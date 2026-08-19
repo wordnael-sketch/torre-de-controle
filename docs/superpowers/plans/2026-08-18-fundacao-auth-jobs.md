@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Stand up a deployable skeleton of the Ilha Crossmídia job-tracking system: a backend (API + SQLite) with Google-restricted login and basic Job CRUD, and a frontend (React) that logs in and shows the (initially empty) job list.
+**Goal:** Stand up a deployable skeleton of the Ilha Crossmídia job-tracking system: a backend (API + PostgreSQL via Supabase) with Google-restricted login and basic Job CRUD, and a frontend (React) that logs in and shows the (initially empty) job list.
 
-**Architecture:** Two independent apps in one repo — `server/` (Node.js + Express + TypeScript + SQLite, deployed to an always-on host like Railway/Render) and `web/` (React + Vite + TypeScript, deployed to Vercel). They communicate over HTTP with credentials (cookies), across origins, so the backend enables CORS for the frontend's origin and issues cross-site session cookies.
+**Architecture:** Two independent apps in one repo — `server/` (Node.js + Express + TypeScript + PostgreSQL via Supabase, deployed to an always-on host like Railway/Render) and `web/` (React + Vite + TypeScript, deployed to Vercel). They communicate over HTTP with credentials (cookies), across origins, so the backend enables CORS for the frontend's origin and issues cross-site session cookies.
 
-**Tech Stack:** Node.js (>=22.5) + Express + TypeScript + node:sqlite (backend) · React + Vite + TypeScript + react-router-dom + @react-oauth/google (frontend) · Vitest + Supertest + Testing Library (tests).
+**Tech Stack:** Node.js + Express + TypeScript + PostgreSQL via Supabase (`pg`) (backend) · React + Vite + TypeScript + react-router-dom + @react-oauth/google (frontend) · Vitest + Supertest + Testing Library (tests).
 
 **Spec:** [docs/superpowers/specs/2026-08-18-sistema-acompanhamento-jobs-design.md](../specs/2026-08-18-sistema-acompanhamento-jobs-design.md)
 
@@ -14,10 +14,28 @@
 
 - Login via Google OAuth, restrito ao domínio `ilhacrossmidia.com.br`. (spec §3)
 - Usuário único: apenas o Gerente de Projeto usa o sistema — sem múltiplos perfis/permissões no MVP. (spec §3)
-- Banco de dados: SQLite em disco persistente. (spec §4)
+- Banco de dados: **PostgreSQL gerenciado pelo Supabase** — substitui a decisão original de
+  SQLite em disco (spec §4), a pedido do usuário durante a execução do Task 2/3 (ver
+  ledger para o histórico completo: `better-sqlite3` → `node:sqlite` → Postgres/Supabase).
+  Conexão via `pg` (node-postgres) usando a *session pooler connection string* do projeto
+  (porta 5432, host `aws-0-<região>.pooler.supabase.com`) — a conexão direta
+  (`db.<ref>.supabase.co`) exige IPv6, indisponível nesta rede. String de conexão em
+  `DATABASE_URL` (variável de ambiente, nunca commitada). Todo o acesso ao banco é
+  assíncrono (Promises) — isso muda a assinatura de toda função que toca o banco em
+  relação ao design original síncrono do SQLite (ver Tasks 2-4, 7, 8 abaixo).
 - O processo do backend deve rodar "always-on" (sem scale-to-zero) — hospedagem separada do frontend, que vai para o Vercel. (decisão de hospedagem tomada nesta sessão, complementa spec §4)
 - Frontend (Vercel) e backend (host always-on) ficam em origens diferentes: o backend precisa de CORS restrito à origem do frontend e cookies de sessão cross-site (`SameSite=None; Secure` em produção).
-- Banco de dados implementado com o módulo nativo `node:sqlite` (`DatabaseSync`), não `better-sqlite3` — decisão tomada durante a execução do Task 1 (ver ledger): `better-sqlite3` exige compilação nativa (node-gyp + Visual Studio Build Tools) indisponível neste ambiente e não garantida no host de deploy; `node:sqlite` tem API síncrona equivalente (`exec`/`prepare`/`run`/`get`/`all`) sem nenhuma compilação nativa. Isso fixa o requisito de versão: **Node.js >= 22.5.0** em todo lugar (dev e produção), já registrado em `server/package.json` como `engines.node`.
+- **Testes que tocam o banco rodam contra o projeto Supabase real** (não há Docker
+  disponível neste ambiente para um Postgres local) — cada teste roda dentro de uma
+  transação (`BEGIN` ... `ROLLBACK`) via `server/test/helpers/testDb.ts`, então nada
+  escrito por um teste persiste, mesmo compartilhando o banco com dados reais de
+  desenvolvimento. Testes que listam/agregam dados (ex: `listJobs`) devem verificar
+  posições/relações relativas entre os registros que o próprio teste criou, nunca o
+  tamanho absoluto do resultado — o banco pode ter outras linhas reais.
+- *(Histórico, não mais válido)* Rulings anteriores sobre `node:sqlite`/`better-sqlite3`
+  e a versão do `vitest` (registradas no ledger) foram supersedidas pela mudança para
+  Postgres/Supabase acima. `vitest ^4.1.11` continua sendo usado no backend (não é
+  regressão — não há motivo para voltar à 2.x).
 
 ---
 
@@ -55,9 +73,6 @@ data/
   "name": "gerente-de-projeto-server",
   "version": "0.1.0",
   "private": true,
-  "engines": {
-    "node": ">=22.5.0"
-  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
@@ -70,7 +85,8 @@ data/
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "google-auth-library": "^9.14.1",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.13.1"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.7",
@@ -78,6 +94,7 @@ data/
     "@types/express": "^4.17.21",
     "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^22.5.0",
+    "@types/pg": "^8.11.10",
     "@types/supertest": "^6.0.2",
     "supertest": "^7.0.0",
     "tsx": "^4.19.0",
@@ -87,18 +104,17 @@ data/
 }
 ```
 
-> **Note (rulings recorded during Task 1/2 execution):** this snippet already
-> reflects two rulings — see the SDD ledger for both in full:
-> 1. `node:sqlite` instead of `better-sqlite3` (Task 1 was implemented and
->    reviewed against an earlier version that included `better-sqlite3`,
->    then corrected by the controller before Task 2 started).
-> 2. `vitest` bumped from `^2.0.5` to `^4.1.11` (Task 2's `node:sqlite`
->    import failed to resolve under vitest 2.x/vite 5.x — it strips the
->    `node:` prefix before checking for a builtin, and `node:sqlite` only
->    resolves with the prefix present; vitest 4.x resolves it correctly
->    with no extra config). This bump applies to the **backend only** —
->    the frontend's vitest/vite versions in Task 9 are unaffected (no
->    `node:` builtin imports there) and stay as originally specified.
+> **Note (rulings recorded during Task 1/2/3 execution):** this snippet reflects the full
+> history of rulings — see the SDD ledger for each in full:
+> 1. `node:sqlite` instead of `better-sqlite3` (superseded by #3 below).
+> 2. `vitest` bumped from `^2.0.5` to `^4.1.11` to resolve `node:sqlite` (kept — no
+>    reason to revert now that Postgres doesn't use `node:sqlite` either).
+> 3. **Final decision: PostgreSQL via Supabase, using `pg`** — the user asked to switch
+>    to Supabase mid-execution. This drops `node:sqlite`/`better-sqlite3` entirely (no
+>    native compilation, no Node-version floor tied to a DB driver — `engines.node` was
+>    removed since nothing in this snippet requires a specific Node version anymore) and
+>    adds `pg` + `@types/pg`. It also makes every DB-touching function async — the
+>    biggest structural change, rippling through Tasks 2, 3, 4, 7, 8 below.
 
 - [ ] **Step 3: Create `server/tsconfig.json`**
 
@@ -193,21 +209,43 @@ git commit -m "feat(server): scaffold Express app with health check"
 
 ---
 
-## Task 2: SQLite DB module + schema
+## Task 2: Postgres DB module + schema + test transaction helper
 
 **Files:**
 - Create: `server/src/db/schema.sql`
 - Create: `server/src/db/index.ts`
+- Create: `server/test/helpers/testDb.ts`
 - Test: `server/test/db.test.ts`
 
 **Interfaces:**
-- Produces: `export type AppDatabase = DatabaseSync` (from `node:sqlite`), `createDb(filePath: string): AppDatabase`
+- Produces: `export interface AppDatabase { query<T extends QueryResultRow = QueryResultRow>(text: string, params?: unknown[]): Promise<QueryResult<T>> }` (satisfied structurally by both `pg`'s `Pool` and `PoolClient`), `createDb(connectionString: string): Promise<Pool>`, `getTestPool(): Pool`, `withTestTransaction<T>(fn: (db: PoolClient) => Promise<T>): Promise<T>`
 
-Uses Node's built-in `node:sqlite` module (`DatabaseSync`), not the `better-sqlite3`
-package — see the Global Constraints ruling above. Requires Node >= 22.5.0 (already
-pinned in `server/package.json` via `engines.node`).
+Uses `pg` (node-postgres) against a Supabase-hosted PostgreSQL database — not
+`node:sqlite`/`better-sqlite3` (see the Global Constraints ruling above). The connection
+string lives in the `DATABASE_URL` environment variable (never committed — already in
+`.gitignore` via the `.env` pattern). `createDb` is `async`: it opens a connection pool
+and applies the schema (idempotent, `CREATE TABLE IF NOT EXISTS`) before returning it —
+every caller must `await` it.
 
-- [ ] **Step 1: Write the failing test**
+**Why a transaction helper is part of this task:** there is no Docker available in this
+environment to run a local Postgres for tests, so tests run against the real Supabase
+project (see Global Constraints). `withTestTransaction` wraps a test in `BEGIN` /
+`ROLLBACK` on a dedicated client so nothing the test writes ever persists. Tasks 3 and 4
+(and later 7, 8) depend on this helper for their own tests.
+
+- [ ] **Step 1: Create `server/.env`** (not committed — already covered by `.gitignore`'s
+  `.env` pattern)
+
+```
+DATABASE_URL=postgresql://postgres.<project-ref>:<url-encoded-password>@aws-0-<region>.pooler.supabase.com:5432/postgres
+```
+
+Use the Supabase project's **session pooler** connection string (Project Settings →
+Database → Connection string → mode "Session", port 5432) — not the direct
+`db.<ref>.supabase.co` host, which requires IPv6 and is not reachable from this network.
+URL-encode any special characters in the password (e.g. `@` → `%40`).
+
+- [ ] **Step 2: Write the failing test**
 
 `server/test/db.test.ts`:
 
@@ -216,87 +254,140 @@ import { describe, it, expect } from 'vitest';
 import { createDb } from '../src/db';
 
 describe('createDb', () => {
-  it('creates the users and jobs tables', () => {
-    const db = createDb(':memory:');
+  it('creates the users and jobs tables', async () => {
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) {
+      throw new Error('DATABASE_URL environment variable is required to run this test');
+    }
 
-    const tables = db
-      .prepare(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
-      )
-      .all() as { name: string }[];
+    const db = await createDb(connectionString);
+    try {
+      const result = await db.query<{ table_name: string }>(
+        `SELECT table_name FROM information_schema.tables
+         WHERE table_schema = 'public' AND table_name IN ('jobs', 'users')
+         ORDER BY table_name`,
+      );
 
-    expect(tables.map((t) => t.name)).toEqual(['jobs', 'users']);
+      expect(result.rows.map((r) => r.table_name)).toEqual(['jobs', 'users']);
+    } finally {
+      await db.end();
+    }
   });
 });
 ```
 
-Note: the `AUTOINCREMENT` columns in the schema make SQLite create an internal
-`sqlite_sequence` bookkeeping table — the `NOT LIKE 'sqlite_%'` filter excludes it (and
-any other SQLite-internal table) so the assertion reflects only tables this app owns.
+Note: `db.end()` closes the pool's connections — call it whenever a test (or script)
+creates its own pool via `createDb`, to avoid leaving open connections that make vitest
+hang after the test run.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 3: Run test to verify it fails**
 
-Run: `npm test` (inside `server/`)
+Run: `npm test` (inside `server/`, with `.env` from Step 1 in place)
 Expected: FAIL — `src/db/index.ts` does not exist yet.
 
-- [ ] **Step 3: Create `server/src/db/schema.sql`**
+- [ ] **Step 4: Create `server/src/db/schema.sql`**
 
 ```sql
 CREATE TABLE IF NOT EXISTS users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   google_sub TEXT NOT NULL UNIQUE,
   email TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS jobs (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   name TEXT NOT NULL,
   code TEXT,
   client TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ```
 
-- [ ] **Step 4: Implement `server/src/db/index.ts`**
+`id` is `INTEGER` (32-bit), not `BIGINT` — `pg` returns `BIGINT` columns as strings (to
+avoid silent precision loss in JS numbers), which would silently break the `id: number`
+contract every model in this plan relies on. `INTEGER` is returned as a native JS number
+and comfortably covers this app's scale.
+
+- [ ] **Step 5: Implement `server/src/db/index.ts`**
 
 ```ts
-import { DatabaseSync } from 'node:sqlite';
+import { Pool } from 'pg';
+import type { QueryResult, QueryResultRow } from 'pg';
 import fs from 'node:fs';
 import path from 'node:path';
 
-export type AppDatabase = DatabaseSync;
+export interface AppDatabase {
+  query<T extends QueryResultRow = QueryResultRow>(
+    text: string,
+    params?: unknown[],
+  ): Promise<QueryResult<T>>;
+}
 
-export function createDb(filePath: string): AppDatabase {
-  if (filePath !== ':memory:') {
-    const dir = path.dirname(filePath);
-    fs.mkdirSync(dir, { recursive: true });
-  }
-
-  const db = new DatabaseSync(filePath);
-  db.exec('PRAGMA journal_mode = WAL');
+export async function createDb(connectionString: string): Promise<Pool> {
+  const pool = new Pool({ connectionString, ssl: { rejectUnauthorized: false } });
 
   const schemaPath = path.join(__dirname, 'schema.sql');
   const schema = fs.readFileSync(schemaPath, 'utf-8');
-  db.exec(schema);
+  await pool.query(schema);
 
-  return db;
+  return pool;
 }
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [ ] **Step 6: Run test to verify it passes**
 
 Run: `npm test` (inside `server/`)
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Implement `server/test/helpers/testDb.ts`**
+
+```ts
+import 'dotenv/config';
+import { Pool, type PoolClient } from 'pg';
+
+let pool: Pool | undefined;
+
+function getTestPool(): Pool {
+  if (!pool) {
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) {
+      throw new Error('DATABASE_URL environment variable is required to run tests');
+    }
+    pool = new Pool({ connectionString, ssl: { rejectUnauthorized: false } });
+  }
+  return pool;
+}
+
+export async function withTestTransaction<T>(
+  fn: (db: PoolClient) => Promise<T>,
+): Promise<T> {
+  const client = await getTestPool().connect();
+  try {
+    await client.query('BEGIN');
+    return await fn(client);
+  } finally {
+    await client.query('ROLLBACK');
+    client.release();
+  }
+}
+```
+
+No test file for this step — it's exercised indirectly by every test in Tasks 3, 4, 7,
+8 that uses `withTestTransaction`. Verify it works by running Task 3's tests once that
+task is implemented (a later task, not this one).
+
+- [ ] **Step 8: Commit**
 
 ```bash
-git add server/src/db server/test/db.test.ts
-git commit -m "feat(server): add SQLite connection and schema"
+git add server/src/db server/test/db.test.ts server/test/helpers/testDb.ts
+git commit -m "feat(server): add Postgres connection module and test transaction helper"
 ```
+
+Do **not** commit `server/.env` — confirm `git status` shows it untracked/ignored before
+committing.
 
 ---
 
@@ -307,55 +398,64 @@ git commit -m "feat(server): add SQLite connection and schema"
 - Test: `server/test/models.job.test.ts`
 
 **Interfaces:**
-- Consumes: `AppDatabase` from `../db` (Task 2)
-- Produces: `export interface Job { id: number; name: string; code: string | null; client: string | null; createdAt: string; updatedAt: string; }`, `listJobs(db: AppDatabase): Job[]`, `createJob(db: AppDatabase, input: { name: string; code?: string; client?: string }): Job`
+- Consumes: `AppDatabase` from `../db`, `withTestTransaction` from `./helpers/testDb` (Task 2)
+- Produces: `export interface Job { id: number; name: string; code: string | null; client: string | null; createdAt: string; updatedAt: string; }`, `listJobs(db: AppDatabase): Promise<Job[]>`, `createJob(db: AppDatabase, input: { name: string; code?: string; client?: string }): Promise<Job>`
+
+Both functions are `async` — every DB call goes over the network to Supabase. Tests run
+each case inside `withTestTransaction` (Task 2) so nothing written persists; the
+"ordered by newest first" test checks the created jobs' *relative* order rather than an
+absolute list length, because the shared Supabase project may already contain other rows
+(see Global Constraints).
 
 - [ ] **Step 1: Write the failing test**
 
 `server/test/models.job.test.ts`:
 
 ```ts
-import { describe, it, expect, beforeEach } from 'vitest';
-import { createDb, type AppDatabase } from '../src/db';
+import { describe, it, expect } from 'vitest';
 import { createJob, listJobs } from '../src/models/job';
+import { withTestTransaction } from './helpers/testDb';
 
 describe('job model', () => {
-  let db: AppDatabase;
+  it('creates a job and returns it with generated fields', async () => {
+    await withTestTransaction(async (db) => {
+      const job = await createJob(db, {
+        name: 'Colgate - Color Correct Wave 2',
+        code: '0307-2026',
+        client: 'Colgate',
+      });
 
-  beforeEach(() => {
-    db = createDb(':memory:');
-  });
-
-  it('creates a job and returns it with generated fields', () => {
-    const job = createJob(db, {
-      name: 'Colgate - Color Correct Wave 2',
-      code: '0307-2026',
-      client: 'Colgate',
+      expect(job.id).toBeGreaterThan(0);
+      expect(job.name).toBe('Colgate - Color Correct Wave 2');
+      expect(job.code).toBe('0307-2026');
+      expect(job.client).toBe('Colgate');
+      expect(job.createdAt).toBeTruthy();
     });
-
-    expect(job.id).toBeGreaterThan(0);
-    expect(job.name).toBe('Colgate - Color Correct Wave 2');
-    expect(job.code).toBe('0307-2026');
-    expect(job.client).toBe('Colgate');
-    expect(job.createdAt).toBeTruthy();
   });
 
-  it('creates a job without optional fields', () => {
-    const job = createJob(db, { name: 'Job sem codigo' });
+  it('creates a job without optional fields', async () => {
+    await withTestTransaction(async (db) => {
+      const job = await createJob(db, { name: 'Job sem codigo' });
 
-    expect(job.code).toBeNull();
-    expect(job.client).toBeNull();
+      expect(job.code).toBeNull();
+      expect(job.client).toBeNull();
+    });
   });
 
-  it('lists jobs ordered by newest first', () => {
-    createJob(db, { name: 'Primeiro job' });
-    createJob(db, { name: 'Segundo job' });
+  it('lists jobs ordered by newest first', async () => {
+    await withTestTransaction(async (db) => {
+      await createJob(db, { name: 'Primeiro job (ordering test)' });
+      await createJob(db, { name: 'Segundo job (ordering test)' });
 
-    const jobs = listJobs(db);
+      const jobs = await listJobs(db);
+      const names = jobs.map((j) => j.name);
+      const indexSegundo = names.indexOf('Segundo job (ordering test)');
+      const indexPrimeiro = names.indexOf('Primeiro job (ordering test)');
 
-    expect(jobs).toHaveLength(2);
-    expect(jobs[0].name).toBe('Segundo job');
-    expect(jobs[1].name).toBe('Primeiro job');
+      expect(indexSegundo).toBeGreaterThanOrEqual(0);
+      expect(indexPrimeiro).toBeGreaterThanOrEqual(0);
+      expect(indexSegundo).toBeLessThan(indexPrimeiro);
+    });
   });
 });
 ```
@@ -384,8 +484,8 @@ interface JobRow {
   name: string;
   code: string | null;
   client: string | null;
-  created_at: string;
-  updated_at: string;
+  created_at: string | Date;
+  updated_at: string | Date;
 }
 
 function toJob(row: JobRow): Job {
@@ -394,31 +494,32 @@ function toJob(row: JobRow): Job {
     name: row.name,
     code: row.code,
     client: row.client,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    createdAt: new Date(row.created_at).toISOString(),
+    updatedAt: new Date(row.updated_at).toISOString(),
   };
 }
 
-export function listJobs(db: AppDatabase): Job[] {
-  const rows = db.prepare('SELECT * FROM jobs ORDER BY created_at DESC').all() as JobRow[];
-  return rows.map(toJob);
+export async function listJobs(db: AppDatabase): Promise<Job[]> {
+  const result = await db.query<JobRow>('SELECT * FROM jobs ORDER BY created_at DESC, id DESC');
+  return result.rows.map(toJob);
 }
 
-export function createJob(
+export async function createJob(
   db: AppDatabase,
   input: { name: string; code?: string; client?: string },
-): Job {
-  const result = db
-    .prepare('INSERT INTO jobs (name, code, client) VALUES (?, ?, ?)')
-    .run(input.name, input.code ?? null, input.client ?? null);
+): Promise<Job> {
+  const result = await db.query<JobRow>(
+    'INSERT INTO jobs (name, code, client) VALUES ($1, $2, $3) RETURNING *',
+    [input.name, input.code ?? null, input.client ?? null],
+  );
 
-  const row = db
-    .prepare('SELECT * FROM jobs WHERE id = ?')
-    .get(result.lastInsertRowid) as JobRow;
-
-  return toJob(row);
+  return toJob(result.rows[0]);
 }
 ```
+
+`created_at`/`updated_at` are typed `string | Date` because `pg` returns `TIMESTAMPTZ`
+columns as JS `Date` objects by default — `new Date(row.created_at).toISOString()`
+normalizes either shape to an ISO string, matching the `Job.createdAt: string` contract.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -441,73 +542,74 @@ git commit -m "feat(server): add job model with create and list"
 - Test: `server/test/models.user.test.ts`
 
 **Interfaces:**
-- Consumes: `AppDatabase` from `../db` (Task 2)
-- Produces: `export interface User { id: number; googleSub: string; email: string; name: string; createdAt: string; }`, `findOrCreateUser(db: AppDatabase, input: { googleSub: string; email: string; name: string }): User`, `getUserById(db: AppDatabase, id: number): User | null`
+- Consumes: `AppDatabase` from `../db`, `withTestTransaction` from `./helpers/testDb` (Task 2)
+- Produces: `export interface User { id: number; googleSub: string; email: string; name: string; createdAt: string; }`, `findOrCreateUser(db: AppDatabase, input: { googleSub: string; email: string; name: string }): Promise<User>`, `getUserById(db: AppDatabase, id: number): Promise<User | null>`
+
+Both functions are `async`, same reasoning as Task 3. `getUserById`'s "not found" test
+uses `-1` rather than a positive sentinel like `999` — `-1` can never be produced by an
+`INTEGER GENERATED ALWAYS AS IDENTITY` column, so the test can't collide with real data
+in the shared Supabase project.
 
 - [ ] **Step 1: Write the failing test**
 
 `server/test/models.user.test.ts`:
 
 ```ts
-import { describe, it, expect, beforeEach } from 'vitest';
-import { createDb, type AppDatabase } from '../src/db';
+import { describe, it, expect } from 'vitest';
 import { findOrCreateUser, getUserById } from '../src/models/user';
+import { withTestTransaction } from './helpers/testDb';
 
 describe('findOrCreateUser', () => {
-  let db: AppDatabase;
+  it('creates a new user on first call', async () => {
+    await withTestTransaction(async (db) => {
+      const user = await findOrCreateUser(db, {
+        googleSub: 'google-sub-123',
+        email: 'wilka@ilhacrossmidia.com.br',
+        name: 'Wilka',
+      });
 
-  beforeEach(() => {
-    db = createDb(':memory:');
+      expect(user.id).toBeGreaterThan(0);
+      expect(user.email).toBe('wilka@ilhacrossmidia.com.br');
+    });
   });
 
-  it('creates a new user on first call', () => {
-    const user = findOrCreateUser(db, {
-      googleSub: 'google-sub-123',
-      email: 'wilka@ilhacrossmidia.com.br',
-      name: 'Wilka',
-    });
+  it('returns the same user on subsequent calls with the same googleSub', async () => {
+    await withTestTransaction(async (db) => {
+      const first = await findOrCreateUser(db, {
+        googleSub: 'google-sub-123',
+        email: 'wilka@ilhacrossmidia.com.br',
+        name: 'Wilka',
+      });
+      const second = await findOrCreateUser(db, {
+        googleSub: 'google-sub-123',
+        email: 'wilka@ilhacrossmidia.com.br',
+        name: 'Wilka',
+      });
 
-    expect(user.id).toBeGreaterThan(0);
-    expect(user.email).toBe('wilka@ilhacrossmidia.com.br');
-  });
-
-  it('returns the same user on subsequent calls with the same googleSub', () => {
-    const first = findOrCreateUser(db, {
-      googleSub: 'google-sub-123',
-      email: 'wilka@ilhacrossmidia.com.br',
-      name: 'Wilka',
+      expect(second.id).toBe(first.id);
     });
-    const second = findOrCreateUser(db, {
-      googleSub: 'google-sub-123',
-      email: 'wilka@ilhacrossmidia.com.br',
-      name: 'Wilka',
-    });
-
-    expect(second.id).toBe(first.id);
   });
 });
 
 describe('getUserById', () => {
-  let db: AppDatabase;
+  it('returns the user matching the id', async () => {
+    await withTestTransaction(async (db) => {
+      const created = await findOrCreateUser(db, {
+        googleSub: 'google-sub-123',
+        email: 'wilka@ilhacrossmidia.com.br',
+        name: 'Wilka',
+      });
 
-  beforeEach(() => {
-    db = createDb(':memory:');
-  });
+      const found = await getUserById(db, created.id);
 
-  it('returns the user matching the id', () => {
-    const created = findOrCreateUser(db, {
-      googleSub: 'google-sub-123',
-      email: 'wilka@ilhacrossmidia.com.br',
-      name: 'Wilka',
+      expect(found).toEqual(created);
     });
-
-    const found = getUserById(db, created.id);
-
-    expect(found).toEqual(created);
   });
 
-  it('returns null when no user matches the id', () => {
-    expect(getUserById(db, 999)).toBeNull();
+  it('returns null when no user matches the id', async () => {
+    await withTestTransaction(async (db) => {
+      expect(await getUserById(db, -1)).toBeNull();
+    });
   });
 });
 ```
@@ -535,7 +637,7 @@ interface UserRow {
   google_sub: string;
   email: string;
   name: string;
-  created_at: string;
+  created_at: string | Date;
 }
 
 function toUser(row: UserRow): User {
@@ -544,34 +646,33 @@ function toUser(row: UserRow): User {
     googleSub: row.google_sub,
     email: row.email,
     name: row.name,
-    createdAt: row.created_at,
+    createdAt: new Date(row.created_at).toISOString(),
   };
 }
 
-export function findOrCreateUser(
+export async function findOrCreateUser(
   db: AppDatabase,
   input: { googleSub: string; email: string; name: string },
-): User {
-  const existing = db
-    .prepare('SELECT * FROM users WHERE google_sub = ?')
-    .get(input.googleSub) as UserRow | undefined;
+): Promise<User> {
+  const existing = await db.query<UserRow>('SELECT * FROM users WHERE google_sub = $1', [
+    input.googleSub,
+  ]);
 
-  if (existing) {
-    return toUser(existing);
+  if (existing.rows[0]) {
+    return toUser(existing.rows[0]);
   }
 
-  const result = db
-    .prepare('INSERT INTO users (google_sub, email, name) VALUES (?, ?, ?)')
-    .run(input.googleSub, input.email, input.name);
+  const inserted = await db.query<UserRow>(
+    'INSERT INTO users (google_sub, email, name) VALUES ($1, $2, $3) RETURNING *',
+    [input.googleSub, input.email, input.name],
+  );
 
-  const row = db.prepare('SELECT * FROM users WHERE id = ?').get(result.lastInsertRowid) as UserRow;
-
-  return toUser(row);
+  return toUser(inserted.rows[0]);
 }
 
-export function getUserById(db: AppDatabase, id: number): User | null {
-  const row = db.prepare('SELECT * FROM users WHERE id = ?').get(id) as UserRow | undefined;
-  return row ? toUser(row) : null;
+export async function getUserById(db: AppDatabase, id: number): Promise<User | null> {
+  const result = await db.query<UserRow>('SELECT * FROM users WHERE id = $1', [id]);
+  return result.rows[0] ? toUser(result.rows[0]) : null;
 }
 ```
 
@@ -839,19 +940,26 @@ git commit -m "feat(server): add requireAuth middleware"
 - Test: `server/test/routes.auth.test.ts`
 
 **Interfaces:**
-- Consumes: `findOrCreateUser`, `getUserById` (Task 4), `isAllowedDomain` (Task 5), `signSession` (Task 5), `requireAuth`, `SESSION_COOKIE` (Task 6), `AppDatabase` (Task 2)
+- Consumes: `findOrCreateUser(...): Promise<User>`, `getUserById(...): Promise<User | null>` (Task 4), `isAllowedDomain` (Task 5), `signSession` (Task 5), `requireAuth`, `SESSION_COOKIE` (Task 6), `AppDatabase`, `withTestTransaction` (Task 2)
 - Produces: `export interface GoogleProfile { sub: string; email: string; name: string }`, `export type VerifyIdToken = (idToken: string) => Promise<GoogleProfile>`, `createAuthRouter(deps: { db: AppDatabase; verifyIdToken: VerifyIdToken; jwtSecret: string; allowedDomain: string }): Router`, `createGoogleVerifier(clientId: string): VerifyIdToken`, extended `export interface AppDeps { db: AppDatabase; verifyIdToken: VerifyIdToken; jwtSecret: string; allowedDomain: string; frontendUrl: string }`, `createApp(deps: AppDeps): Express`
 
 - [ ] **Step 1: Write the failing test**
 
 `server/test/routes.auth.test.ts`:
 
+Route tests wrap each test body in `withTestTransaction` (Task 2) so every query the
+route handlers make during that test — across however many HTTP requests the test
+issues — runs on the same transaction and rolls back at the end. `AppDatabase` is a
+structural interface (`{ query(...) }`), so a `PoolClient` from `withTestTransaction`
+satisfies it exactly like the `Pool` does elsewhere.
+
 ```ts
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../src/app';
-import { createDb, type AppDatabase } from '../src/db';
 import type { GoogleProfile } from '../src/routes/auth';
+import type { AppDatabase } from '../src/db';
+import { withTestTransaction } from './helpers/testDb';
 
 const JWT_SECRET = 'test-secret';
 const ALLOWED_DOMAIN = 'ilhacrossmidia.com.br';
@@ -862,125 +970,136 @@ function buildApp(db: AppDatabase, verifyIdToken: (idToken: string) => Promise<G
 }
 
 describe('POST /api/auth/google', () => {
-  let db: AppDatabase;
-
-  beforeEach(() => {
-    db = createDb(':memory:');
-  });
-
   it('logs in a user with an allowed domain and sets a session cookie', async () => {
-    const app = buildApp(db, async () => ({
-      sub: 'google-sub-1',
-      email: 'wilka@ilhacrossmidia.com.br',
-      name: 'Wilka',
-    }));
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db, async () => ({
+        sub: 'google-sub-1',
+        email: 'wilka@ilhacrossmidia.com.br',
+        name: 'Wilka',
+      }));
 
-    const res = await request(app).post('/api/auth/google').send({ idToken: 'fake-token' });
+      const res = await request(app).post('/api/auth/google').send({ idToken: 'fake-token' });
 
-    expect(res.status).toBe(200);
-    expect(res.body.user.email).toBe('wilka@ilhacrossmidia.com.br');
-    expect(res.headers['set-cookie']?.[0]).toMatch(/^session=/);
+      expect(res.status).toBe(200);
+      expect(res.body.user.email).toBe('wilka@ilhacrossmidia.com.br');
+      expect(res.headers['set-cookie']?.[0]).toMatch(/^session=/);
+    });
   });
 
   it('rejects a user outside the allowed domain', async () => {
-    const app = buildApp(db, async () => ({
-      sub: 'google-sub-2',
-      email: 'someone@gmail.com',
-      name: 'Someone',
-    }));
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db, async () => ({
+        sub: 'google-sub-2',
+        email: 'someone@gmail.com',
+        name: 'Someone',
+      }));
 
-    const res = await request(app).post('/api/auth/google').send({ idToken: 'fake-token' });
+      const res = await request(app).post('/api/auth/google').send({ idToken: 'fake-token' });
 
-    expect(res.status).toBe(403);
+      expect(res.status).toBe(403);
+    });
   });
 
   it('rejects an invalid Google token', async () => {
-    const app = buildApp(db, async () => {
-      throw new Error('invalid token');
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db, async () => {
+        throw new Error('invalid token');
+      });
+
+      const res = await request(app).post('/api/auth/google').send({ idToken: 'bad-token' });
+
+      expect(res.status).toBe(401);
     });
-
-    const res = await request(app).post('/api/auth/google').send({ idToken: 'bad-token' });
-
-    expect(res.status).toBe(401);
   });
 
   it('rejects a request without an idToken', async () => {
-    const app = buildApp(db, async () => {
-      throw new Error('should not be called');
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db, async () => {
+        throw new Error('should not be called');
+      });
+
+      const res = await request(app).post('/api/auth/google').send({});
+
+      expect(res.status).toBe(400);
     });
-
-    const res = await request(app).post('/api/auth/google').send({});
-
-    expect(res.status).toBe(400);
   });
 });
 
 describe('GET /api/auth/me', () => {
-  let db: AppDatabase;
-
-  beforeEach(() => {
-    db = createDb(':memory:');
-  });
-
   it('returns the current user when logged in', async () => {
-    const app = buildApp(db, async () => ({
-      sub: 'google-sub-1',
-      email: 'wilka@ilhacrossmidia.com.br',
-      name: 'Wilka',
-    }));
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db, async () => ({
+        sub: 'google-sub-1',
+        email: 'wilka@ilhacrossmidia.com.br',
+        name: 'Wilka',
+      }));
 
-    const agent = request.agent(app);
-    await agent.post('/api/auth/google').send({ idToken: 'fake-token' });
+      const agent = request.agent(app);
+      await agent.post('/api/auth/google').send({ idToken: 'fake-token' });
 
-    const res = await agent.get('/api/auth/me');
+      const res = await agent.get('/api/auth/me');
 
-    expect(res.status).toBe(200);
-    expect(res.body.user).toEqual(
-      expect.objectContaining({ email: 'wilka@ilhacrossmidia.com.br', name: 'Wilka' }),
-    );
-    expect(res.body.user.id).toBeGreaterThan(0);
+      expect(res.status).toBe(200);
+      expect(res.body.user).toEqual(
+        expect.objectContaining({ email: 'wilka@ilhacrossmidia.com.br', name: 'Wilka' }),
+      );
+      expect(res.body.user.id).toBeGreaterThan(0);
+    });
   });
 
   it('returns 401 when not logged in', async () => {
-    const app = buildApp(db, async () => {
-      throw new Error('should not be called');
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db, async () => {
+        throw new Error('should not be called');
+      });
+
+      const res = await request(app).get('/api/auth/me');
+
+      expect(res.status).toBe(401);
     });
-
-    const res = await request(app).get('/api/auth/me');
-
-    expect(res.status).toBe(401);
   });
 });
 
 describe('POST /api/auth/logout', () => {
   it('clears the session cookie', async () => {
-    const db = createDb(':memory:');
-    const app = buildApp(db, async () => ({
-      sub: 'google-sub-1',
-      email: 'wilka@ilhacrossmidia.com.br',
-      name: 'Wilka',
-    }));
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db, async () => ({
+        sub: 'google-sub-1',
+        email: 'wilka@ilhacrossmidia.com.br',
+        name: 'Wilka',
+      }));
 
-    const res = await request(app).post('/api/auth/logout');
+      const res = await request(app).post('/api/auth/logout');
 
-    expect(res.status).toBe(204);
-    expect(res.headers['set-cookie']?.[0]).toMatch(/^session=;/);
+      expect(res.status).toBe(204);
+      expect(res.headers['set-cookie']?.[0]).toMatch(/^session=;/);
+    });
   });
 });
 ```
 
 - [ ] **Step 2: Update `server/test/app.health.test.ts` to match the new `createApp` signature**
 
+The health check route never touches the database, so this test stubs `AppDatabase`
+directly instead of opening a real connection — no network dependency for a test that
+doesn't need one.
+
 ```ts
 import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../src/app';
-import { createDb } from '../src/db';
+import type { AppDatabase } from '../src/db';
 
 describe('GET /api/health', () => {
   it('returns status ok', async () => {
+    const stubDb: AppDatabase = {
+      query: async () => {
+        throw new Error('not used in this test');
+      },
+    };
+
     const app = createApp({
-      db: createDb(':memory:'),
+      db: stubDb,
       verifyIdToken: async () => {
         throw new Error('not used in this test');
       },
@@ -1050,7 +1169,7 @@ export function createAuthRouter(deps: AuthRouterDeps): Router {
       return;
     }
 
-    const user = findOrCreateUser(deps.db, {
+    const user = await findOrCreateUser(deps.db, {
       googleSub: profile.sub,
       email: profile.email,
       name: profile.name,
@@ -1068,8 +1187,8 @@ export function createAuthRouter(deps: AuthRouterDeps): Router {
     res.json({ user });
   });
 
-  router.get('/me', requireAuth(deps.jwtSecret), (req, res) => {
-    const user = getUserById(deps.db, req.user!.userId);
+  router.get('/me', requireAuth(deps.jwtSecret), async (req, res) => {
+    const user = await getUserById(deps.db, req.user!.userId);
 
     if (!user) {
       res.status(401).json({ error: 'Not authenticated' });
@@ -1145,6 +1264,9 @@ export function createApp(deps: AppDeps): Express {
 
 - [ ] **Step 7: Update `server/src/index.ts`**
 
+`createDb` is `async` (Task 2), and this project's `tsconfig.json` targets CommonJS (no
+top-level `await`), so startup is wrapped in an async `main()`:
+
 ```ts
 import 'dotenv/config';
 import { createApp } from './app';
@@ -1152,12 +1274,15 @@ import { createDb } from './db';
 import { createGoogleVerifier } from './auth/googleVerifier';
 
 const port = Number(process.env.PORT ?? 4000);
-const dbPath = process.env.DB_PATH ?? './data/app.db';
+const connectionString = process.env.DATABASE_URL;
 const jwtSecret = process.env.JWT_SECRET;
 const googleClientId = process.env.GOOGLE_CLIENT_ID;
 const allowedDomain = process.env.ALLOWED_EMAIL_DOMAIN ?? 'ilhacrossmidia.com.br';
 const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
 
+if (!connectionString) {
+  throw new Error('DATABASE_URL environment variable is required');
+}
 if (!jwtSecret) {
   throw new Error('JWT_SECRET environment variable is required');
 }
@@ -1165,24 +1290,37 @@ if (!googleClientId) {
   throw new Error('GOOGLE_CLIENT_ID environment variable is required');
 }
 
-const app = createApp({
-  db: createDb(dbPath),
-  verifyIdToken: createGoogleVerifier(googleClientId),
-  jwtSecret,
-  allowedDomain,
-  frontendUrl,
-});
+async function main() {
+  const db = await createDb(connectionString!);
 
-app.listen(port, () => {
-  console.log(`Server listening on port ${port}`);
+  const app = createApp({
+    db,
+    verifyIdToken: createGoogleVerifier(googleClientId!),
+    jwtSecret: jwtSecret!,
+    allowedDomain,
+    frontendUrl,
+  });
+
+  app.listen(port, () => {
+    console.log(`Server listening on port ${port}`);
+  });
+}
+
+main().catch((err) => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
 });
 ```
+
+The `!` assertions inside `main()` are necessary — TypeScript's narrowing from the outer
+`if (!x) throw` checks does not carry into a nested function body, even for `const`
+bindings.
 
 - [ ] **Step 8: Create `server/.env.example`**
 
 ```
 PORT=4000
-DB_PATH=./data/app.db
+DATABASE_URL=postgresql://postgres.<project-ref>:<url-encoded-password>@aws-0-<region>.pooler.supabase.com:5432/postgres
 GOOGLE_CLIENT_ID=replace-with-google-oauth-client-id
 JWT_SECRET=replace-with-a-long-random-secret
 ALLOWED_EMAIL_DOMAIN=ilhacrossmidia.com.br
@@ -1215,19 +1353,25 @@ git commit -m "feat(server): add Google-restricted login and CORS"
 - Test: `server/test/routes.jobs.test.ts`
 
 **Interfaces:**
-- Consumes: `createJob`, `listJobs` (Task 3), `requireAuth` (Task 6), `AppDeps` (Task 7)
+- Consumes: `createJob(...): Promise<Job>`, `listJobs(...): Promise<Job[]>` (Task 3), `requireAuth` (Task 6), `AppDeps`, `withTestTransaction` (Task 7/2)
 - Produces: `createJobsRouter(deps: { db: AppDatabase; jwtSecret: string }): Router`
+
+Like Task 7's route tests, these wrap each test in `withTestTransaction` — and because the
+shared Supabase table may hold other real rows, assertions check that a job this test
+created *appears* in the response, never that the list is empty or has an exact length
+(see Global Constraints).
 
 - [ ] **Step 1: Write the failing test**
 
 `server/test/routes.jobs.test.ts`:
 
 ```ts
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../src/app';
-import { createDb, type AppDatabase } from '../src/db';
+import type { AppDatabase } from '../src/db';
 import type { GoogleProfile } from '../src/routes/auth';
+import { withTestTransaction } from './helpers/testDb';
 
 const JWT_SECRET = 'test-secret';
 const ALLOWED_DOMAIN = 'ilhacrossmidia.com.br';
@@ -1249,58 +1393,59 @@ async function loggedInAgent(app: ReturnType<typeof buildApp>) {
 }
 
 describe('GET /api/jobs', () => {
-  let db: AppDatabase;
-
-  beforeEach(() => {
-    db = createDb(':memory:');
-  });
-
   it('returns 401 when not logged in', async () => {
-    const app = buildApp(db);
-    const res = await request(app).get('/api/jobs');
-    expect(res.status).toBe(401);
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const res = await request(app).get('/api/jobs');
+      expect(res.status).toBe(401);
+    });
   });
 
-  it('returns an empty list when there are no jobs', async () => {
-    const app = buildApp(db);
-    const agent = await loggedInAgent(app);
+  it('includes a freshly created job in the list', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
 
-    const res = await agent.get('/api/jobs');
+      await agent.post('/api/jobs').send({ name: 'Job criado no teste GET /api/jobs' });
+      const res = await agent.get('/api/jobs');
 
-    expect(res.status).toBe(200);
-    expect(res.body.jobs).toEqual([]);
+      expect(res.status).toBe(200);
+      expect(
+        res.body.jobs.some((job: { name: string }) => job.name === 'Job criado no teste GET /api/jobs'),
+      ).toBe(true);
+    });
   });
 });
 
 describe('POST /api/jobs', () => {
-  let db: AppDatabase;
-
-  beforeEach(() => {
-    db = createDb(':memory:');
-  });
-
   it('creates a job and returns it', async () => {
-    const app = buildApp(db);
-    const agent = await loggedInAgent(app);
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
 
-    const res = await agent
-      .post('/api/jobs')
-      .send({ name: 'Colgate - Color Correct Wave 2', code: '0307-2026', client: 'Colgate' });
+      const res = await agent
+        .post('/api/jobs')
+        .send({ name: 'Colgate - Color Correct Wave 2', code: '0307-2026', client: 'Colgate' });
 
-    expect(res.status).toBe(201);
-    expect(res.body.job.name).toBe('Colgate - Color Correct Wave 2');
+      expect(res.status).toBe(201);
+      expect(res.body.job.name).toBe('Colgate - Color Correct Wave 2');
 
-    const list = await agent.get('/api/jobs');
-    expect(list.body.jobs).toHaveLength(1);
+      const list = await agent.get('/api/jobs');
+      expect(
+        list.body.jobs.some((job: { name: string }) => job.name === 'Colgate - Color Correct Wave 2'),
+      ).toBe(true);
+    });
   });
 
   it('rejects a job without a name', async () => {
-    const app = buildApp(db);
-    const agent = await loggedInAgent(app);
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
 
-    const res = await agent.post('/api/jobs').send({ client: 'Colgate' });
+      const res = await agent.post('/api/jobs').send({ client: 'Colgate' });
 
-    expect(res.status).toBe(400);
+      expect(res.status).toBe(400);
+    });
   });
 });
 ```
@@ -1328,11 +1473,11 @@ export function createJobsRouter(deps: JobsRouterDeps): Router {
 
   router.use(requireAuth(deps.jwtSecret));
 
-  router.get('/', (_req, res) => {
-    res.json({ jobs: listJobs(deps.db) });
+  router.get('/', async (_req, res) => {
+    res.json({ jobs: await listJobs(deps.db) });
   });
 
-  router.post('/', (req, res) => {
+  router.post('/', async (req, res) => {
     const { name, code, client } = req.body as { name?: string; code?: string; client?: string };
 
     if (!name || !name.trim()) {
@@ -1340,7 +1485,7 @@ export function createJobsRouter(deps: JobsRouterDeps): Router {
       return;
     }
 
-    const job = createJob(deps.db, { name: name.trim(), code, client });
+    const job = await createJob(deps.db, { name: name.trim(), code, client });
     res.status(201).json({ job });
   });
 
@@ -2175,15 +2320,18 @@ Ver spec completa em `docs/superpowers/specs/2026-08-18-sistema-acompanhamento-j
 
 ## Estrutura
 
-- `server/` — API (Node.js + Express + TypeScript + SQLite). Deploy em plataforma
-  always-on (Railway, Render, ou VPS) — **não** em serverless/Vercel, pois mantém
-  conexão persistente com o WhatsApp e um banco SQLite em disco.
+- `server/` — API (Node.js + Express + TypeScript + PostgreSQL via Supabase). Deploy em
+  plataforma always-on (Railway, Render, ou VPS) — **não** em serverless/Vercel, pois
+  mantém conexão persistente com o WhatsApp (em planos futuros deste projeto).
 - `web/` — Frontend (React + Vite + TypeScript). Deploy no Vercel.
 
 ## Pré-requisitos
 
-- Node.js 22.5 ou superior (o backend usa o módulo nativo `node:sqlite`, que não
-  precisa de compilação nativa — ao contrário de bibliotecas como `better-sqlite3`).
+- Node.js 18 ou superior.
+- Um projeto no [Supabase](https://supabase.com/dashboard) (gratuito): crie a conta
+  (pode entrar com Google), crie um projeto, e em **Project Settings → Database →
+  Connection string** copie a *session pooler* connection string (porta 5432) — a
+  conexão direta (`db.<ref>.supabase.co`) exige IPv6 e pode não funcionar em toda rede.
 - Uma credencial OAuth do Google (Google Cloud Console → APIs & Services →
   Credentials → Create OAuth client ID → Web application), com as origens
   JavaScript autorizadas incluindo `http://localhost:5173` (dev) e, depois do
@@ -2195,7 +2343,7 @@ Backend:
 
 ```bash
 cd server
-cp .env.example .env   # preencha GOOGLE_CLIENT_ID e JWT_SECRET
+cp .env.example .env   # preencha DATABASE_URL, GOOGLE_CLIENT_ID e JWT_SECRET
 npm install
 npm run dev
 ```
@@ -2213,11 +2361,11 @@ Acesse `http://localhost:5173`.
 
 ## Deploy
 
-- **Backend**: Railway ou Render, apontando para o diretório `server/`, com um
-  volume/disco persistente montado no caminho de `DB_PATH`. Configure as
-  variáveis de ambiente do `server/.env.example` (usando o domínio real do
-  frontend em `FRONTEND_URL`) e garanta que o plano escolhido não hiberna o
-  processo por inatividade.
+- **Backend**: Railway ou Render, apontando para o diretório `server/`. Configure as
+  variáveis de ambiente do `server/.env.example` (`DATABASE_URL` do Supabase, e o
+  domínio real do frontend em `FRONTEND_URL`) e garanta que o plano escolhido não hiberna
+  o processo por inatividade — o banco em si já é gerenciado pelo Supabase, então o
+  backend não precisa de disco persistente próprio.
 - **Frontend**: Vercel, apontando para o diretório `web/` (framework preset
   Vite). Configure `VITE_API_BASE_URL` com a URL pública do backend e
   `VITE_GOOGLE_CLIENT_ID`.
