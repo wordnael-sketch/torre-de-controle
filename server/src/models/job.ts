@@ -115,11 +115,17 @@ export async function createJob(
 }
 
 async function isFinalStatus(db: AppDatabase, statusId: number): Promise<boolean> {
+  // Must compare (phase order, status order) as a pair — comparing status "order"
+  // within the same phase alone would call the LAST STATUS OF EVERY PHASE "final"
+  // (e.g. "Defesa da Proposta", the end of Phase 1), not just the true final status
+  // of the final phase ("Arquivamento", end of Phase 6).
   const result = await db.query<{ is_final: boolean }>(
     `SELECT NOT EXISTS (
        SELECT 1 FROM statuses s2
+       JOIN phases p2 ON p2.id = s2.phase_id
        JOIN statuses s1 ON s1.id = $1
-       WHERE s2.phase_id = s1.phase_id AND s2."order" > s1."order"
+       JOIN phases p1 ON p1.id = s1.phase_id
+       WHERE (p2."order", s2."order") > (p1."order", s1."order")
      ) AS is_final
      FROM statuses WHERE id = $1`,
     [statusId],
@@ -137,8 +143,8 @@ async function applyStatusChange(
   const completed = await isFinalStatus(db, toStatusId);
 
   await db.query(
-    `UPDATE jobs SET status_id = $1, updated_at = now(), completed_at = ${completed ? 'now()' : 'NULL'} WHERE id = $2`,
-    [toStatusId, jobId],
+    `UPDATE jobs SET status_id = $1, updated_at = now(), completed_at = CASE WHEN $2 THEN now() ELSE NULL END WHERE id = $3`,
+    [toStatusId, completed, jobId],
   );
 
   await recordStatusChange(db, { jobId, fromStatusId, toStatusId, note });

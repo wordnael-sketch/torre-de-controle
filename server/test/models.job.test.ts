@@ -121,4 +121,33 @@ describe('job status lifecycle', () => {
       expect(completed.completedAt).not.toBeNull();
     });
   });
+
+  it('does NOT mark the job completed when it only reaches the last status of an earlier phase', async () => {
+    await withTestTransaction(async (db) => {
+      const created = await createJob(db, { name: 'Job Não-Conclusão Teste' });
+
+      // "Defesa da Proposta" is the LAST status of Phase 1, not the final status of
+      // the whole pipeline — reaching it must not complete the job.
+      const phase1LastStatus = await db.query<{ id: number }>(
+        `SELECT id FROM statuses WHERE name = 'Defesa da Proposta'`,
+      );
+
+      const updated = await setJobStatus(db, created.id, phase1LastStatus.rows[0].id);
+
+      expect(updated.statusName).toBe('Defesa da Proposta');
+      expect(updated.completedAt).toBeNull();
+    });
+  });
+
+  it('advanceJobStatus throws when the job is already at the last status of its phase', async () => {
+    await withTestTransaction(async (db) => {
+      const created = await createJob(db, { name: 'Job Avanço no Limite Teste' });
+      const phase1LastStatus = await db.query<{ id: number }>(
+        `SELECT id FROM statuses WHERE name = 'Defesa da Proposta'`,
+      );
+      await setJobStatus(db, created.id, phase1LastStatus.rows[0].id);
+
+      await expect(advanceJobStatus(db, created.id)).rejects.toThrow();
+    });
+  });
 });
