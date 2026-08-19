@@ -3,6 +3,7 @@ import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import type { AppDatabase } from './db';
 import { createAuthRouter, type VerifyIdToken } from './routes/auth';
+import { createJobsRouter } from './routes/jobs';
 
 export interface AppDeps {
   db: AppDatabase;
@@ -23,6 +24,7 @@ export function createApp(deps: AppDeps): Express {
   });
 
   app.use('/api/auth', createAuthRouter(deps));
+  app.use('/api/jobs', createJobsRouter(deps));
 
   return app;
 }
