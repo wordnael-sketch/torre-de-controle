@@ -37,6 +37,8 @@ export interface User {
   name?: string;
 }
 
+export type AlertLevel = 'green' | 'yellow' | 'red';
+
 export interface Job {
   id: number;
   name: string;
@@ -44,6 +46,59 @@ export interface Job {
   client: string | null;
   createdAt: string;
   updatedAt: string;
+  statusId: number | null;
+  statusName: string | null;
+  phaseId: number | null;
+  phaseName: string | null;
+  completedAt: string | null;
+  alertLevel: AlertLevel;
+  highlightedPersonName: string | null;
+}
+
+export interface RoleAssignment {
+  area: string;
+  personId: number | null;
+  personName: string | null;
+}
+
+export interface StatusHistoryEntry {
+  id: number;
+  fromStatusId: number | null;
+  toStatusId: number;
+  changedAt: string;
+  note: string | null;
+}
+
+export interface JobDetail extends Job {
+  actionRequired: string | null;
+  triggerLabel: string | null;
+  roleAssignments: RoleAssignment[];
+  statusHistory: StatusHistoryEntry[];
+}
+
+export interface Status {
+  id: number;
+  phaseId: number;
+  order: number;
+  name: string;
+  actionRequired: string;
+  triggerLabel: string;
+  primaryRole: string;
+}
+
+export interface Phase {
+  id: number;
+  order: number;
+  name: string;
+  roles: string[];
+  statuses: Status[];
+}
+
+export interface Person {
+  id: number;
+  name: string;
+  area: string;
+  active: boolean;
 }
 
 export const api = {
@@ -57,4 +112,21 @@ export const api = {
   listJobs: () => request<{ jobs: Job[] }>('/api/jobs'),
   createJob: (job: { name: string; code?: string; client?: string }) =>
     request<{ job: Job }>('/api/jobs', { method: 'POST', body: JSON.stringify(job) }),
+  getJob: (id: number) => request<{ job: JobDetail }>(`/api/jobs/${id}`),
+  advanceJob: (id: number, note?: string) =>
+    request<{ job: Job }>(`/api/jobs/${id}/advance`, { method: 'POST', body: JSON.stringify({ note }) }),
+  setJobStatus: (id: number, statusId: number, note?: string) =>
+    request<{ job: Job }>(`/api/jobs/${id}/status`, {
+      method: 'POST',
+      body: JSON.stringify({ statusId, note }),
+    }),
+  assignRole: (id: number, area: string, personId: number | null) =>
+    request<{ roleAssignment: RoleAssignment }>(`/api/jobs/${id}/roles/${area}`, {
+      method: 'PUT',
+      body: JSON.stringify({ personId }),
+    }),
+  getReference: () => request<{ phases: Phase[] }>('/api/reference'),
+  listPeople: () => request<{ people: Person[] }>('/api/people'),
+  createPerson: (input: { name: string; area: string }) =>
+    request<{ person: Person }>('/api/people', { method: 'POST', body: JSON.stringify(input) }),
 };

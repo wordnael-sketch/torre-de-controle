@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { request } from '../src/api/client';
+import { request, api } from '../src/api/client';
 
 describe('api client request()', () => {
   beforeEach(() => {
@@ -51,6 +51,73 @@ describe('api client request()', () => {
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining('/api/jobs'),
       expect.objectContaining({ credentials: 'include' }),
+    );
+  });
+});
+
+describe('api.getJob / api.advanceJob / api.setJobStatus / api.assignRole', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('getJob fetches /api/jobs/:id', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ job: { id: 1, name: 'Job' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.getJob(1);
+
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/jobs/1'), expect.anything());
+  });
+
+  it('advanceJob posts to /api/jobs/:id/advance', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ job: { id: 1 } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.advanceJob(1, 'nota');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/jobs/1/advance'),
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('setJobStatus posts to /api/jobs/:id/status', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ job: { id: 1 } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.setJobStatus(1, 42, 'nota');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/jobs/1/status'),
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('assignRole puts to /api/jobs/:id/roles/:area', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ roleAssignment: { area: 'Comercial', personId: 1, personName: 'Anne' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.assignRole(1, 'Comercial', 2);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/jobs/1/roles/Comercial'),
+      expect.objectContaining({ method: 'PUT' }),
     );
   });
 });
