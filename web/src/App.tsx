@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { Login } from './pages/Login';
 import { Board } from './pages/Board';
+import { JobDetailPage } from './pages/JobDetail';
 
 function RequireAuth({ children }: { children: ReactElement }) {
   const { user, loading, logout } = useAuth();
@@ -58,6 +59,14 @@ function AppRoutes() {
         element={
           <RequireAuth>
             <Board />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/jobs/:id"
+        element={
+          <RequireAuth>
+            <JobDetailPage />
           </RequireAuth>
         }
       />
