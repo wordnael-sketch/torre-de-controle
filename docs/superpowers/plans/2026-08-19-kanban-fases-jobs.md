@@ -942,7 +942,10 @@ describe('job status history', () => {
 
       const history = await getJobStatusHistory(db, job.id);
 
-      expect(history.length).toBeGreaterThanOrEqual(2);
+      // >=1, not >=2: at this point in the plan, createJob (Plan 1's version) does
+      // not yet record an initial history entry itself — that lands in Task 4. This
+      // test only asserts on the entry recordStatusChange just wrote above.
+      expect(history.length).toBeGreaterThanOrEqual(1);
       expect(history[0].toStatusId).toBe(briefingRow.rows[0].id);
       expect(history[0].note).toBe('Avanço de teste');
     });
@@ -951,6 +954,14 @@ describe('job status history', () => {
   it('returns the most recent changed_at via getLastStatusChangeAt', async () => {
     await withTestTransaction(async (db) => {
       const job = await createJob(db, { name: 'Job Último Status Teste' });
+
+      // createJob doesn't record history yet at this point in the plan (Task 4 adds
+      // that) — record one manually so there's something for getLastStatusChangeAt
+      // to find.
+      const statusRow = await db.query<{ id: number }>(
+        `SELECT id FROM statuses WHERE name = 'Prospecção'`,
+      );
+      await recordStatusChange(db, { jobId: job.id, fromStatusId: null, toStatusId: statusRow.rows[0].id });
 
       const lastChangedAt = await getLastStatusChangeAt(db, job.id);
 
