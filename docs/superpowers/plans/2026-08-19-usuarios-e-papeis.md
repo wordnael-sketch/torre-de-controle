@@ -158,8 +158,8 @@ git commit -m "feat(server): add user roles/status and seed first admin"
 
 **Files:**
 - Modify: `server/src/models/user.ts`
-- Modify: `server/test/models.user.test.ts` (replace in full — `findOrCreateUser` is
-  removed)
+- Modify: `server/test/models.user.test.ts` (replace in full — `findOrCreateUser`'s
+  own tests are removed, but the function itself is kept in `user.ts`, see below)
 
 **Interfaces:**
 - Consumes: `AppDatabase`, `withTestTransaction`.
@@ -175,7 +175,16 @@ git commit -m "feat(server): add user roles/status and seed first admin"
   `setUserRole(db: AppDatabase, id: number, role: UserRole): Promise<User | null>`,
   `setUserStatus(db: AppDatabase, id: number, status: 'active' | 'revoked'): Promise<User | null>`.
 
-`findOrCreateUser` is removed entirely — nothing calls it after Task 4.
+**`findOrCreateUser` is KEPT in this task, not removed** — a correction to the
+original scope. `server/src/routes/auth.ts` still calls it and is not rewritten until
+Task 4; deleting it here would break every existing auth/jobs/reference route test
+for the two-task window between Task 2 and Task 4 landing. Task 1's implementer
+already hit this exact problem in miniature (the seeded Wilka row, with a null
+`google_sub`, broke the OLD `findOrCreateUser`'s google_sub-only lookup) and fixed it
+with an email-fallback inside the old function — Step 3 below carries that same fix
+forward into the new file, adapted to the new `User`/`UserRow` shape. Task 4 is the
+one that actually deletes `findOrCreateUser`, at the same time it rewrites
+`auth.ts` to stop calling it.
 
 - [ ] **Step 1: Replace `server/test/models.user.test.ts` in full**
 
@@ -348,6 +357,45 @@ function toUser(row: UserRow): User {
 export async function findUserByEmail(db: AppDatabase, email: string): Promise<User | null> {
   const result = await db.query<UserRow>('SELECT * FROM users WHERE email = $1', [email]);
   return result.rows[0] ? toUser(result.rows[0]) : null;
+}
+
+// TEMPORARY — kept only because server/src/routes/auth.ts still calls this until
+// Task 4 rewrites it. Task 4 deletes this function. Carries forward the
+// email-fallback fix Task 1's implementer added to the old version of this file
+// (the seeded Wilka row has a null google_sub, so a google_sub-only lookup misses
+// her and would otherwise crash into the email UNIQUE constraint on INSERT).
+export async function findOrCreateUser(
+  db: AppDatabase,
+  input: { googleSub: string; email: string; name: string },
+): Promise<User> {
+  const existing = await db.query<UserRow>('SELECT * FROM users WHERE google_sub = $1', [
+    input.googleSub,
+  ]);
+
+  if (existing.rows[0]) {
+    return toUser(existing.rows[0]);
+  }
+
+  const byEmail = await db.query<UserRow>('SELECT * FROM users WHERE email = $1', [input.email]);
+
+  if (byEmail.rows[0]) {
+    const row = byEmail.rows[0];
+    if (!row.google_sub || !row.name) {
+      const updated = await db.query<UserRow>(
+        'UPDATE users SET google_sub = $1, name = $2 WHERE id = $3 RETURNING *',
+        [input.googleSub, input.name, row.id],
+      );
+      return toUser(updated.rows[0]);
+    }
+    return toUser(row);
+  }
+
+  const inserted = await db.query<UserRow>(
+    'INSERT INTO users (google_sub, email, name) VALUES ($1, $2, $3) RETURNING *',
+    [input.googleSub, input.email, input.name],
+  );
+
+  return toUser(inserted.rows[0]);
 }
 
 export async function activateUser(
@@ -659,6 +707,8 @@ git commit -m "feat(server): add requireActiveUser and requireAdmin middleware"
 - Modify: `server/src/routes/auth.ts`
 - Modify: `server/src/routes/jobs.ts`
 - Modify: `server/src/routes/reference.ts`
+- Modify: `server/src/models/user.ts` (remove the now-dead `findOrCreateUser`, kept
+  temporarily by Task 2 only because this task's Step 3 needed it to still exist)
 - Modify: `server/test/routes.auth.test.ts` (replace in full)
 
 **Interfaces:**
@@ -1021,7 +1071,61 @@ and update the import from `import { requireAuth } from '../auth/middleware';` t
 `import { requireAuth, requireActiveUser } from '../auth/middleware';`. Nothing else
 in this file changes.
 
-- [ ] **Step 6: Run tests to verify they pass**
+- [ ] **Step 6: Remove the now-dead `findOrCreateUser` from `server/src/models/user.ts`**
+
+Task 2 kept `findOrCreateUser` in `user.ts` only because this task's Step 3 (above)
+still called it at that point. Now that Step 3 has replaced `auth.ts`'s `/google`
+handler to use `findUserByEmail`/`activateUser` instead, nothing in the codebase
+calls `findOrCreateUser` anymore — remove it so it doesn't linger as dead code.
+
+Delete this entire function from `server/src/models/user.ts` (it's the one with the
+`// TEMPORARY` comment above it, between `findUserByEmail` and `activateUser`):
+
+```ts
+// TEMPORARY — kept only because server/src/routes/auth.ts still calls this until
+// Task 4 rewrites it. Task 4 deletes this function. Carries forward the
+// email-fallback fix Task 1's implementer added to the old version of this file
+// (the seeded Wilka row has a null google_sub, so a google_sub-only lookup misses
+// her and would otherwise crash into the email UNIQUE constraint on INSERT).
+export async function findOrCreateUser(
+  db: AppDatabase,
+  input: { googleSub: string; email: string; name: string },
+): Promise<User> {
+  const existing = await db.query<UserRow>('SELECT * FROM users WHERE google_sub = $1', [
+    input.googleSub,
+  ]);
+
+  if (existing.rows[0]) {
+    return toUser(existing.rows[0]);
+  }
+
+  const byEmail = await db.query<UserRow>('SELECT * FROM users WHERE email = $1', [input.email]);
+
+  if (byEmail.rows[0]) {
+    const row = byEmail.rows[0];
+    if (!row.google_sub || !row.name) {
+      const updated = await db.query<UserRow>(
+        'UPDATE users SET google_sub = $1, name = $2 WHERE id = $3 RETURNING *',
+        [input.googleSub, input.name, row.id],
+      );
+      return toUser(updated.rows[0]);
+    }
+    return toUser(row);
+  }
+
+  const inserted = await db.query<UserRow>(
+    'INSERT INTO users (google_sub, email, name) VALUES ($1, $2, $3) RETURNING *',
+    [input.googleSub, input.email, input.name],
+  );
+
+  return toUser(inserted.rows[0]);
+}
+```
+
+Leave every other function in `user.ts` (from Task 2) exactly as it is — this step
+removes only this one function.
+
+- [ ] **Step 7: Run tests to verify they pass**
 
 Run: `npm test` (inside `server/`)
 Expected: PASS — this also re-runs every existing `jobs`/`reference` route test
@@ -1036,10 +1140,10 @@ invited her and that seed data is visible inside every test transaction; if a
 different email is used anywhere, this task does not require changing those files —
 flag it as a finding for review instead of guessing at a fix.)
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add server/src/routes/auth.ts server/src/routes/jobs.ts server/src/routes/reference.ts server/test/routes.auth.test.ts
+git add server/src/routes/auth.ts server/src/routes/jobs.ts server/src/routes/reference.ts server/src/models/user.ts server/test/routes.auth.test.ts
 git commit -m "feat(server): require invitation to log in, re-check account status on every request"
 ```
 
