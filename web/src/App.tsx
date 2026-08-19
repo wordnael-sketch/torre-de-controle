@@ -1,9 +1,10 @@
 import type { ReactElement } from 'react';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { Login } from './pages/Login';
 import { Board } from './pages/Board';
 import { JobDetailPage } from './pages/JobDetail';
+import { UsersPage } from './pages/Users';
 
 function RequireAuth({ children }: { children: ReactElement }) {
   const { user, loading, logout } = useAuth();
@@ -27,13 +28,34 @@ function RequireAuth({ children }: { children: ReactElement }) {
         }}
       >
         <span>{user.email}</span>
-        <button type="button" onClick={() => void logout()}>
-          Sair
-        </button>
+        <nav style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+          {user.role === 'admin' && <Link to="/usuarios">Usuários</Link>}
+          <button type="button" onClick={() => void logout()}>
+            Sair
+          </button>
+        </nav>
       </header>
       {children}
     </div>
   );
+}
+
+function RequireAdmin({ children }: { children: ReactElement }) {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return <p>Carregando...</p>;
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (user.role !== 'admin') {
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
 }
 
 function LoginRoute() {
@@ -67,6 +89,16 @@ function AppRoutes() {
         element={
           <RequireAuth>
             <JobDetailPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/usuarios"
+        element={
+          <RequireAuth>
+            <RequireAdmin>
+              <UsersPage />
+            </RequireAdmin>
           </RequireAuth>
         }
       />
