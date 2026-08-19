@@ -1775,6 +1775,22 @@ describe('PUT /api/jobs/:id/roles/:area', () => {
       expect(res.body.roleAssignment.personName).toBe('Anne');
     });
   });
+
+  it('rejects an area that is not a valid role for the job\'s current phase', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+
+      // Job starts in Fase 1 ("Comercial e Orçamento"), which does not have a
+      // "Financeiro" role (that's a Fase 2 role) — this must be rejected, not
+      // silently insert an orphan row.
+      const created = await agent.post('/api/jobs').send({ name: 'Job Área Inválida Rota Teste' });
+
+      const res = await agent.put(`/api/jobs/${created.body.job.id}/roles/Financeiro`).send({ personId: null });
+
+      expect(res.status).toBe(400);
+    });
+  });
 });
 ```
 
@@ -1890,6 +1906,16 @@ export function createJobsRouter(deps: JobsRouterDeps): Router {
 
       if (!job || !job.phaseId) {
         res.status(404).json({ error: 'Job not found' });
+        return;
+      }
+
+      const roleExists = await deps.db.query(
+        'SELECT 1 FROM phase_roles WHERE phase_id = $1 AND area = $2',
+        [job.phaseId, req.params.area],
+      );
+
+      if (roleExists.rows.length === 0) {
+        res.status(400).json({ error: 'area is not a valid role for this job\'s current phase' });
         return;
       }
 
