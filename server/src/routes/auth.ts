@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import type { AppDatabase } from '../db';
-import { findOrCreateUser, getUserById } from '../models/user';
+import { findUserByEmail, activateUser } from '../models/user';
 import { isAllowedDomain } from '../auth/domain';
 import { signSession } from '../auth/session';
-import { requireAuth, SESSION_COOKIE } from '../auth/middleware';
+import { requireAuth, requireActiveUser, SESSION_COOKIE } from '../auth/middleware';
 import { asyncHandler } from '../utils/asyncHandler';
 
 export interface GoogleProfile {
@@ -52,13 +52,19 @@ export function createAuthRouter(deps: AuthRouterDeps): Router {
       }
 
       if (!isAllowedDomain(profile.email, deps.allowedDomain)) {
-        res.status(403).json({ error: 'Email domain not allowed' });
+        res.status(403).json({ error: 'domain_not_allowed' });
         return;
       }
 
-      const user = await findOrCreateUser(deps.db, {
+      const existing = await findUserByEmail(deps.db, profile.email);
+
+      if (!existing || existing.status === 'revoked') {
+        res.status(403).json({ error: 'not_invited' });
+        return;
+      }
+
+      const user = await activateUser(deps.db, existing.id, {
         googleSub: profile.sub,
-        email: profile.email,
         name: profile.name,
       });
 
@@ -75,15 +81,9 @@ export function createAuthRouter(deps: AuthRouterDeps): Router {
   router.get(
     '/me',
     requireAuth(deps.jwtSecret),
+    requireActiveUser(deps.db),
     asyncHandler(async (req, res) => {
-      const user = await getUserById(deps.db, req.user!.userId);
-
-      if (!user) {
-        res.status(401).json({ error: 'Not authenticated' });
-        return;
-      }
-
-      res.json({ user });
+      res.json({ user: req.currentUser });
     }),
   );
 

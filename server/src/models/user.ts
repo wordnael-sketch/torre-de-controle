@@ -40,45 +40,6 @@ export async function findUserByEmail(db: AppDatabase, email: string): Promise<U
   return result.rows[0] ? toUser(result.rows[0]) : null;
 }
 
-// TEMPORARY — kept only because server/src/routes/auth.ts still calls this until
-// Task 4 rewrites it. Task 4 deletes this function. Carries forward the
-// email-fallback fix Task 1's implementer added to the old version of this file
-// (the seeded Wilka row has a null google_sub, so a google_sub-only lookup misses
-// her and would otherwise crash into the email UNIQUE constraint on INSERT).
-export async function findOrCreateUser(
-  db: AppDatabase,
-  input: { googleSub: string; email: string; name: string },
-): Promise<User> {
-  const existing = await db.query<UserRow>('SELECT * FROM users WHERE google_sub = $1', [
-    input.googleSub,
-  ]);
-
-  if (existing.rows[0]) {
-    return toUser(existing.rows[0]);
-  }
-
-  const byEmail = await db.query<UserRow>('SELECT * FROM users WHERE email = $1', [input.email]);
-
-  if (byEmail.rows[0]) {
-    const row = byEmail.rows[0];
-    if (!row.google_sub || !row.name) {
-      const updated = await db.query<UserRow>(
-        'UPDATE users SET google_sub = $1, name = $2 WHERE id = $3 RETURNING *',
-        [input.googleSub, input.name, row.id],
-      );
-      return toUser(updated.rows[0]);
-    }
-    return toUser(row);
-  }
-
-  const inserted = await db.query<UserRow>(
-    'INSERT INTO users (google_sub, email, name) VALUES ($1, $2, $3) RETURNING *',
-    [input.googleSub, input.email, input.name],
-  );
-
-  return toUser(inserted.rows[0]);
-}
-
 export async function activateUser(
   db: AppDatabase,
   id: number,

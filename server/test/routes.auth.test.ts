@@ -3,6 +3,7 @@ import request from 'supertest';
 import { createApp } from '../src/app';
 import type { GoogleProfile } from '../src/routes/auth';
 import type { AppDatabase } from '../src/db';
+import { inviteUser, setUserStatus } from '../src/models/user';
 import { withTestTransaction } from './helpers/testDb';
 
 const JWT_SECRET = 'test-secret';
@@ -14,19 +15,55 @@ function buildApp(db: AppDatabase, verifyIdToken: (idToken: string) => Promise<G
 }
 
 describe('POST /api/auth/google', () => {
-  it('logs in a user with an allowed domain and sets a session cookie', async () => {
+  it('logs in a user who was invited beforehand and sets a session cookie', async () => {
     await withTestTransaction(async (db) => {
+      await inviteUser(db, { email: 'convidada.login.teste@ilhacrossmidia.com.br', role: 'member' });
+
       const app = buildApp(db, async () => ({
-        sub: 'google-sub-1',
-        email: 'wilka@ilhacrossmidia.com.br',
-        name: 'Wilka',
+        sub: 'google-sub-login-teste',
+        email: 'convidada.login.teste@ilhacrossmidia.com.br',
+        name: 'Convidada Teste',
       }));
 
       const res = await request(app).post('/api/auth/google').send({ idToken: 'fake-token' });
 
       expect(res.status).toBe(200);
-      expect(res.body.user.email).toBe('wilka@ilhacrossmidia.com.br');
+      expect(res.body.user.email).toBe('convidada.login.teste@ilhacrossmidia.com.br');
+      expect(res.body.user.status).toBe('active');
       expect(res.headers['set-cookie']?.[0]).toMatch(/^session=/);
+    });
+  });
+
+  it('rejects an email that was never invited', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db, async () => ({
+        sub: 'google-sub-nao-convidado-teste',
+        email: 'nunca.convidado.teste@ilhacrossmidia.com.br',
+        name: 'Ninguém',
+      }));
+
+      const res = await request(app).post('/api/auth/google').send({ idToken: 'fake-token' });
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('not_invited');
+    });
+  });
+
+  it('rejects a revoked user even though they were once invited and active', async () => {
+    await withTestTransaction(async (db) => {
+      const invited = await inviteUser(db, { email: 'revogada.login.teste@ilhacrossmidia.com.br', role: 'member' });
+      await setUserStatus(db, invited.id, 'revoked');
+
+      const app = buildApp(db, async () => ({
+        sub: 'google-sub-revogada-teste',
+        email: 'revogada.login.teste@ilhacrossmidia.com.br',
+        name: 'Revogada',
+      }));
+
+      const res = await request(app).post('/api/auth/google').send({ idToken: 'fake-token' });
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('not_invited');
     });
   });
 
@@ -41,6 +78,7 @@ describe('POST /api/auth/google', () => {
       const res = await request(app).post('/api/auth/google').send({ idToken: 'fake-token' });
 
       expect(res.status).toBe(403);
+      expect(res.body.error).toBe('domain_not_allowed');
     });
   });
 
@@ -72,10 +110,12 @@ describe('POST /api/auth/google', () => {
 describe('GET /api/auth/me', () => {
   it('returns the current user when logged in', async () => {
     await withTestTransaction(async (db) => {
+      await inviteUser(db, { email: 'me.teste@ilhacrossmidia.com.br', role: 'member' });
+
       const app = buildApp(db, async () => ({
-        sub: 'google-sub-1',
-        email: 'wilka@ilhacrossmidia.com.br',
-        name: 'Wilka',
+        sub: 'google-sub-me-teste',
+        email: 'me.teste@ilhacrossmidia.com.br',
+        name: 'Pessoa Me',
       }));
 
       const agent = request.agent(app);
@@ -85,7 +125,7 @@ describe('GET /api/auth/me', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.user).toEqual(
-        expect.objectContaining({ email: 'wilka@ilhacrossmidia.com.br', name: 'Wilka' }),
+        expect.objectContaining({ email: 'me.teste@ilhacrossmidia.com.br', name: 'Pessoa Me' }),
       );
       expect(res.body.user.id).toBeGreaterThan(0);
     });
@@ -98,6 +138,27 @@ describe('GET /api/auth/me', () => {
       });
 
       const res = await request(app).get('/api/auth/me');
+
+      expect(res.status).toBe(401);
+    });
+  });
+
+  it('returns 401 for a session whose account was revoked after login', async () => {
+    await withTestTransaction(async (db) => {
+      await inviteUser(db, { email: 'revogada.sessao.teste@ilhacrossmidia.com.br', role: 'member' });
+
+      const app = buildApp(db, async () => ({
+        sub: 'google-sub-revogada-sessao-teste',
+        email: 'revogada.sessao.teste@ilhacrossmidia.com.br',
+        name: 'Pessoa',
+      }));
+
+      const agent = request.agent(app);
+      const loginRes = await agent.post('/api/auth/google').send({ idToken: 'fake-token' });
+
+      await setUserStatus(db, loginRes.body.user.id, 'revoked');
+
+      const res = await agent.get('/api/auth/me');
 
       expect(res.status).toBe(401);
     });

@@ -3,7 +3,7 @@ import type { AppDatabase } from '../db';
 import { createJob, listJobs, getJobById, advanceJobStatus, setJobStatus } from '../models/job';
 import { getJobStatusHistory } from '../models/jobStatusHistory';
 import { getJobRoleAssignments, setJobRoleAssignment } from '../models/jobRoleAssignments';
-import { requireAuth } from '../auth/middleware';
+import { requireAuth, requireActiveUser } from '../auth/middleware';
 import { asyncHandler } from '../utils/asyncHandler';
 
 export interface JobsRouterDeps {
@@ -20,6 +20,7 @@ export function createJobsRouter(deps: JobsRouterDeps): Router {
   const router = Router();
 
   router.use(requireAuth(deps.jwtSecret));
+  router.use(requireActiveUser(deps.db));
 
   router.get(
     '/',

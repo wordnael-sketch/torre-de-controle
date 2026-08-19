@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { AppDatabase } from '../db';
 import { listPhasesWithStatuses } from '../models/reference';
 import { listPeople, createPerson, setPersonActive } from '../models/people';
-import { requireAuth } from '../auth/middleware';
+import { requireAuth, requireActiveUser } from '../auth/middleware';
 import { asyncHandler } from '../utils/asyncHandler';
 
 export interface ReferenceRouterDeps {
@@ -14,6 +14,7 @@ export function createReferenceRouter(deps: ReferenceRouterDeps): Router {
   const router = Router();
 
   router.use(requireAuth(deps.jwtSecret));
+  router.use(requireActiveUser(deps.db));
 
   router.get(
     '/reference',
