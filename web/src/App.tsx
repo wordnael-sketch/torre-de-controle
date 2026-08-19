@@ -5,7 +5,7 @@ import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 
 function RequireAuth({ children }: { children: ReactElement }) {
-  const { user, loading } = useAuth();
+  const { user, loading, logout } = useAuth();
 
   if (loading) {
     return <p>Carregando...</p>;
@@ -15,13 +15,46 @@ function RequireAuth({ children }: { children: ReactElement }) {
     return <Navigate to="/login" replace />;
   }
 
-  return children;
+  return (
+    <div>
+      <header
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          maxWidth: 640,
+          margin: '0 auto',
+          padding: '1rem',
+        }}
+      >
+        <span>{user.email}</span>
+        <button type="button" onClick={() => void logout()}>
+          Sair
+        </button>
+      </header>
+      {children}
+    </div>
+  );
+}
+
+function LoginRoute() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return <p>Carregando...</p>;
+  }
+
+  if (user) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <Login />;
 }
 
 function AppRoutes() {
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
+      <Route path="/login" element={<LoginRoute />} />
       <Route
         path="/"
         element={

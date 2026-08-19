@@ -26,5 +26,10 @@ export function createApp(deps: AppDeps): Express {
   app.use('/api/auth', createAuthRouter(deps));
   app.use('/api/jobs', createJobsRouter(deps));
 
+  app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  });
+
   return app;
 }

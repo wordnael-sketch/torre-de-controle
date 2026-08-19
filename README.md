@@ -49,7 +49,11 @@ Acesse `http://localhost:5173`.
   variáveis de ambiente do `server/.env.example` (`DATABASE_URL` do Supabase, e o
   domínio real do frontend em `FRONTEND_URL`) e garanta que o plano escolhido não hiberna
   o processo por inatividade — o banco em si já é gerenciado pelo Supabase, então o
-  backend não precisa de disco persistente próprio.
+  backend não precisa de disco persistente próprio. Certifique-se de definir
+  `NODE_ENV=production` explicitamente — o Render define isso automaticamente, mas o
+  Railway não, e sem ele os cookies de sessão saem com `SameSite=Lax` em vez de
+  `SameSite=None; Secure`, o que o navegador rejeita numa chamada cross-site do Vercel
+  para o backend (login parece funcionar mas a sessão nunca é reconhecida).
 - **Frontend**: Vercel, apontando para o diretório `web/` (framework preset
   Vite). Configure `VITE_API_BASE_URL` com a URL pública do backend e
   `VITE_GOOGLE_CLIENT_ID`.

@@ -12,6 +12,10 @@ export function createGoogleVerifier(clientId: string) {
       throw new Error('Invalid Google ID token payload');
     }
 
+    if (!payload.email_verified) {
+      throw new Error('Google email not verified');
+    }
+
     return { sub: payload.sub, email: payload.email, name: payload.name };
   };
 }

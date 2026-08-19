@@ -9,13 +9,21 @@ const JWT_SECRET = 'test-secret';
 const ALLOWED_DOMAIN = 'ilhacrossmidia.com.br';
 const FRONTEND_URL = 'http://localhost:5173';
 
-function buildApp(db: AppDatabase) {
-  const verifyIdToken = async (): Promise<GoogleProfile> => ({
-    sub: 'google-sub-1',
-    email: 'wilka@ilhacrossmidia.com.br',
-    name: 'Wilka',
+function buildApp(db: AppDatabase, verifyIdToken?: () => Promise<GoogleProfile>) {
+  const resolvedVerifyIdToken =
+    verifyIdToken ??
+    (async (): Promise<GoogleProfile> => ({
+      sub: 'google-sub-1',
+      email: 'wilka@ilhacrossmidia.com.br',
+      name: 'Wilka',
+    }));
+  return createApp({
+    db,
+    verifyIdToken: resolvedVerifyIdToken,
+    jwtSecret: JWT_SECRET,
+    allowedDomain: ALLOWED_DOMAIN,
+    frontendUrl: FRONTEND_URL,
   });
-  return createApp({ db, verifyIdToken, jwtSecret: JWT_SECRET, allowedDomain: ALLOWED_DOMAIN, frontendUrl: FRONTEND_URL });
 }
 
 async function loggedInAgent(app: ReturnType<typeof buildApp>) {
@@ -78,5 +86,24 @@ describe('POST /api/jobs', () => {
 
       expect(res.status).toBe(400);
     });
+  });
+});
+
+describe('error handling', () => {
+  it('returns 500 instead of crashing when the database call fails during login', async () => {
+    const failingDb: AppDatabase = {
+      query: async () => {
+        throw new Error('simulated database failure');
+      },
+    };
+    const app = buildApp(failingDb, async () => ({
+      sub: 'google-sub-err',
+      email: 'wilka@ilhacrossmidia.com.br',
+      name: 'Wilka',
+    }));
+
+    const res = await request(app).post('/api/auth/google').send({ idToken: 'fake-token' });
+
+    expect(res.status).toBe(500);
   });
 });
