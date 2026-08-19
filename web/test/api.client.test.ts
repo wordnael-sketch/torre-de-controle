@@ -28,13 +28,13 @@ describe('api client request()', () => {
         ok: false,
         status: 403,
         statusText: 'Forbidden',
-        json: async () => ({ error: 'Email domain not allowed' }),
+        json: async () => ({ error: 'domain_not_allowed' }),
       }),
     );
 
     await expect(request('/api/auth/google')).rejects.toMatchObject({
       status: 403,
-      message: 'Email domain not allowed',
+      message: 'domain_not_allowed',
     });
   });
 
@@ -135,5 +135,72 @@ describe('api.getJob / api.advanceJob / api.setJobStatus / api.assignRole', () =
     expect(calledUrl).toContain('/api/jobs/1/roles/');
     expect(calledUrl).not.toContain('roles/Jurídico/Base'); // would be the broken, unencoded form
     expect(decodeURIComponent(calledUrl.split('/roles/')[1])).toBe('Jurídico/Base');
+  });
+});
+
+describe('api.listUsers / api.inviteUser / api.setUserRole / api.setUserStatus', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('listUsers fetches /api/users', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ users: [] }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.listUsers();
+
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/users'), expect.anything());
+  });
+
+  it('inviteUser posts to /api/users/invite', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => ({ user: { id: 1, email: 'a@ilhacrossmidia.com.br', role: 'member', status: 'invited' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.inviteUser({ email: 'a@ilhacrossmidia.com.br', role: 'member' });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/users/invite'),
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('setUserRole patches /api/users/:id/role', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ user: { id: 1, email: 'a@ilhacrossmidia.com.br', role: 'admin', status: 'active' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.setUserRole(1, 'admin');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/users/1/role'),
+      expect.objectContaining({ method: 'PATCH' }),
+    );
+  });
+
+  it('setUserStatus patches /api/users/:id/status', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ user: { id: 1, email: 'a@ilhacrossmidia.com.br', role: 'member', status: 'revoked' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.setUserStatus(1, 'revoked');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/users/1/status'),
+      expect.objectContaining({ method: 'PATCH' }),
+    );
   });
 });

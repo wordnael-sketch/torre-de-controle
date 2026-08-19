@@ -31,10 +31,15 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
   return res.json() as Promise<T>;
 }
 
+export type UserRole = 'admin' | 'member';
+export type UserStatus = 'invited' | 'active' | 'revoked';
+
 export interface User {
   id: number;
   email: string;
-  name?: string;
+  name?: string | null;
+  role: UserRole;
+  status: UserStatus;
 }
 
 export type AlertLevel = 'green' | 'yellow' | 'red';
@@ -129,4 +134,11 @@ export const api = {
   listPeople: () => request<{ people: Person[] }>('/api/people'),
   createPerson: (input: { name: string; area: string }) =>
     request<{ person: Person }>('/api/people', { method: 'POST', body: JSON.stringify(input) }),
+  listUsers: () => request<{ users: User[] }>('/api/users'),
+  inviteUser: (input: { email: string; role: UserRole }) =>
+    request<{ user: User }>('/api/users/invite', { method: 'POST', body: JSON.stringify(input) }),
+  setUserRole: (id: number, role: UserRole) =>
+    request<{ user: User }>(`/api/users/${id}/role`, { method: 'PATCH', body: JSON.stringify({ role }) }),
+  setUserStatus: (id: number, status: 'active' | 'revoked') =>
+    request<{ user: User }>(`/api/users/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
 };
