@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { AppDatabase } from '../db';
 import { createJob, listJobs, getJobById, advanceJobStatus, setJobStatus } from '../models/job';
+import { setBolaCom, getBolaComDayCounts } from '../models/bolaCom';
 import { getJobStatusHistory } from '../models/jobStatusHistory';
 import { getJobRoleAssignments, setJobRoleAssignment } from '../models/jobRoleAssignments';
 import { requireAuth, requireActiveUser } from '../auth/middleware';
@@ -60,13 +61,14 @@ export function createJobsRouter(deps: JobsRouterDeps): Router {
         return;
       }
 
-      const [statusRow, roleAssignments, statusHistory] = await Promise.all([
+      const [statusRow, roleAssignments, statusHistory, bolaComDayCounts] = await Promise.all([
         deps.db.query<{ action_required: string; trigger_label: string }>(
           'SELECT action_required, trigger_label FROM statuses WHERE id = $1',
           [job.statusId],
         ),
         job.phaseId ? getJobRoleAssignments(deps.db, jobId, job.phaseId) : Promise.resolve([]),
         getJobStatusHistory(deps.db, jobId),
+        getBolaComDayCounts(deps.db, jobId),
       ]);
 
       res.json({
@@ -76,6 +78,7 @@ export function createJobsRouter(deps: JobsRouterDeps): Router {
           triggerLabel: statusRow.rows[0]?.trigger_label ?? null,
           roleAssignments,
           statusHistory,
+          bolaComDayCounts,
         },
       });
     }),
@@ -183,6 +186,34 @@ export function createJobsRouter(deps: JobsRouterDeps): Router {
         personId ?? null,
       );
       res.json({ roleAssignment });
+    }),
+  );
+
+  router.patch(
+    '/:id/bola-com',
+    asyncHandler(async (req, res) => {
+      const jobId = parseId(req.params.id);
+      if (jobId === null) {
+        res.status(400).json({ error: 'invalid job id' });
+        return;
+      }
+
+      const { bolaCom } = req.body as { bolaCom?: string };
+      if (bolaCom !== 'ilha' && bolaCom !== 'cliente') {
+        res.status(400).json({ error: 'bolaCom must be "ilha" or "cliente"' });
+        return;
+      }
+
+      const existing = await getJobById(deps.db, jobId);
+      if (!existing) {
+        res.status(404).json({ error: 'Job not found' });
+        return;
+      }
+
+      await setBolaCom(deps.db, jobId, bolaCom);
+      const job = await getJobById(deps.db, jobId);
+      const bolaComDayCounts = await getBolaComDayCounts(deps.db, jobId);
+      res.json({ job, bolaComDayCounts });
     }),
   );
 

@@ -321,3 +321,46 @@ describe('error handling on jobs routes', () => {
     });
   });
 });
+
+describe('PATCH /api/jobs/:id/bola-com', () => {
+  it('switches bola-com and returns updated day counts', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+
+      const created = await agent.post('/api/jobs').send({ name: 'Job Bola Com Rota Teste' });
+      const res = await agent
+        .patch(`/api/jobs/${created.body.job.id}/bola-com`)
+        .send({ bolaCom: 'cliente' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.job.bolaCom).toBe('cliente');
+      expect(res.body.bolaComDayCounts.currentSide).toBe('cliente');
+    });
+  });
+
+  it('rejects an invalid bolaCom value', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+
+      const created = await agent.post('/api/jobs').send({ name: 'Job Bola Com Inválida Teste' });
+      const res = await agent
+        .patch(`/api/jobs/${created.body.job.id}/bola-com`)
+        .send({ bolaCom: 'terceiro' });
+
+      expect(res.status).toBe(400);
+    });
+  });
+
+  it('returns 404 for a nonexistent job', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+
+      const res = await agent.patch('/api/jobs/999999999/bola-com').send({ bolaCom: 'ilha' });
+
+      expect(res.status).toBe(404);
+    });
+  });
+});

@@ -312,3 +312,14 @@ INSERT INTO people (name, area) VALUES
   ('Gabriella', 'Marketing'),
   ('Danilo', 'Marketing')
 ON CONFLICT (name, area) DO NOTHING;
+
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS bola_com TEXT NOT NULL DEFAULT 'ilha'
+  CHECK (bola_com IN ('ilha', 'cliente'));
+
+CREATE TABLE IF NOT EXISTS job_bola_com_history (
+  id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  job_id INTEGER NOT NULL REFERENCES jobs(id),
+  bola_com TEXT NOT NULL CHECK (bola_com IN ('ilha', 'cliente')),
+  changed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  note TEXT
+);

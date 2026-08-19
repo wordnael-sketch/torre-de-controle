@@ -1,6 +1,7 @@
 import type { AppDatabase } from '../db';
 import { getLastStatusChangeAt } from './jobStatusHistory';
 import { computeAlertLevel, type AlertLevel } from './alertLevel';
+import { recordInitialBolaCom } from './bolaCom';
 
 export interface Job {
   id: number;
@@ -16,6 +17,7 @@ export interface Job {
   completedAt: string | null;
   alertLevel: AlertLevel;
   highlightedPersonName: string | null;
+  bolaCom: 'ilha' | 'cliente';
 }
 
 interface JobRow {
@@ -31,6 +33,7 @@ interface JobRow {
   phase_name: string | null;
   completed_at: string | Date | null;
   highlighted_person_name: string | null;
+  bola_com: 'ilha' | 'cliente';
 }
 
 const JOB_SELECT = `
@@ -70,6 +73,7 @@ async function rowToJob(db: AppDatabase, row: JobRow): Promise<Job> {
     completedAt,
     alertLevel,
     highlightedPersonName: row.highlighted_person_name,
+    bolaCom: row.bola_com,
   };
 }
 
@@ -114,6 +118,7 @@ export async function createJob(
   );
 
   const jobId = inserted.rows[0].id;
+  await recordInitialBolaCom(db, jobId);
   const job = await getJobById(db, jobId);
   return job!;
 }
