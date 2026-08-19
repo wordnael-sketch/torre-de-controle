@@ -12,7 +12,9 @@ export function Login() {
     try {
       await loginWithGoogle(credential);
     } catch (err) {
-      if (err instanceof ApiError && err.status === 403) {
+      if (err instanceof ApiError && err.status === 403 && err.message === 'not_invited') {
+        setError('Seu acesso ainda não foi liberado. Peça a um administrador para te convidar.');
+      } else if (err instanceof ApiError && err.status === 403) {
         setError('Use uma conta @ilhacrossmidia.com.br.');
       } else {
         setError('Não foi possível fazer login. Tente novamente.');
