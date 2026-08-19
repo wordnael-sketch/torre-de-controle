@@ -1223,6 +1223,35 @@ describe('job status lifecycle', () => {
       expect(completed.completedAt).not.toBeNull();
     });
   });
+
+  it('does NOT mark the job completed when it only reaches the last status of an earlier phase', async () => {
+    await withTestTransaction(async (db) => {
+      const created = await createJob(db, { name: 'Job Não-Conclusão Teste' });
+
+      // "Defesa da Proposta" is the LAST status of Phase 1, not the final status of
+      // the whole pipeline — reaching it must not complete the job.
+      const phase1LastStatus = await db.query<{ id: number }>(
+        `SELECT id FROM statuses WHERE name = 'Defesa da Proposta'`,
+      );
+
+      const updated = await setJobStatus(db, created.id, phase1LastStatus.rows[0].id);
+
+      expect(updated.statusName).toBe('Defesa da Proposta');
+      expect(updated.completedAt).toBeNull();
+    });
+  });
+
+  it('advanceJobStatus throws when the job is already at the last status of its phase', async () => {
+    await withTestTransaction(async (db) => {
+      const created = await createJob(db, { name: 'Job Avanço no Limite Teste' });
+      const phase1LastStatus = await db.query<{ id: number }>(
+        `SELECT id FROM statuses WHERE name = 'Defesa da Proposta'`,
+      );
+      await setJobStatus(db, created.id, phase1LastStatus.rows[0].id);
+
+      await expect(advanceJobStatus(db, created.id)).rejects.toThrow();
+    });
+  });
 });
 ```
 
@@ -1352,11 +1381,17 @@ export async function createJob(
 }
 
 async function isFinalStatus(db: AppDatabase, statusId: number): Promise<boolean> {
+  // Must compare (phase order, status order) as a pair — comparing status "order"
+  // within the same phase alone would call the LAST STATUS OF EVERY PHASE "final"
+  // (e.g. "Defesa da Proposta", the end of Phase 1), not just the true final status
+  // of the final phase ("Arquivamento", end of Phase 6).
   const result = await db.query<{ is_final: boolean }>(
     `SELECT NOT EXISTS (
        SELECT 1 FROM statuses s2
+       JOIN phases p2 ON p2.id = s2.phase_id
        JOIN statuses s1 ON s1.id = $1
-       WHERE s2.phase_id = s1.phase_id AND s2."order" > s1."order"
+       JOIN phases p1 ON p1.id = s1.phase_id
+       WHERE (p2."order", s2."order") > (p1."order", s1."order")
      ) AS is_final
      FROM statuses WHERE id = $1`,
     [statusId],
@@ -1374,8 +1409,8 @@ async function applyStatusChange(
   const completed = await isFinalStatus(db, toStatusId);
 
   await db.query(
-    `UPDATE jobs SET status_id = $1, updated_at = now(), completed_at = ${completed ? 'now()' : 'NULL'} WHERE id = $2`,
-    [toStatusId, jobId],
+    `UPDATE jobs SET status_id = $1, updated_at = now(), completed_at = CASE WHEN $2 THEN now() ELSE NULL END WHERE id = $3`,
+    [toStatusId, completed, jobId],
   );
 
   await recordStatusChange(db, { jobId, fromStatusId, toStatusId, note });
