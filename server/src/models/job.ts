@@ -1,5 +1,5 @@
 import type { AppDatabase } from '../db';
-import { recordStatusChange, getLastStatusChangeAt } from './jobStatusHistory';
+import { getLastStatusChangeAt } from './jobStatusHistory';
 import { computeAlertLevel, type AlertLevel } from './alertLevel';
 
 export interface Job {
@@ -53,7 +53,8 @@ const JOB_SELECT = `
 `;
 
 async function rowToJob(db: AppDatabase, row: JobRow): Promise<Job> {
-  const lastChangedAt = await getLastStatusChangeAt(db, row.id);
+  const completedAt = row.completed_at ? new Date(row.completed_at).toISOString() : null;
+  const alertLevel = completedAt ? 'green' : computeAlertLevel(await getLastStatusChangeAt(db, row.id), new Date());
 
   return {
     id: row.id,
@@ -66,8 +67,8 @@ async function rowToJob(db: AppDatabase, row: JobRow): Promise<Job> {
     statusName: row.status_name,
     phaseId: row.phase_id,
     phaseName: row.phase_name,
-    completedAt: row.completed_at ? new Date(row.completed_at).toISOString() : null,
-    alertLevel: computeAlertLevel(lastChangedAt, new Date()),
+    completedAt,
+    alertLevel,
     highlightedPersonName: row.highlighted_person_name,
   };
 }
@@ -102,14 +103,17 @@ export async function createJob(
   const firstStatusId = await getFirstStatusId(db);
 
   const inserted = await db.query<{ id: number }>(
-    'INSERT INTO jobs (name, code, client, status_id) VALUES ($1, $2, $3, $4) RETURNING id',
+    `WITH new_job AS (
+       INSERT INTO jobs (name, code, client, status_id) VALUES ($1, $2, $3, $4) RETURNING id
+     ), history AS (
+       INSERT INTO job_status_history (job_id, from_status_id, to_status_id)
+       SELECT id, NULL, $4 FROM new_job
+     )
+     SELECT id FROM new_job`,
     [input.name, input.code ?? null, input.client ?? null, firstStatusId],
   );
 
   const jobId = inserted.rows[0].id;
-
-  await recordStatusChange(db, { jobId, fromStatusId: null, toStatusId: firstStatusId });
-
   const job = await getJobById(db, jobId);
   return job!;
 }
@@ -143,11 +147,15 @@ async function applyStatusChange(
   const completed = await isFinalStatus(db, toStatusId);
 
   await db.query(
-    `UPDATE jobs SET status_id = $1, updated_at = now(), completed_at = CASE WHEN $2 THEN now() ELSE NULL END WHERE id = $3`,
-    [toStatusId, completed, jobId],
+    `WITH updated AS (
+       UPDATE jobs SET status_id = $1, updated_at = now(), completed_at = CASE WHEN $2 THEN now() ELSE NULL END
+       WHERE id = $3
+       RETURNING id
+     )
+     INSERT INTO job_status_history (job_id, from_status_id, to_status_id, note)
+     SELECT id, $4, $1, $5 FROM updated`,
+    [toStatusId, completed, jobId, fromStatusId, note ?? null],
   );
-
-  await recordStatusChange(db, { jobId, fromStatusId, toStatusId, note });
 
   const job = await getJobById(db, jobId);
   return job!;

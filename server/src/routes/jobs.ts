@@ -11,6 +11,11 @@ export interface JobsRouterDeps {
   jwtSecret: string;
 }
 
+function parseId(raw: string): number | null {
+  const id = Number(raw);
+  return Number.isInteger(id) ? id : null;
+}
+
 export function createJobsRouter(deps: JobsRouterDeps): Router {
   const router = Router();
 
@@ -41,7 +46,12 @@ export function createJobsRouter(deps: JobsRouterDeps): Router {
   router.get(
     '/:id',
     asyncHandler(async (req, res) => {
-      const jobId = Number(req.params.id);
+      const jobId = parseId(req.params.id);
+      if (jobId === null) {
+        res.status(400).json({ error: 'invalid job id' });
+        return;
+      }
+
       const job = await getJobById(deps.db, jobId);
 
       if (!job) {
@@ -73,15 +83,38 @@ export function createJobsRouter(deps: JobsRouterDeps): Router {
   router.post(
     '/:id/advance',
     asyncHandler(async (req, res) => {
+      const jobId = parseId(req.params.id);
+      if (jobId === null) {
+        res.status(400).json({ error: 'invalid job id' });
+        return;
+      }
+
+      const existing = await getJobById(deps.db, jobId);
+      if (!existing) {
+        res.status(404).json({ error: 'Job not found' });
+        return;
+      }
+
       const { note } = req.body as { note?: string };
-      const job = await advanceJobStatus(deps.db, Number(req.params.id), note);
-      res.json({ job });
+
+      try {
+        const job = await advanceJobStatus(deps.db, jobId, note);
+        res.json({ job });
+      } catch {
+        res.status(400).json({ error: 'Job cannot be advanced automatically (already at the last status of its phase)' });
+      }
     }),
   );
 
   router.post(
     '/:id/status',
     asyncHandler(async (req, res) => {
+      const jobId = parseId(req.params.id);
+      if (jobId === null) {
+        res.status(400).json({ error: 'invalid job id' });
+        return;
+      }
+
       const { statusId, note } = req.body as { statusId?: number; note?: string };
 
       if (!statusId) {
@@ -89,7 +122,19 @@ export function createJobsRouter(deps: JobsRouterDeps): Router {
         return;
       }
 
-      const job = await setJobStatus(deps.db, Number(req.params.id), statusId, note);
+      const existing = await getJobById(deps.db, jobId);
+      if (!existing) {
+        res.status(404).json({ error: 'Job not found' });
+        return;
+      }
+
+      const statusExists = await deps.db.query('SELECT 1 FROM statuses WHERE id = $1', [statusId]);
+      if (statusExists.rows.length === 0) {
+        res.status(400).json({ error: 'statusId does not exist' });
+        return;
+      }
+
+      const job = await setJobStatus(deps.db, jobId, statusId, note);
       res.json({ job });
     }),
   );
@@ -97,8 +142,14 @@ export function createJobsRouter(deps: JobsRouterDeps): Router {
   router.put(
     '/:id/roles/:area',
     asyncHandler(async (req, res) => {
+      const jobId = parseId(req.params.id);
+      if (jobId === null) {
+        res.status(400).json({ error: 'invalid job id' });
+        return;
+      }
+
       const { personId } = req.body as { personId?: number | null };
-      const job = await getJobById(deps.db, Number(req.params.id));
+      const job = await getJobById(deps.db, jobId);
 
       if (!job || !job.phaseId) {
         res.status(404).json({ error: 'Job not found' });
@@ -113,6 +164,14 @@ export function createJobsRouter(deps: JobsRouterDeps): Router {
       if (roleExists.rows.length === 0) {
         res.status(400).json({ error: 'area is not a valid role for this job\'s current phase' });
         return;
+      }
+
+      if (personId != null) {
+        const personExists = await deps.db.query('SELECT 1 FROM people WHERE id = $1', [personId]);
+        if (personExists.rows.length === 0) {
+          res.status(400).json({ error: 'personId does not exist' });
+          return;
+        }
       }
 
       const roleAssignment = await setJobRoleAssignment(

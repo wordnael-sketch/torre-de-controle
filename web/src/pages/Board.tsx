@@ -80,7 +80,7 @@ export function Board() {
           <div key={phase.id} style={{ minWidth: 260, flex: '0 0 auto' }}>
             <h2>{phase.name}</h2>
             {jobs
-              .filter((job) => job.phaseId === phase.id)
+              .filter((job) => job.phaseId === phase.id && !job.completedAt)
               .map((job) => (
                 <Link
                   key={job.id}

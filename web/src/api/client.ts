@@ -121,7 +121,7 @@ export const api = {
       body: JSON.stringify({ statusId, note }),
     }),
   assignRole: (id: number, area: string, personId: number | null) =>
-    request<{ roleAssignment: RoleAssignment }>(`/api/jobs/${id}/roles/${area}`, {
+    request<{ roleAssignment: RoleAssignment }>(`/api/jobs/${id}/roles/${encodeURIComponent(area)}`, {
       method: 'PUT',
       body: JSON.stringify({ personId }),
     }),

@@ -120,4 +120,20 @@ describe('api.getJob / api.advanceJob / api.setJobStatus / api.assignRole', () =
       expect.objectContaining({ method: 'PUT' }),
     );
   });
+
+  it('assignRole URL-encodes an area containing a slash', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ roleAssignment: { area: 'Jurídico/Base', personId: 1, personName: 'Carol' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.assignRole(1, 'Jurídico/Base', 2);
+
+    const calledUrl = fetchMock.mock.calls[0][0] as string;
+    expect(calledUrl).toContain('/api/jobs/1/roles/');
+    expect(calledUrl).not.toContain('roles/Jurídico/Base'); // would be the broken, unencoded form
+    expect(decodeURIComponent(calledUrl.split('/roles/')[1])).toBe('Jurídico/Base');
+  });
 });

@@ -54,7 +54,19 @@ export function createReferenceRouter(deps: ReferenceRouterDeps): Router {
         return;
       }
 
-      const person = await setPersonActive(deps.db, Number(req.params.id), active);
+      const personId = Number(req.params.id);
+      if (!Number.isInteger(personId)) {
+        res.status(400).json({ error: 'invalid person id' });
+        return;
+      }
+
+      const existing = await deps.db.query('SELECT 1 FROM people WHERE id = $1', [personId]);
+      if (existing.rows.length === 0) {
+        res.status(404).json({ error: 'Person not found' });
+        return;
+      }
+
+      const person = await setPersonActive(deps.db, personId, active);
       res.json({ person });
     }),
   );

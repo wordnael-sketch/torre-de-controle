@@ -123,4 +123,50 @@ describe('JobDetailPage', () => {
     // rendered, not just the status line.
     await waitFor(() => expect(screen.getAllByText(/Prospecção/)).toHaveLength(2));
   });
+
+  it('hides the trigger button when the job is at the last status of its phase', async () => {
+    mockedApi.getJob.mockResolvedValue({
+      job: { ...jobDetail, statusId: 11, statusName: 'Briefing Recebido', triggerLabel: 'Avançar para: Orçamento e Decupagem' },
+    });
+    mockedApi.getReference.mockResolvedValue({
+      phases: [
+        {
+          ...referencePhases[0],
+          statuses: [
+            ...referencePhases[0].statuses,
+            { id: 12, phaseId: 1, order: 3, name: 'Orçamento e Decupagem', actionRequired: '', triggerLabel: '', primaryRole: 'Produção Executiva' },
+            { id: 13, phaseId: 1, order: 4, name: 'Defesa da Proposta', actionRequired: '', triggerLabel: 'Tocar a Buzina', primaryRole: 'Comercial' },
+          ],
+        },
+      ],
+    });
+
+    renderJobDetail();
+
+    await screen.findByText('Briefing Recebido');
+    expect(screen.getByRole('button', { name: 'Avançar para: Orçamento e Decupagem' })).toBeInTheDocument();
+  });
+
+  it('does not render a trigger button at the last status of a phase', async () => {
+    mockedApi.getJob.mockResolvedValue({
+      job: { ...jobDetail, statusId: 13, statusName: 'Defesa da Proposta', triggerLabel: 'Tocar a Buzina' },
+    });
+    mockedApi.getReference.mockResolvedValue({
+      phases: [
+        {
+          ...referencePhases[0],
+          statuses: [
+            ...referencePhases[0].statuses,
+            { id: 12, phaseId: 1, order: 3, name: 'Orçamento e Decupagem', actionRequired: '', triggerLabel: '', primaryRole: 'Produção Executiva' },
+            { id: 13, phaseId: 1, order: 4, name: 'Defesa da Proposta', actionRequired: '', triggerLabel: 'Tocar a Buzina', primaryRole: 'Comercial' },
+          ],
+        },
+      ],
+    });
+
+    renderJobDetail();
+
+    await screen.findByText('Defesa da Proposta');
+    expect(screen.queryByRole('button', { name: 'Tocar a Buzina' })).not.toBeInTheDocument();
+  });
 });

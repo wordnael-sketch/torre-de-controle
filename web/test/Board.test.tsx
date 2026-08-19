@@ -128,4 +128,31 @@ describe('Board', () => {
     await waitFor(() => expect(mockedApi.createJob).toHaveBeenCalledWith({ name: 'Novo job' }));
     expect(await screen.findByText(/Novo job/)).toBeInTheDocument();
   });
+
+  it('does not show a completed job on the board', async () => {
+    mockedApi.listJobs.mockResolvedValue({
+      jobs: [
+        {
+          id: 1,
+          name: 'Job Concluído Teste',
+          code: null,
+          client: null,
+          createdAt: '2026-08-18T00:00:00.000Z',
+          updatedAt: '2026-08-18T00:00:00.000Z',
+          statusId: 30,
+          statusName: 'Arquivamento',
+          phaseId: 2,
+          phaseName: 'Dotação Financeira e Burocracia (Set-up)',
+          completedAt: '2026-08-18T00:00:00.000Z',
+          alertLevel: 'green',
+          highlightedPersonName: null,
+        },
+      ],
+    });
+
+    renderBoard();
+
+    await screen.findByText('Comercial e Orçamento');
+    expect(screen.queryByText('Job Concluído Teste')).not.toBeInTheDocument();
+  });
 });

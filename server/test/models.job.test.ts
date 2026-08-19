@@ -150,4 +150,18 @@ describe('job status lifecycle', () => {
       await expect(advanceJobStatus(db, created.id)).rejects.toThrow();
     });
   });
+
+  it('a completed job always reports green alertLevel regardless of elapsed time', async () => {
+    await withTestTransaction(async (db) => {
+      const created = await createJob(db, { name: 'Job Farol Pós-Conclusão Teste' });
+      const finalStatus = await db.query<{ id: number }>(
+        `SELECT id FROM statuses WHERE name = 'Arquivamento'`,
+      );
+
+      const completed = await setJobStatus(db, created.id, finalStatus.rows[0].id);
+
+      expect(completed.completedAt).not.toBeNull();
+      expect(completed.alertLevel).toBe('green');
+    });
+  });
 });

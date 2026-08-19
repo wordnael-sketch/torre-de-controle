@@ -223,4 +223,101 @@ describe('PUT /api/jobs/:id/roles/:area', () => {
       expect(res.status).toBe(400);
     });
   });
+
+  it('accepts an area containing a slash when the client encodes it', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+
+      // Job starts in Fase 1, which doesn't have "Jurídico/Base" — move it to
+      // Fase 2 first (which does) via the manual status route.
+      const created = await agent.post('/api/jobs').send({ name: 'Job Área Com Barra Teste' });
+      const fase2Status = await db.query<{ id: number }>(
+        `SELECT id FROM statuses WHERE name = 'Aguardando Contrato'`,
+      );
+      await agent.post(`/api/jobs/${created.body.job.id}/status`).send({ statusId: fase2Status.rows[0].id });
+
+      const personRow = await db.query<{ id: number }>(
+        `SELECT id FROM people WHERE name = 'Carol' AND area = 'Jurídico/Base'`,
+      );
+
+      const res = await agent
+        .put(`/api/jobs/${created.body.job.id}/roles/${encodeURIComponent('Jurídico/Base')}`)
+        .send({ personId: personRow.rows[0].id });
+
+      expect(res.status).toBe(200);
+      expect(res.body.roleAssignment.personName).toBe('Carol');
+    });
+  });
+});
+
+describe('error handling on jobs routes', () => {
+  it('GET /api/jobs/:id returns 404 for a nonexistent job', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+      const res = await agent.get('/api/jobs/999999999');
+      expect(res.status).toBe(404);
+    });
+  });
+
+  it('GET /api/jobs/:id returns 400 for a non-numeric id', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+      const res = await agent.get('/api/jobs/not-a-number');
+      expect(res.status).toBe(400);
+    });
+  });
+
+  it('POST /api/jobs/:id/advance returns 404 for a nonexistent job', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+      const res = await agent.post('/api/jobs/999999999/advance').send({});
+      expect(res.status).toBe(404);
+    });
+  });
+
+  it('POST /api/jobs/:id/advance returns 400 when already at the last status of its phase', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+      const created = await agent.post('/api/jobs').send({ name: 'Job Limite de Fase Teste' });
+      const lastStatus = await db.query<{ id: number }>(
+        `SELECT id FROM statuses WHERE name = 'Defesa da Proposta'`,
+      );
+      await agent.post(`/api/jobs/${created.body.job.id}/status`).send({ statusId: lastStatus.rows[0].id });
+
+      const res = await agent.post(`/api/jobs/${created.body.job.id}/advance`).send({});
+
+      expect(res.status).toBe(400);
+    });
+  });
+
+  it('POST /api/jobs/:id/status returns 400 for a nonexistent statusId', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+      const created = await agent.post('/api/jobs').send({ name: 'Job Status Inexistente Teste' });
+
+      const res = await agent.post(`/api/jobs/${created.body.job.id}/status`).send({ statusId: 999999999 });
+
+      expect(res.status).toBe(400);
+    });
+  });
+
+  it('PUT /api/jobs/:id/roles/:area returns 400 for a nonexistent personId', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+      const created = await agent.post('/api/jobs').send({ name: 'Job Pessoa Inexistente Teste' });
+
+      const res = await agent
+        .put(`/api/jobs/${created.body.job.id}/roles/Comercial`)
+        .send({ personId: 999999999 });
+
+      expect(res.status).toBe(400);
+    });
+  });
 });

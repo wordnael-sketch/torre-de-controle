@@ -56,15 +56,18 @@ export function JobDetailPage() {
     }
   }
 
-  if (error) {
-    return <p role="alert">{error}</p>;
-  }
-
   if (!job) {
-    return <p>Carregando...</p>;
+    return error ? <p role="alert">{error}</p> : <p>Carregando...</p>;
   }
 
   const allStatuses = phases.flatMap((phase) => phase.statuses);
+  const currentPhase = phases.find((phase) => phase.id === job.phaseId);
+  const currentStatusInPhase = currentPhase?.statuses.find((status) => status.id === job.statusId);
+  const hasNextStatusInPhase = Boolean(
+    currentPhase &&
+      currentStatusInPhase &&
+      currentPhase.statuses.some((status) => status.order === currentStatusInPhase.order + 1),
+  );
   // Exclude the job's current status from the manual selector: it's not a
   // meaningful "change to" target, and keeping it out avoids duplicating the
   // status name's text in the DOM (it's already shown in the status line above).
@@ -82,7 +85,7 @@ export function JobDetailPage() {
 
       {error && <p role="alert">{error}</p>}
 
-      {job.triggerLabel && (
+      {job.triggerLabel && hasNextStatusInPhase && (
         <button type="button" onClick={handleAdvance}>
           {job.triggerLabel}
         </button>

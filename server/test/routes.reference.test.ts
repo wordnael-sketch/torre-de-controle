@@ -94,4 +94,13 @@ describe('PATCH /api/people/:id/active', () => {
       expect(res.body.person.active).toBe(false);
     });
   });
+
+  it('returns 404 for a nonexistent person', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+      const res = await agent.patch('/api/people/999999999/active').send({ active: false });
+      expect(res.status).toBe(404);
+    });
+  });
 });
