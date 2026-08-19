@@ -34,7 +34,7 @@ tudo atualizado.
 ## 3. Usuário e Escopo de Acesso
 
 - **Usuário único**: o Gerente de Projeto. Não há outros perfis/dashboards no MVP.
-- Login via **Google OAuth**, restrito ao domínio `ilhacrossmidia.com` (Google
+- Login via **Google OAuth**, restrito ao domínio `ilhacrossmidia.com.br` (Google
   Workspace já usado pela empresa). Sem senha própria do sistema.
 - No primeiro acesso, o Gerente passa por um onboarding de vínculo de contas (seção 6).
 
