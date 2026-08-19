@@ -215,10 +215,12 @@ git commit -m "feat(server): scaffold Express app with health check"
 - Create: `server/src/db/schema.sql`
 - Create: `server/src/db/index.ts`
 - Create: `server/test/helpers/testDb.ts`
+- Create: `server/test/setup.ts`
+- Create: `server/vitest.config.mts`
 - Test: `server/test/db.test.ts`
 
 **Interfaces:**
-- Produces: `export interface AppDatabase { query<T extends QueryResultRow = QueryResultRow>(text: string, params?: unknown[]): Promise<QueryResult<T>> }` (satisfied structurally by both `pg`'s `Pool` and `PoolClient`), `createDb(connectionString: string): Promise<Pool>`, `getTestPool(): Pool`, `withTestTransaction<T>(fn: (db: PoolClient) => Promise<T>): Promise<T>`
+- Produces: `export interface AppDatabase { query<T extends QueryResultRow = QueryResultRow>(text: string, params?: unknown[]): Promise<QueryResult<T>> }` (satisfied structurally by both `pg`'s `Pool` and `PoolClient`), `createDb(connectionString: string): Promise<Pool>`, `withTestTransaction<T>(fn: (db: PoolClient) => Promise<T>): Promise<T>`
 
 Uses `pg` (node-postgres) against a Supabase-hosted PostgreSQL database — not
 `node:sqlite`/`better-sqlite3` (see the Global Constraints ruling above). The connection
@@ -245,7 +247,33 @@ Database → Connection string → mode "Session", port 5432) — not the direct
 `db.<ref>.supabase.co` host, which requires IPv6 and is not reachable from this network.
 URL-encode any special characters in the password (e.g. `@` → `%40`).
 
-- [ ] **Step 2: Write the failing test**
+- [ ] **Step 2: Create `server/test/setup.ts` and `server/vitest.config.mts`**
+
+Every test in this plan that touches the database reads `DATABASE_URL` from `server/.env`
+— loading it once, globally, before any test file runs, is simpler than importing
+`dotenv/config` in each test file individually.
+
+`server/test/setup.ts`:
+
+```ts
+import 'dotenv/config';
+```
+
+`server/vitest.config.mts` (the `.mts` extension avoids a CJS/ESM warning, since this
+project's `tsconfig.json`/`package.json` target CommonJS but this config file uses `export
+default`):
+
+```ts
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  test: {
+    setupFiles: ['./test/setup.ts'],
+  },
+});
+```
+
+- [ ] **Step 3: Write the failing test**
 
 `server/test/db.test.ts`:
 
@@ -280,12 +308,12 @@ Note: `db.end()` closes the pool's connections — call it whenever a test (or s
 creates its own pool via `createDb`, to avoid leaving open connections that make vitest
 hang after the test run.
 
-- [ ] **Step 3: Run test to verify it fails**
+- [ ] **Step 4: Run test to verify it fails**
 
 Run: `npm test` (inside `server/`, with `.env` from Step 1 in place)
 Expected: FAIL — `src/db/index.ts` does not exist yet.
 
-- [ ] **Step 4: Create `server/src/db/schema.sql`**
+- [ ] **Step 5: Create `server/src/db/schema.sql`**
 
 ```sql
 CREATE TABLE IF NOT EXISTS users (
@@ -311,7 +339,7 @@ avoid silent precision loss in JS numbers), which would silently break the `id: 
 contract every model in this plan relies on. `INTEGER` is returned as a native JS number
 and comfortably covers this app's scale.
 
-- [ ] **Step 5: Implement `server/src/db/index.ts`**
+- [ ] **Step 6: Implement `server/src/db/index.ts`**
 
 ```ts
 import { Pool } from 'pg';
@@ -337,34 +365,40 @@ export async function createDb(connectionString: string): Promise<Pool> {
 }
 ```
 
-- [ ] **Step 6: Run test to verify it passes**
+- [ ] **Step 7: Run test to verify it passes**
 
 Run: `npm test` (inside `server/`)
 Expected: PASS
 
-- [ ] **Step 7: Implement `server/test/helpers/testDb.ts`**
+- [ ] **Step 8: Implement `server/test/helpers/testDb.ts`**
+
+Reuses `createDb` (Step 6) instead of opening a second, separate pool — this guarantees
+the schema is applied before any test transaction runs, and avoids duplicating the pool
+construction logic. `poolPromise` caches the pool at module scope so it's created once
+per test run, not once per `withTestTransaction` call.
 
 ```ts
-import 'dotenv/config';
-import { Pool, type PoolClient } from 'pg';
+import type { Pool, PoolClient } from 'pg';
+import { createDb } from '../../src/db';
 
-let pool: Pool | undefined;
+let poolPromise: Promise<Pool> | undefined;
 
-function getTestPool(): Pool {
-  if (!pool) {
+function getTestPool(): Promise<Pool> {
+  if (!poolPromise) {
     const connectionString = process.env.DATABASE_URL;
     if (!connectionString) {
       throw new Error('DATABASE_URL environment variable is required to run tests');
     }
-    pool = new Pool({ connectionString, ssl: { rejectUnauthorized: false } });
+    poolPromise = createDb(connectionString);
   }
-  return pool;
+  return poolPromise;
 }
 
 export async function withTestTransaction<T>(
   fn: (db: PoolClient) => Promise<T>,
 ): Promise<T> {
-  const client = await getTestPool().connect();
+  const pool = await getTestPool();
+  const client = await pool.connect();
   try {
     await client.query('BEGIN');
     return await fn(client);
@@ -379,10 +413,10 @@ No test file for this step — it's exercised indirectly by every test in Tasks 
 8 that uses `withTestTransaction`. Verify it works by running Task 3's tests once that
 task is implemented (a later task, not this one).
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add server/src/db server/test/db.test.ts server/test/helpers/testDb.ts
+git add server/src/db server/test/db.test.ts server/test/helpers/testDb.ts server/test/setup.ts server/vitest.config.mts
 git commit -m "feat(server): add Postgres connection module and test transaction helper"
 ```
 
