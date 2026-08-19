@@ -31,11 +31,11 @@ export async function classifyAndApply(
   }
 
   const currentStatus = phase.statuses.find((s) => s.id === job.statusId);
-  const currentOrder = currentStatus?.order ?? 0;
+  const startingOrder = currentStatus?.order ?? 0;
 
   const checklist = phase.statuses.map((status) => ({
     name: status.name,
-    done: status.order <= currentOrder,
+    done: status.order <= startingOrder,
   }));
 
   const raw = await classifier.classify({
@@ -46,13 +46,30 @@ export async function classifyAndApply(
     pastedText,
   });
 
+  // Tracks wherever the job's status actually stands as suggestions are applied
+  // one at a time within this batch — NOT a frozen pre-loop snapshot. Without
+  // this, a batch with e.g. [order 5, order 3] would apply order 5 first (a
+  // legitimate forward move), then check order 3 against the stale starting
+  // order instead of the real post-write order 5, wrongly treating a real
+  // regression (5 -> 3) as still-forward and auto-applying it.
+  let trackedOrder = startingOrder;
+
   const resolved: ResolvedSuggestion[] = [];
   for (const suggestion of raw) {
-    const outcome = await resolveAndApply(db, jobId, phase.statuses, currentOrder, suggestion);
+    const { outcome, appliedOrder } = await resolveAndApply(db, jobId, phase.statuses, trackedOrder, suggestion);
+    if (appliedOrder !== undefined) {
+      trackedOrder = appliedOrder;
+    }
     resolved.push({ ...suggestion, outcome });
   }
 
   return resolved;
+}
+
+interface ResolveResult {
+  outcome: SuggestionOutcome;
+  /** New checklist order after a checklist_item auto-apply, so the caller can advance its tracked order. */
+  appliedOrder?: number;
 }
 
 async function resolveAndApply(
@@ -61,15 +78,15 @@ async function resolveAndApply(
   statuses: Status[],
   currentOrder: number,
   suggestion: RawSuggestion,
-): Promise<SuggestionOutcome> {
+): Promise<ResolveResult> {
   if (suggestion.confidence < SUGGEST_THRESHOLD) {
-    return 'descartado';
+    return { outcome: 'descartado' };
   }
 
   if (suggestion.tipo === 'checklist_item') {
     const target = statuses.find((s) => s.name === suggestion.valor);
     if (!target) {
-      return 'descartado';
+      return { outcome: 'descartado' };
     }
 
     const isRegression = target.order < currentOrder;
@@ -77,21 +94,21 @@ async function resolveAndApply(
 
     if (suggestion.confidence >= AUTO_APPLY_THRESHOLD && !isRegression) {
       await setJobStatus(db, jobId, target.id, evidenceNote);
-      return 'auto_aplicado';
+      return { outcome: 'auto_aplicado', appliedOrder: target.order };
     }
 
-    return 'pendente';
+    return { outcome: 'pendente' };
   }
 
   if (suggestion.valor !== 'ilha' && suggestion.valor !== 'cliente') {
-    return 'descartado';
+    return { outcome: 'descartado' };
   }
 
   if (suggestion.confidence >= AUTO_APPLY_THRESHOLD) {
     const evidenceNote = `IA (${suggestion.confidence.toFixed(2)}): ${suggestion.evidencia}`;
     await setBolaCom(db, jobId, suggestion.valor, evidenceNote);
-    return 'auto_aplicado';
+    return { outcome: 'auto_aplicado' };
   }
 
-  return 'pendente';
+  return { outcome: 'pendente' };
 }

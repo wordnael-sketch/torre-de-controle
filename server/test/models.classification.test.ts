@@ -47,6 +47,9 @@ describe('classifyAndApply', () => {
       const resolved = await classifyAndApply(db, classifier, job.id, 'texto colado qualquer');
 
       expect(resolved[0].outcome).toBe('pendente');
+
+      const updated = await db.query<{ status_id: number }>('SELECT status_id FROM jobs WHERE id = $1', [job.id]);
+      expect(updated.rows[0].status_id).toBe(job.statusId);
     });
   });
 
@@ -92,6 +95,56 @@ describe('classifyAndApply', () => {
       const resolved = await classifyAndApply(db, classifier, job.id, 'texto colado qualquer');
 
       expect(resolved[0].outcome).toBe('pendente');
+
+      const updated = await db.query<{ status_id: number }>('SELECT status_id FROM jobs WHERE id = $1', [job.id]);
+      expect(updated.rows[0].status_id).toBe(targetStatus.rows[0].id);
+    });
+  });
+
+  it('auto-applies only the furthest forward suggestion in a batch, treating an earlier one as a regression against the post-write state (not the stale pre-batch state)', async () => {
+    await withTestTransaction(async (db) => {
+      const job = await createJob(db, { name: 'Job Classificação Retrocesso Dentro Do Lote Teste' });
+      // createJob starts the job at "Prospecção" (order 1) in "Comercial e Orçamento".
+
+      const forwardStatus = await db.query<{ id: number }>(
+        `SELECT id FROM statuses WHERE name = 'Defesa da Proposta'`, // order 5
+      );
+      const middleStatus = await db.query<{ id: number }>(
+        `SELECT id FROM statuses WHERE name = 'Carta Orçamentária/Tratamento criada'`, // order 3
+      );
+
+      // A single paste reporting multiple completed milestones is the exact
+      // real-world case this feature exists for: the batch here contains a
+      // legitimate forward jump to order 5, followed by a suggestion targeting
+      // order 3. Order 3 is only a "regression" relative to the state AFTER the
+      // first suggestion is applied (5), not relative to the job's state before
+      // the batch started (1) — the second suggestion must be checked against
+      // wherever the job actually stands after suggestion one, not a frozen
+      // pre-loop snapshot.
+      const classifier = fakeClassifier([
+        {
+          tipo: 'checklist_item',
+          valor: 'Defesa da Proposta',
+          confidence: 0.9,
+          evidencia: 'Proposta defendida e aprovada pelo cliente',
+        },
+        {
+          tipo: 'checklist_item',
+          valor: 'Carta Orçamentária/Tratamento criada',
+          confidence: 0.9,
+          evidencia: 'Carta orçamentária mencionada em mensagem antiga',
+        },
+      ]);
+
+      const resolved = await classifyAndApply(db, classifier, job.id, 'texto colado qualquer');
+
+      expect(resolved).toHaveLength(2);
+      expect(resolved[0].outcome).toBe('auto_aplicado');
+      expect(resolved[1].outcome).toBe('pendente');
+
+      const updated = await db.query<{ status_id: number }>('SELECT status_id FROM jobs WHERE id = $1', [job.id]);
+      expect(updated.rows[0].status_id).toBe(forwardStatus.rows[0].id);
+      expect(updated.rows[0].status_id).not.toBe(middleStatus.rows[0].id);
     });
   });
 
