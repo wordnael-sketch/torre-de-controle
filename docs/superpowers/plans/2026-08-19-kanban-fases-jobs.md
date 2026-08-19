@@ -2774,7 +2774,7 @@ export function JobDetailPage() {
   async function handleAdvance() {
     setError(null);
     try {
-      await api.advanceJob(jobId);
+      await api.advanceJob(jobId, undefined);
       await refresh();
     } catch {
       setError('Não foi possível avançar o status.');
@@ -2810,6 +2810,12 @@ export function JobDetailPage() {
   }
 
   const allStatuses = phases.flatMap((phase) => phase.statuses);
+  // Exclude the job's current status from the manual selector: it's not a
+  // meaningful "change to" target, and keeping it out avoids duplicating the
+  // status name's text in the DOM (it's already shown in the status line above,
+  // and an unfiltered <option> there would make text queries against that name
+  // ambiguous in tests).
+  const selectableStatuses = allStatuses.filter((status) => status.id !== job.statusId);
   const peopleByArea = (area: string) => people.filter((p) => p.area === area && p.active);
 
   return (
@@ -2841,7 +2847,7 @@ export function JobDetailPage() {
           }}
         >
           <option value="">Selecione...</option>
-          {allStatuses.map((status) => (
+          {selectableStatuses.map((status) => (
             <option key={status.id} value={status.id}>
               {status.name}
             </option>
