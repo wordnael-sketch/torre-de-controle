@@ -226,6 +226,11 @@ export function createJobsRouter(deps: JobsRouterDeps): Router {
         return;
       }
 
+      if (!('lastWhatsappActivityAt' in req.body)) {
+        res.status(400).json({ error: 'lastWhatsappActivityAt is required (use null to clear)' });
+        return;
+      }
+
       const { lastWhatsappActivityAt } = req.body as { lastWhatsappActivityAt?: string | null };
 
       if (lastWhatsappActivityAt !== null && lastWhatsappActivityAt !== undefined) {

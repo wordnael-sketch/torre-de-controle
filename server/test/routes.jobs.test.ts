@@ -414,4 +414,18 @@ describe('PATCH /api/jobs/:id/last-activity', () => {
       expect(res.status).toBe(400);
     });
   });
+
+  it('rejects an omitted field', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+
+      const created = await agent.post('/api/jobs').send({ name: 'Job Campo Omitido Teste' });
+      const res = await agent
+        .patch(`/api/jobs/${created.body.job.id}/last-activity`)
+        .send({});
+
+      expect(res.status).toBe(400);
+    });
+  });
 });
