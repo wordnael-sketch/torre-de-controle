@@ -1,21 +1,21 @@
-import { DatabaseSync } from 'node:sqlite';
+import { Pool } from 'pg';
+import type { QueryResult, QueryResultRow } from 'pg';
 import fs from 'node:fs';
 import path from 'node:path';
 
-export type AppDatabase = DatabaseSync;
+export interface AppDatabase {
+  query<T extends QueryResultRow = QueryResultRow>(
+    text: string,
+    params?: unknown[],
+  ): Promise<QueryResult<T>>;
+}
 
-export function createDb(filePath: string): AppDatabase {
-  if (filePath !== ':memory:') {
-    const dir = path.dirname(filePath);
-    fs.mkdirSync(dir, { recursive: true });
-  }
-
-  const db = new DatabaseSync(filePath);
-  db.exec('PRAGMA journal_mode = WAL');
+export async function createDb(connectionString: string): Promise<Pool> {
+  const pool = new Pool({ connectionString, ssl: { rejectUnauthorized: false } });
 
   const schemaPath = path.join(__dirname, 'schema.sql');
   const schema = fs.readFileSync(schemaPath, 'utf-8');
-  db.exec(schema);
+  await pool.query(schema);
 
-  return db;
+  return pool;
 }

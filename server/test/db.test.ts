@@ -2,15 +2,23 @@ import { describe, it, expect } from 'vitest';
 import { createDb } from '../src/db';
 
 describe('createDb', () => {
-  it('creates the users and jobs tables', () => {
-    const db = createDb(':memory:');
+  it('creates the users and jobs tables', async () => {
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) {
+      throw new Error('DATABASE_URL environment variable is required to run this test');
+    }
 
-    const tables = db
-      .prepare(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
-      )
-      .all() as { name: string }[];
+    const db = await createDb(connectionString);
+    try {
+      const result = await db.query<{ table_name: string }>(
+        `SELECT table_name FROM information_schema.tables
+         WHERE table_schema = 'public' AND table_name IN ('jobs', 'users')
+         ORDER BY table_name`,
+      );
 
-    expect(tables.map((t) => t.name)).toEqual(['jobs', 'users']);
+      expect(result.rows.map((r) => r.table_name)).toEqual(['jobs', 'users']);
+    } finally {
+      await db.end();
+    }
   });
 });
