@@ -15,6 +15,8 @@ INSERT INTO users (email, role, status) VALUES
   ('wilka@ilhacrossmidia.com.br', 'admin', 'invited')
 ON CONFLICT (email) DO NOTHING;
 
+CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_key ON users (lower(email));
+
 CREATE TABLE IF NOT EXISTS jobs (
   id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   name TEXT NOT NULL,

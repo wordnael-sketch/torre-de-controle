@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { api, type User } from '../api/client';
+import { api, onSessionExpired, type User } from '../api/client';
 
 interface AuthContextValue {
   user: User | null;
@@ -21,6 +21,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => onSessionExpired(() => setUser(null)), []);
 
   async function loginWithGoogle(idToken: string) {
     const res = await api.loginWithGoogle(idToken);

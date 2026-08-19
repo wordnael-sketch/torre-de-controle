@@ -26,13 +26,14 @@ describe('users table — roles, status, seeded admin', () => {
     }
   });
 
-  it('seeds wilka@ilhacrossmidia.com.br as an invited admin', async () => {
+  it('seeds wilka@ilhacrossmidia.com.br as an admin (status may have since activated)', async () => {
     const db = await createDb(connectionString);
     try {
       const result = await db.query<{ role: string; status: string }>(
         `SELECT role, status FROM users WHERE email = 'wilka@ilhacrossmidia.com.br'`,
       );
-      expect(result.rows[0]).toEqual({ role: 'admin', status: 'invited' });
+      expect(result.rows[0]?.role).toBe('admin');
+      expect(['invited', 'active']).toContain(result.rows[0]?.status);
     } finally {
       await db.end();
     }

@@ -42,19 +42,29 @@ export function createUsersRouter(deps: UsersRouterDeps): Router {
         res.status(400).json({ error: 'role must be admin or member' });
         return;
       }
-      if (!isAllowedDomain(email, deps.allowedDomain)) {
+      const trimmedEmail = email.trim();
+
+      if (!isAllowedDomain(trimmedEmail, deps.allowedDomain)) {
         res.status(400).json({ error: 'email must be in the allowed domain' });
         return;
       }
 
-      const existing = await findUserByEmail(deps.db, email.trim());
+      const existing = await findUserByEmail(deps.db, trimmedEmail);
       if (existing) {
         res.status(409).json({ error: 'user already exists' });
         return;
       }
 
-      const user = await inviteUser(deps.db, { email: email.trim(), role });
-      res.status(201).json({ user });
+      try {
+        const user = await inviteUser(deps.db, { email: trimmedEmail, role });
+        res.status(201).json({ user });
+      } catch (err) {
+        if ((err as { code?: string }).code === '23505') {
+          res.status(409).json({ error: 'user already exists' });
+          return;
+        }
+        throw err;
+      }
     }),
   );
 
@@ -70,6 +80,11 @@ export function createUsersRouter(deps: UsersRouterDeps): Router {
       const userId = Number(req.params.id);
       if (!Number.isInteger(userId)) {
         res.status(400).json({ error: 'invalid user id' });
+        return;
+      }
+
+      if (userId === req.currentUser!.id) {
+        res.status(400).json({ error: 'cannot_change_own_access' });
         return;
       }
 
@@ -94,6 +109,11 @@ export function createUsersRouter(deps: UsersRouterDeps): Router {
       const userId = Number(req.params.id);
       if (!Number.isInteger(userId)) {
         res.status(400).json({ error: 'invalid user id' });
+        return;
+      }
+
+      if (userId === req.currentUser!.id) {
+        res.status(400).json({ error: 'cannot_change_own_access' });
         return;
       }
 

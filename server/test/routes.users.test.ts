@@ -117,6 +117,28 @@ describe('POST /api/users/invite', () => {
       expect(res.status).toBe(409);
     });
   });
+
+  it('rejects inviting an email that already exists, even with different casing', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db, async () => ({
+        sub: 'google-sub-admin-case-teste',
+        email: 'admin.case.teste@ilhacrossmidia.com.br',
+        name: 'Admin Case Teste',
+      }));
+      const invitedAdmin = await inviteUser(db, { email: 'admin.case.teste@ilhacrossmidia.com.br', role: 'admin' });
+      await activateUser(db, invitedAdmin.id, { googleSub: 'google-sub-admin-case-teste', name: 'Admin Case Teste' });
+      const agent = request.agent(app);
+      await agent.post('/api/auth/google').send({ idToken: 'fake-token' });
+
+      await inviteUser(db, { email: 'jaexiste@ilhacrossmidia.com.br', role: 'member' });
+
+      const res = await agent
+        .post('/api/users/invite')
+        .send({ email: 'JaExiste@ilhacrossmidia.com.br', role: 'member' });
+
+      expect(res.status).toBe(409);
+    });
+  });
 });
 
 describe('PATCH /api/users/:id/role', () => {
@@ -182,6 +204,44 @@ describe('PATCH /api/users/:id/status', () => {
       const reactivateRes = await agent.patch(`/api/users/${target.id}/status`).send({ status: 'active' });
       expect(reactivateRes.status).toBe(200);
       expect(reactivateRes.body.user.status).toBe('active');
+    });
+  });
+});
+
+describe('self-target protection on /:id/role and /:id/status', () => {
+  it('rejects an admin changing their own role', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db, async () => ({
+        sub: 'google-sub-self-role-teste',
+        email: 'admin.self.role.teste@ilhacrossmidia.com.br',
+        name: 'Admin Self Role Teste',
+      }));
+      const invitedAdmin = await inviteUser(db, { email: 'admin.self.role.teste@ilhacrossmidia.com.br', role: 'admin' });
+      const activeAdmin = await activateUser(db, invitedAdmin.id, { googleSub: 'google-sub-self-role-teste', name: 'Admin Self Role Teste' });
+      const agent = request.agent(app);
+      await agent.post('/api/auth/google').send({ idToken: 'fake-token' });
+
+      const res = await agent.patch(`/api/users/${activeAdmin.id}/role`).send({ role: 'member' });
+
+      expect(res.status).toBe(400);
+    });
+  });
+
+  it('rejects an admin revoking their own status', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db, async () => ({
+        sub: 'google-sub-self-status-teste',
+        email: 'admin.self.status.teste@ilhacrossmidia.com.br',
+        name: 'Admin Self Status Teste',
+      }));
+      const invitedAdmin = await inviteUser(db, { email: 'admin.self.status.teste@ilhacrossmidia.com.br', role: 'admin' });
+      const activeAdmin = await activateUser(db, invitedAdmin.id, { googleSub: 'google-sub-self-status-teste', name: 'Admin Self Status Teste' });
+      const agent = request.agent(app);
+      await agent.post('/api/auth/google').send({ idToken: 'fake-token' });
+
+      const res = await agent.patch(`/api/users/${activeAdmin.id}/status`).send({ status: 'revoked' });
+
+      expect(res.status).toBe(400);
     });
   });
 });

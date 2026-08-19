@@ -36,7 +36,7 @@ function toUser(row: UserRow): User {
 }
 
 export async function findUserByEmail(db: AppDatabase, email: string): Promise<User | null> {
-  const result = await db.query<UserRow>('SELECT * FROM users WHERE email = $1', [email]);
+  const result = await db.query<UserRow>('SELECT * FROM users WHERE lower(email) = lower($1)', [email]);
   return result.rows[0] ? toUser(result.rows[0]) : null;
 }
 
@@ -63,7 +63,7 @@ export async function inviteUser(
 ): Promise<User> {
   const result = await db.query<UserRow>(
     `INSERT INTO users (email, role, status) VALUES ($1, $2, 'invited') RETURNING *`,
-    [input.email, input.role],
+    [input.email.toLowerCase(), input.role],
   );
   return toUser(result.rows[0]);
 }

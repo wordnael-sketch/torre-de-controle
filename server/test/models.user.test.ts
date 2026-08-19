@@ -31,6 +31,17 @@ describe('inviteUser / findUserByEmail', () => {
       expect(await findUserByEmail(db, 'nunca-convidado@ilhacrossmidia.com.br')).toBeNull();
     });
   });
+
+  it('finds an invited user by email regardless of case', async () => {
+    await withTestTransaction(async (db) => {
+      const invited = await inviteUser(db, { email: 'CaseTeste@ilhacrossmidia.com.br', role: 'member' });
+
+      const found = await findUserByEmail(db, 'caseteste@ilhacrossmidia.com.br');
+
+      expect(found?.id).toBe(invited.id);
+      expect(found?.email).toBe('caseteste@ilhacrossmidia.com.br');
+    });
+  });
 });
 
 describe('activateUser', () => {

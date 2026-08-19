@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { request, api } from '../src/api/client';
+import { request, api, onSessionExpired } from '../src/api/client';
 
 describe('api client request()', () => {
   beforeEach(() => {
@@ -202,5 +202,51 @@ describe('api.listUsers / api.inviteUser / api.setUserRole / api.setUserStatus',
       expect.stringContaining('/api/users/1/status'),
       expect.objectContaining({ method: 'PATCH' }),
     );
+  });
+});
+
+describe('onSessionExpired', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('notifies the listener on a 401 from a non-/me endpoint', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+        json: async () => ({ error: 'Not authenticated' }),
+      }),
+    );
+
+    const listener = vi.fn();
+    const unsubscribe = onSessionExpired(listener);
+
+    await expect(request('/api/jobs')).rejects.toThrow();
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    unsubscribe();
+  });
+
+  it('does not notify the listener on a 401 from /api/auth/me', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+        json: async () => ({ error: 'Not authenticated' }),
+      }),
+    );
+
+    const listener = vi.fn();
+    const unsubscribe = onSessionExpired(listener);
+
+    await expect(request('/api/auth/me')).rejects.toThrow();
+
+    expect(listener).not.toHaveBeenCalled();
+    unsubscribe();
   });
 });
