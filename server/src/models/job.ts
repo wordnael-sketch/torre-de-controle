@@ -14,8 +14,8 @@ interface JobRow {
   name: string;
   code: string | null;
   client: string | null;
-  created_at: string;
-  updated_at: string;
+  created_at: string | Date;
+  updated_at: string | Date;
 }
 
 function toJob(row: JobRow): Job {
@@ -24,27 +24,24 @@ function toJob(row: JobRow): Job {
     name: row.name,
     code: row.code,
     client: row.client,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    createdAt: new Date(row.created_at).toISOString(),
+    updatedAt: new Date(row.updated_at).toISOString(),
   };
 }
 
-export function listJobs(db: AppDatabase): Job[] {
-  const rows = db.prepare('SELECT * FROM jobs ORDER BY created_at DESC, id DESC').all() as JobRow[];
-  return rows.map(toJob);
+export async function listJobs(db: AppDatabase): Promise<Job[]> {
+  const result = await db.query<JobRow>('SELECT * FROM jobs ORDER BY created_at DESC, id DESC');
+  return result.rows.map(toJob);
 }
 
-export function createJob(
+export async function createJob(
   db: AppDatabase,
   input: { name: string; code?: string; client?: string },
-): Job {
-  const result = db
-    .prepare('INSERT INTO jobs (name, code, client) VALUES (?, ?, ?)')
-    .run(input.name, input.code ?? null, input.client ?? null);
+): Promise<Job> {
+  const result = await db.query<JobRow>(
+    'INSERT INTO jobs (name, code, client) VALUES ($1, $2, $3) RETURNING *',
+    [input.name, input.code ?? null, input.client ?? null],
+  );
 
-  const row = db
-    .prepare('SELECT * FROM jobs WHERE id = ?')
-    .get(result.lastInsertRowid) as JobRow;
-
-  return toJob(row);
+  return toJob(result.rows[0]);
 }
