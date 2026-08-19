@@ -107,3 +107,120 @@ describe('error handling', () => {
     expect(res.status).toBe(500);
   });
 });
+
+describe('GET /api/jobs/:id', () => {
+  it('returns the job detail with actionRequired, triggerLabel, roleAssignments, and history', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+
+      const created = await agent.post('/api/jobs').send({ name: 'Job Detalhe Rota Teste' });
+      const res = await agent.get(`/api/jobs/${created.body.job.id}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.job.statusName).toBe('Prospecção');
+      expect(res.body.job.triggerLabel).toBe('Avançar para: Briefing Recebido');
+      expect(res.body.job.roleAssignments.map((a: { area: string }) => a.area).sort()).toEqual([
+        'Comercial',
+        'Produção Executiva',
+      ]);
+      expect(res.body.job.statusHistory.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('returns 404 for a nonexistent job', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+
+      const res = await agent.get('/api/jobs/999999999');
+
+      expect(res.status).toBe(404);
+    });
+  });
+});
+
+describe('POST /api/jobs/:id/advance', () => {
+  it('advances the job to the next status within the phase', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+
+      const created = await agent.post('/api/jobs').send({ name: 'Job Avanço Rota Teste' });
+      const res = await agent.post(`/api/jobs/${created.body.job.id}/advance`).send({});
+
+      expect(res.status).toBe(200);
+      expect(res.body.job.statusName).toBe('Briefing Recebido');
+    });
+  });
+});
+
+describe('POST /api/jobs/:id/status', () => {
+  it('moves the job to a manually chosen status', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+
+      const created = await agent.post('/api/jobs').send({ name: 'Job Status Manual Rota Teste' });
+      const targetStatus = await db.query<{ id: number }>(
+        `SELECT id FROM statuses WHERE name = 'Aprovação PPM'`,
+      );
+
+      const res = await agent
+        .post(`/api/jobs/${created.body.job.id}/status`)
+        .send({ statusId: targetStatus.rows[0].id, note: 'Pulo manual via rota' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.job.statusName).toBe('Aprovação PPM');
+    });
+  });
+
+  it('rejects a missing statusId', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+
+      const created = await agent.post('/api/jobs').send({ name: 'Job Status Manual Inválido Teste' });
+      const res = await agent.post(`/api/jobs/${created.body.job.id}/status`).send({});
+
+      expect(res.status).toBe(400);
+    });
+  });
+});
+
+describe('PUT /api/jobs/:id/roles/:area', () => {
+  it('assigns a person to a role area for the job', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+
+      const created = await agent.post('/api/jobs').send({ name: 'Job Atribuição Rota Teste' });
+      const personRow = await db.query<{ id: number }>(
+        `SELECT id FROM people WHERE name = 'Anne' AND area = 'Comercial'`,
+      );
+
+      const res = await agent
+        .put(`/api/jobs/${created.body.job.id}/roles/Comercial`)
+        .send({ personId: personRow.rows[0].id });
+
+      expect(res.status).toBe(200);
+      expect(res.body.roleAssignment.personName).toBe('Anne');
+    });
+  });
+
+  it('rejects an area that is not a valid role for the job\'s current phase', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+
+      // Job starts in Fase 1 ("Comercial e Orçamento"), which does not have a
+      // "Financeiro" role (that's a Fase 2 role) — this must be rejected, not
+      // silently insert an orphan row.
+      const created = await agent.post('/api/jobs').send({ name: 'Job Área Inválida Rota Teste' });
+
+      const res = await agent.put(`/api/jobs/${created.body.job.id}/roles/Financeiro`).send({ personId: null });
+
+      expect(res.status).toBe(400);
+    });
+  });
+});
