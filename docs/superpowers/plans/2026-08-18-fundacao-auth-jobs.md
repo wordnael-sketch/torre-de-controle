@@ -6,7 +6,7 @@
 
 **Architecture:** Two independent apps in one repo — `server/` (Node.js + Express + TypeScript + SQLite, deployed to an always-on host like Railway/Render) and `web/` (React + Vite + TypeScript, deployed to Vercel). They communicate over HTTP with credentials (cookies), across origins, so the backend enables CORS for the frontend's origin and issues cross-site session cookies.
 
-**Tech Stack:** Node.js + Express + TypeScript + better-sqlite3 (backend) · React + Vite + TypeScript + react-router-dom + @react-oauth/google (frontend) · Vitest + Supertest + Testing Library (tests).
+**Tech Stack:** Node.js (>=22.5) + Express + TypeScript + node:sqlite (backend) · React + Vite + TypeScript + react-router-dom + @react-oauth/google (frontend) · Vitest + Supertest + Testing Library (tests).
 
 **Spec:** [docs/superpowers/specs/2026-08-18-sistema-acompanhamento-jobs-design.md](../specs/2026-08-18-sistema-acompanhamento-jobs-design.md)
 
@@ -17,6 +17,7 @@
 - Banco de dados: SQLite em disco persistente. (spec §4)
 - O processo do backend deve rodar "always-on" (sem scale-to-zero) — hospedagem separada do frontend, que vai para o Vercel. (decisão de hospedagem tomada nesta sessão, complementa spec §4)
 - Frontend (Vercel) e backend (host always-on) ficam em origens diferentes: o backend precisa de CORS restrito à origem do frontend e cookies de sessão cross-site (`SameSite=None; Secure` em produção).
+- Banco de dados implementado com o módulo nativo `node:sqlite` (`DatabaseSync`), não `better-sqlite3` — decisão tomada durante a execução do Task 1 (ver ledger): `better-sqlite3` exige compilação nativa (node-gyp + Visual Studio Build Tools) indisponível neste ambiente e não garantida no host de deploy; `node:sqlite` tem API síncrona equivalente (`exec`/`prepare`/`run`/`get`/`all`) sem nenhuma compilação nativa. Isso fixa o requisito de versão: **Node.js >= 22.5.0** em todo lugar (dev e produção), já registrado em `server/package.json` como `engines.node`.
 
 ---
 
@@ -54,6 +55,9 @@ data/
   "name": "gerente-de-projeto-server",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=22.5.0"
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
@@ -61,7 +65,6 @@ data/
     "test": "vitest run"
   },
   "dependencies": {
-    "better-sqlite3": "^11.3.0",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
@@ -70,12 +73,11 @@ data/
     "jsonwebtoken": "^9.0.2"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.11",
     "@types/cookie-parser": "^1.4.7",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/jsonwebtoken": "^9.0.7",
-    "@types/node": "^20.14.15",
+    "@types/node": "^22.5.0",
     "@types/supertest": "^6.0.2",
     "supertest": "^7.0.0",
     "tsx": "^4.19.0",
@@ -84,6 +86,12 @@ data/
   }
 }
 ```
+
+> **Note (ruling recorded during Task 1 execution):** this snippet already
+> reflects the `node:sqlite` ruling below — Task 1 was implemented and
+> reviewed against an earlier version that included `better-sqlite3`, then
+> corrected by the controller in a follow-up commit before Task 2 started.
+> See the SDD ledger for the full ruling.
 
 - [ ] **Step 3: Create `server/tsconfig.json`**
 
@@ -186,7 +194,11 @@ git commit -m "feat(server): scaffold Express app with health check"
 - Test: `server/test/db.test.ts`
 
 **Interfaces:**
-- Produces: `export type AppDatabase = Database.Database`, `createDb(filePath: string): AppDatabase`
+- Produces: `export type AppDatabase = DatabaseSync` (from `node:sqlite`), `createDb(filePath: string): AppDatabase`
+
+Uses Node's built-in `node:sqlite` module (`DatabaseSync`), not the `better-sqlite3`
+package — see the Global Constraints ruling above. Requires Node >= 22.5.0 (already
+pinned in `server/package.json` via `engines.node`).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -201,13 +213,19 @@ describe('createDb', () => {
     const db = createDb(':memory:');
 
     const tables = db
-      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+      )
       .all() as { name: string }[];
 
     expect(tables.map((t) => t.name)).toEqual(['jobs', 'users']);
   });
 });
 ```
+
+Note: the `AUTOINCREMENT` columns in the schema make SQLite create an internal
+`sqlite_sequence` bookkeeping table — the `NOT LIKE 'sqlite_%'` filter excludes it (and
+any other SQLite-internal table) so the assertion reflects only tables this app owns.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -238,11 +256,11 @@ CREATE TABLE IF NOT EXISTS jobs (
 - [ ] **Step 4: Implement `server/src/db/index.ts`**
 
 ```ts
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
 
-export type AppDatabase = Database.Database;
+export type AppDatabase = DatabaseSync;
 
 export function createDb(filePath: string): AppDatabase {
   if (filePath !== ':memory:') {
@@ -250,8 +268,8 @@ export function createDb(filePath: string): AppDatabase {
     fs.mkdirSync(dir, { recursive: true });
   }
 
-  const db = new Database(filePath);
-  db.pragma('journal_mode = WAL');
+  const db = new DatabaseSync(filePath);
+  db.exec('PRAGMA journal_mode = WAL');
 
   const schemaPath = path.join(__dirname, 'schema.sql');
   const schema = fs.readFileSync(schemaPath, 'utf-8');
@@ -2157,7 +2175,8 @@ Ver spec completa em `docs/superpowers/specs/2026-08-18-sistema-acompanhamento-j
 
 ## Pré-requisitos
 
-- Node.js 18 ou superior.
+- Node.js 22.5 ou superior (o backend usa o módulo nativo `node:sqlite`, que não
+  precisa de compilação nativa — ao contrário de bibliotecas como `better-sqlite3`).
 - Uma credencial OAuth do Google (Google Cloud Console → APIs & Services →
   Credentials → Create OAuth client ID → Web application), com as origens
   JavaScript autorizadas incluindo `http://localhost:5173` (dev) e, depois do
