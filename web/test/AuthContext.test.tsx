@@ -41,7 +41,7 @@ describe('AuthProvider', () => {
   });
 
   it('sets the user when /me succeeds', async () => {
-    mockedApi.me.mockResolvedValue({ user: { id: 1, email: 'wilka@ilhacrossmidia.com.br' } });
+    mockedApi.me.mockResolvedValue({ user: { id: 1, email: 'wilka@ilhacrossmidia.com.br', role: 'admin', status: 'active' } });
 
     render(
       <AuthProvider>
