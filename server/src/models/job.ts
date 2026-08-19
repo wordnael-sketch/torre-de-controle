@@ -18,6 +18,7 @@ export interface Job {
   alertLevel: AlertLevel;
   highlightedPersonName: string | null;
   bolaCom: 'ilha' | 'cliente';
+  lastWhatsappActivityAt: string | null;
 }
 
 interface JobRow {
@@ -34,6 +35,7 @@ interface JobRow {
   completed_at: string | Date | null;
   highlighted_person_name: string | null;
   bola_com: 'ilha' | 'cliente';
+  last_whatsapp_activity_at: string | Date | null;
 }
 
 const JOB_SELECT = `
@@ -74,6 +76,9 @@ async function rowToJob(db: AppDatabase, row: JobRow): Promise<Job> {
     alertLevel,
     highlightedPersonName: row.highlighted_person_name,
     bolaCom: row.bola_com,
+    lastWhatsappActivityAt: row.last_whatsapp_activity_at
+      ? new Date(row.last_whatsapp_activity_at).toISOString()
+      : null,
   };
 }
 
@@ -198,4 +203,15 @@ export async function setJobStatus(
   }
 
   return applyStatusChange(db, jobId, current.statusId, statusId, note);
+}
+
+export async function setLastWhatsappActivity(
+  db: AppDatabase,
+  jobId: number,
+  value: string | null,
+): Promise<void> {
+  await db.query('UPDATE jobs SET last_whatsapp_activity_at = $1, updated_at = now() WHERE id = $2', [
+    value,
+    jobId,
+  ]);
 }

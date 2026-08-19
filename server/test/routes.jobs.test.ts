@@ -364,3 +364,54 @@ describe('PATCH /api/jobs/:id/bola-com', () => {
     });
   });
 });
+
+describe('PATCH /api/jobs/:id/last-activity', () => {
+  it('sets the last WhatsApp activity timestamp', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+
+      const created = await agent.post('/api/jobs').send({ name: 'Job Última Atividade Rota Teste' });
+      const timestamp = '2026-08-18T10:00:00.000Z';
+      const res = await agent
+        .patch(`/api/jobs/${created.body.job.id}/last-activity`)
+        .send({ lastWhatsappActivityAt: timestamp });
+
+      expect(res.status).toBe(200);
+      expect(res.body.job.lastWhatsappActivityAt).toBe(timestamp);
+    });
+  });
+
+  it('clears the timestamp when null is sent', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+
+      const created = await agent.post('/api/jobs').send({ name: 'Job Limpar Última Atividade Teste' });
+      await agent
+        .patch(`/api/jobs/${created.body.job.id}/last-activity`)
+        .send({ lastWhatsappActivityAt: '2026-08-18T10:00:00.000Z' });
+
+      const res = await agent
+        .patch(`/api/jobs/${created.body.job.id}/last-activity`)
+        .send({ lastWhatsappActivityAt: null });
+
+      expect(res.status).toBe(200);
+      expect(res.body.job.lastWhatsappActivityAt).toBeNull();
+    });
+  });
+
+  it('rejects an invalid date string', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+
+      const created = await agent.post('/api/jobs').send({ name: 'Job Data Inválida Teste' });
+      const res = await agent
+        .patch(`/api/jobs/${created.body.job.id}/last-activity`)
+        .send({ lastWhatsappActivityAt: 'não é uma data' });
+
+      expect(res.status).toBe(400);
+    });
+  });
+});

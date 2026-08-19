@@ -323,3 +323,5 @@ CREATE TABLE IF NOT EXISTS job_bola_com_history (
   changed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   note TEXT
 );
+
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS last_whatsapp_activity_at TIMESTAMPTZ;

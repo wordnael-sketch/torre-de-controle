@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { AppDatabase } from '../db';
-import { createJob, listJobs, getJobById, advanceJobStatus, setJobStatus } from '../models/job';
+import { createJob, listJobs, getJobById, advanceJobStatus, setJobStatus, setLastWhatsappActivity } from '../models/job';
 import { setBolaCom, getBolaComDayCounts } from '../models/bolaCom';
 import { getJobStatusHistory } from '../models/jobStatusHistory';
 import { getJobRoleAssignments, setJobRoleAssignment } from '../models/jobRoleAssignments';
@@ -214,6 +214,37 @@ export function createJobsRouter(deps: JobsRouterDeps): Router {
       const job = await getJobById(deps.db, jobId);
       const bolaComDayCounts = await getBolaComDayCounts(deps.db, jobId);
       res.json({ job, bolaComDayCounts });
+    }),
+  );
+
+  router.patch(
+    '/:id/last-activity',
+    asyncHandler(async (req, res) => {
+      const jobId = parseId(req.params.id);
+      if (jobId === null) {
+        res.status(400).json({ error: 'invalid job id' });
+        return;
+      }
+
+      const { lastWhatsappActivityAt } = req.body as { lastWhatsappActivityAt?: string | null };
+
+      if (lastWhatsappActivityAt !== null && lastWhatsappActivityAt !== undefined) {
+        const parsed = new Date(lastWhatsappActivityAt);
+        if (Number.isNaN(parsed.getTime())) {
+          res.status(400).json({ error: 'lastWhatsappActivityAt must be a valid ISO date string or null' });
+          return;
+        }
+      }
+
+      const existing = await getJobById(deps.db, jobId);
+      if (!existing) {
+        res.status(404).json({ error: 'Job not found' });
+        return;
+      }
+
+      await setLastWhatsappActivity(deps.db, jobId, lastWhatsappActivityAt ?? null);
+      const job = await getJobById(deps.db, jobId);
+      res.json({ job });
     }),
   );
 
