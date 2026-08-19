@@ -82,16 +82,23 @@ data/
     "supertest": "^7.0.0",
     "tsx": "^4.19.0",
     "typescript": "^5.5.4",
-    "vitest": "^2.0.5"
+    "vitest": "^4.1.11"
   }
 }
 ```
 
-> **Note (ruling recorded during Task 1 execution):** this snippet already
-> reflects the `node:sqlite` ruling below — Task 1 was implemented and
-> reviewed against an earlier version that included `better-sqlite3`, then
-> corrected by the controller in a follow-up commit before Task 2 started.
-> See the SDD ledger for the full ruling.
+> **Note (rulings recorded during Task 1/2 execution):** this snippet already
+> reflects two rulings — see the SDD ledger for both in full:
+> 1. `node:sqlite` instead of `better-sqlite3` (Task 1 was implemented and
+>    reviewed against an earlier version that included `better-sqlite3`,
+>    then corrected by the controller before Task 2 started).
+> 2. `vitest` bumped from `^2.0.5` to `^4.1.11` (Task 2's `node:sqlite`
+>    import failed to resolve under vitest 2.x/vite 5.x — it strips the
+>    `node:` prefix before checking for a builtin, and `node:sqlite` only
+>    resolves with the prefix present; vitest 4.x resolves it correctly
+>    with no extra config). This bump applies to the **backend only** —
+>    the frontend's vitest/vite versions in Task 9 are unaffected (no
+>    `node:` builtin imports there) and stay as originally specified.
 
 - [ ] **Step 3: Create `server/tsconfig.json`**
 
