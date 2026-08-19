@@ -5,6 +5,7 @@ import type { AppDatabase } from './db';
 import { createAuthRouter, type VerifyIdToken } from './routes/auth';
 import { createJobsRouter } from './routes/jobs';
 import { createReferenceRouter } from './routes/reference';
+import { createUsersRouter } from './routes/users';
 
 export interface AppDeps {
   db: AppDatabase;
@@ -27,6 +28,7 @@ export function createApp(deps: AppDeps): Express {
   app.use('/api/auth', createAuthRouter(deps));
   app.use('/api/jobs', createJobsRouter(deps));
   app.use('/api', createReferenceRouter(deps));
+  app.use('/api/users', createUsersRouter(deps));
 
   app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     console.error(err);
