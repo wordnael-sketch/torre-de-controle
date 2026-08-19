@@ -10,11 +10,11 @@ describe('listPhasesWithStatuses', () => {
       expect(phases).toHaveLength(6);
       expect(phases.map((p) => p.name)).toEqual([
         'Comercial e Orçamento',
-        'Dotação Financeira e Burocracia (Set-up)',
+        'Dotação e Burocracia',
         'Pré-Produção',
-        'Captação (Set de Gravação)',
+        'Captação',
         'Pós-Produção',
-        'Encerramento e Auditoria',
+        'Encerramento',
       ]);
 
       const fase1 = phases[0];
@@ -22,10 +22,11 @@ describe('listPhasesWithStatuses', () => {
       expect(fase1.statuses.map((s) => s.name)).toEqual([
         'Prospecção',
         'Briefing Recebido',
+        'Carta Orçamentária/Tratamento criada',
         'Orçamento e Decupagem',
         'Defesa da Proposta',
       ]);
-      expect(fase1.statuses[3].triggerLabel).toBe('Tocar a Buzina');
+      expect(fase1.statuses[4].triggerLabel).toBe('Tocar a Buzina');
     });
   });
 });

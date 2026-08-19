@@ -163,7 +163,7 @@ describe('POST /api/jobs/:id/status', () => {
 
       const created = await agent.post('/api/jobs').send({ name: 'Job Status Manual Rota Teste' });
       const targetStatus = await db.query<{ id: number }>(
-        `SELECT id FROM statuses WHERE name = 'Aprovação PPM'`,
+        `SELECT id FROM statuses WHERE name = 'PPM aprovada pelo cliente'`,
       );
 
       const res = await agent
@@ -171,7 +171,7 @@ describe('POST /api/jobs/:id/status', () => {
         .send({ statusId: targetStatus.rows[0].id, note: 'Pulo manual via rota' });
 
       expect(res.status).toBe(200);
-      expect(res.body.job.statusName).toBe('Aprovação PPM');
+      expect(res.body.job.statusName).toBe('PPM aprovada pelo cliente');
     });
   });
 
@@ -233,7 +233,7 @@ describe('PUT /api/jobs/:id/roles/:area', () => {
       // Fase 2 first (which does) via the manual status route.
       const created = await agent.post('/api/jobs').send({ name: 'Job Área Com Barra Teste' });
       const fase2Status = await db.query<{ id: number }>(
-        `SELECT id FROM statuses WHERE name = 'Aguardando Contrato'`,
+        `SELECT id FROM statuses WHERE name = 'Contrato assinado pelo cliente'`,
       );
       await agent.post(`/api/jobs/${created.body.job.id}/status`).send({ statusId: fase2Status.rows[0].id });
 

@@ -97,12 +97,12 @@ describe('job status lifecycle', () => {
       const created = await createJob(db, { name: 'Job Status Manual Teste' });
 
       const targetStatus = await db.query<{ id: number }>(
-        `SELECT id FROM statuses WHERE name = 'Aprovação PPM'`,
+        `SELECT id FROM statuses WHERE name = 'PPM aprovada pelo cliente'`,
       );
 
       const updated = await setJobStatus(db, created.id, targetStatus.rows[0].id, 'Pulo manual de teste');
 
-      expect(updated.statusName).toBe('Aprovação PPM');
+      expect(updated.statusName).toBe('PPM aprovada pelo cliente');
       expect(updated.phaseName).toBe('Pré-Produção');
     });
   });
@@ -112,12 +112,12 @@ describe('job status lifecycle', () => {
       const created = await createJob(db, { name: 'Job Conclusão Teste' });
 
       const finalStatus = await db.query<{ id: number }>(
-        `SELECT id FROM statuses WHERE name = 'Arquivamento'`,
+        `SELECT id FROM statuses WHERE name = 'Todos os checkboxes preenchidos — Job concluído'`,
       );
 
       const completed = await setJobStatus(db, created.id, finalStatus.rows[0].id);
 
-      expect(completed.statusName).toBe('Arquivamento');
+      expect(completed.statusName).toBe('Todos os checkboxes preenchidos — Job concluído');
       expect(completed.completedAt).not.toBeNull();
     });
   });
@@ -155,7 +155,7 @@ describe('job status lifecycle', () => {
     await withTestTransaction(async (db) => {
       const created = await createJob(db, { name: 'Job Farol Pós-Conclusão Teste' });
       const finalStatus = await db.query<{ id: number }>(
-        `SELECT id FROM statuses WHERE name = 'Arquivamento'`,
+        `SELECT id FROM statuses WHERE name = 'Todos os checkboxes preenchidos — Job concluído'`,
       );
 
       const completed = await setJobStatus(db, created.id, finalStatus.rows[0].id);

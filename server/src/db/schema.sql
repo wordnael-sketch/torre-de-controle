@@ -81,13 +81,37 @@ CREATE TABLE IF NOT EXISTS job_status_history (
   note TEXT
 );
 
+-- Migração única: expande os 25 status "bundled" originais em 40 marcos
+-- individuais de checklist e renomeia 3 fases para o nome curto usado na UI.
+-- Guardado por IF EXISTS: roda uma vez (quando a fase com o nome antigo ainda
+-- existe) e depois vira no-op para sempre, como o resto deste arquivo.
+DO $$
+DECLARE
+  other_jobs_count INTEGER;
+BEGIN
+  IF EXISTS (SELECT 1 FROM phases WHERE name = 'Dotação Financeira e Burocracia (Set-up)') THEN
+    SELECT count(*) INTO other_jobs_count FROM jobs WHERE name <> 'ZZ_PROBE_REVIEW_JOB';
+
+    IF other_jobs_count > 0 THEN
+      RAISE EXCEPTION 'Migração de status abortada: % job(s) reais além do probe de teste existem. Esta migração assume que não há jobs reais em uso ainda — resolva manualmente antes de reaplicar.', other_jobs_count;
+    END IF;
+
+    DELETE FROM job_role_assignments WHERE job_id IN (SELECT id FROM jobs);
+    DELETE FROM job_status_history WHERE job_id IN (SELECT id FROM jobs);
+    DELETE FROM jobs;
+    DELETE FROM statuses;
+    DELETE FROM phase_roles;
+    DELETE FROM phases;
+  END IF;
+END $$;
+
 INSERT INTO phases ("order", name) VALUES
   (1, 'Comercial e Orçamento'),
-  (2, 'Dotação Financeira e Burocracia (Set-up)'),
+  (2, 'Dotação e Burocracia'),
   (3, 'Pré-Produção'),
-  (4, 'Captação (Set de Gravação)'),
+  (4, 'Captação'),
   (5, 'Pós-Produção'),
-  (6, 'Encerramento e Auditoria')
+  (6, 'Encerramento')
 ON CONFLICT (name) DO NOTHING;
 
 INSERT INTO phase_roles (phase_id, area)
@@ -95,21 +119,21 @@ SELECT p.id, v.area
 FROM (VALUES
   ('Comercial e Orçamento', 'Comercial'),
   ('Comercial e Orçamento', 'Produção Executiva'),
-  ('Dotação Financeira e Burocracia (Set-up)', 'Financeiro'),
-  ('Dotação Financeira e Burocracia (Set-up)', 'Atendimento'),
-  ('Dotação Financeira e Burocracia (Set-up)', 'Jurídico/Base'),
+  ('Dotação e Burocracia', 'Financeiro'),
+  ('Dotação e Burocracia', 'Atendimento'),
+  ('Dotação e Burocracia', 'Jurídico/Base'),
   ('Pré-Produção', 'Produção'),
   ('Pré-Produção', 'Criativo'),
   ('Pré-Produção', 'Locação/Elenco/Arte'),
-  ('Captação (Set de Gravação)', 'Técnica/Imagem'),
-  ('Captação (Set de Gravação)', 'Elétrica/Maquinaria'),
-  ('Captação (Set de Gravação)', 'Produção Executiva'),
-  ('Captação (Set de Gravação)', 'Financeiro'),
+  ('Captação', 'Técnica/Imagem'),
+  ('Captação', 'Elétrica/Maquinaria'),
+  ('Captação', 'Produção Executiva'),
+  ('Captação', 'Financeiro'),
   ('Pós-Produção', 'Pós'),
   ('Pós-Produção', 'Atendimento'),
-  ('Encerramento e Auditoria', 'Qualidade e RH'),
-  ('Encerramento e Auditoria', 'Produção Executiva'),
-  ('Encerramento e Auditoria', 'Marketing')
+  ('Encerramento', 'Qualidade e RH'),
+  ('Encerramento', 'Produção Executiva'),
+  ('Encerramento', 'Marketing')
 ) AS v(phase_name, area)
 JOIN phases p ON p.name = v.phase_name
 ON CONFLICT (phase_id, area) DO NOTHING;
@@ -122,79 +146,124 @@ FROM (VALUES
     'Avançar para: Briefing Recebido', 'Comercial'),
   ('Comercial e Orçamento', 2, 'Briefing Recebido',
     'Preenchimento do Briefing Padronizado e criação da Carta Orçamentária/Tratamento.',
+    'Avançar para: Carta Orçamentária/Tratamento criada', 'Comercial'),
+  ('Comercial e Orçamento', 3, 'Carta Orçamentária/Tratamento criada',
+    'Preenchimento do Briefing Padronizado e criação da Carta Orçamentária/Tratamento.',
     'Avançar para: Orçamento e Decupagem', 'Comercial'),
-  ('Comercial e Orçamento', 3, 'Orçamento e Decupagem',
+  ('Comercial e Orçamento', 4, 'Orçamento e Decupagem',
     'Preenchimento do Briefing Padronizado e criação da Carta Orçamentária/Tratamento.',
     'Avançar para: Defesa da Proposta', 'Produção Executiva'),
-  ('Comercial e Orçamento', 4, 'Defesa da Proposta',
+  ('Comercial e Orçamento', 5, 'Defesa da Proposta',
     'Preenchimento do Briefing Padronizado e criação da Carta Orçamentária/Tratamento.',
     'Tocar a Buzina', 'Comercial'),
 
-  ('Dotação Financeira e Burocracia (Set-up)', 1, 'Dotação e Travamento',
-    'Fagner trava a edição das planilhas de orçamento no Drive, Atendimento define o Assistente de Direção (AD) e Jurídico aprova o contrato.',
-    'Avançar para: Aguardando Contrato', 'Financeiro'),
-  ('Dotação Financeira e Burocracia (Set-up)', 2, 'Aguardando Contrato',
-    'Fagner trava a edição das planilhas de orçamento no Drive, Atendimento define o Assistente de Direção (AD) e Jurídico aprova o contrato.',
-    'Avançar para: NF Emitida', 'Jurídico/Base'),
-  ('Dotação Financeira e Burocracia (Set-up)', 3, 'NF Emitida',
-    'Fagner trava a edição das planilhas de orçamento no Drive, Atendimento define o Assistente de Direção (AD) e Jurídico aprova o contrato.',
-    'Avançar para: Grupos Criados', 'Financeiro'),
-  ('Dotação Financeira e Burocracia (Set-up)', 4, 'Grupos Criados',
-    'Fagner trava a edição das planilhas de orçamento no Drive, Atendimento define o Assistente de Direção (AD) e Jurídico aprova o contrato.',
-    'Contrato assinado anexado no Drive e pastas movidas para "Em execução"', 'Atendimento'),
+  ('Dotação e Burocracia', 1, 'Dotação orçamentária aprovada pelo CEO',
+    'Fagner trava a edição das planilhas de orçamento no Drive, Atendimento define o Assistente de Direção (AD), Jurídico aprova o contrato, e a Nota Fiscal e os grupos de WhatsApp são organizados antes do início da produção.',
+    'Avançar para: Planilhas travadas pelo Head-Financeiro', 'Financeiro'),
+  ('Dotação e Burocracia', 2, 'Planilhas travadas pelo Head-Financeiro',
+    'Fagner trava a edição das planilhas de orçamento no Drive, Atendimento define o Assistente de Direção (AD), Jurídico aprova o contrato, e a Nota Fiscal e os grupos de WhatsApp são organizados antes do início da produção.',
+    'Avançar para: Atendimento da conta definida', 'Financeiro'),
+  ('Dotação e Burocracia', 3, 'Atendimento da conta definida',
+    'Fagner trava a edição das planilhas de orçamento no Drive, Atendimento define o Assistente de Direção (AD), Jurídico aprova o contrato, e a Nota Fiscal e os grupos de WhatsApp são organizados antes do início da produção.',
+    'Avançar para: Assistente de Direção definido', 'Atendimento'),
+  ('Dotação e Burocracia', 4, 'Assistente de Direção definido',
+    'Fagner trava a edição das planilhas de orçamento no Drive, Atendimento define o Assistente de Direção (AD), Jurídico aprova o contrato, e a Nota Fiscal e os grupos de WhatsApp são organizados antes do início da produção.',
+    'Avançar para: Contrato assinado pelo cliente', 'Atendimento'),
+  ('Dotação e Burocracia', 5, 'Contrato assinado pelo cliente',
+    'Fagner trava a edição das planilhas de orçamento no Drive, Atendimento define o Assistente de Direção (AD), Jurídico aprova o contrato, e a Nota Fiscal e os grupos de WhatsApp são organizados antes do início da produção.',
+    'Avançar para: Nota Fiscal emitida', 'Jurídico/Base'),
+  ('Dotação e Burocracia', 6, 'Nota Fiscal emitida',
+    'Fagner trava a edição das planilhas de orçamento no Drive, Atendimento define o Assistente de Direção (AD), Jurídico aprova o contrato, e a Nota Fiscal e os grupos de WhatsApp são organizados antes do início da produção.',
+    'Avançar para: Grupos de WhatsApp criados (Executivo, Pós e Geral)', 'Financeiro'),
+  ('Dotação e Burocracia', 7, 'Grupos de WhatsApp criados (Executivo, Pós e Geral)',
+    'Fagner trava a edição das planilhas de orçamento no Drive, Atendimento define o Assistente de Direção (AD), Jurídico aprova o contrato, e a Nota Fiscal e os grupos de WhatsApp são organizados antes do início da produção.',
+    'Avançar para: Pré-cadastro na ANCINE iniciado', 'Atendimento'),
+  ('Dotação e Burocracia', 8, 'Pré-cadastro na ANCINE iniciado',
+    'Fagner trava a edição das planilhas de orçamento no Drive, Atendimento define o Assistente de Direção (AD), Jurídico aprova o contrato, e a Nota Fiscal e os grupos de WhatsApp são organizados antes do início da produção.',
+    'Contrato assinado anexado no Drive e pastas movidas para "Em execução"', 'Jurídico/Base'),
 
   ('Pré-Produção', 1, 'Reunião de Briefing',
     'Aprovação da estética na PPM com o cliente e emissão dos seguros.',
     'Avançar para: Contratações (Logística/Freelas)', 'Produção'),
   ('Pré-Produção', 2, 'Contratações (Logística/Freelas)',
     'Aprovação da estética na PPM com o cliente e emissão dos seguros.',
-    'Avançar para: Aprovação PPM', 'Produção'),
-  ('Pré-Produção', 3, 'Aprovação PPM',
+    'Avançar para: Estética aprovada na PPM', 'Produção'),
+  ('Pré-Produção', 3, 'Estética aprovada na PPM',
     'Aprovação da estética na PPM com o cliente e emissão dos seguros.',
-    'Avançar para: OD Enviada', 'Criativo'),
-  ('Pré-Produção', 4, 'OD Enviada',
+    'Avançar para: Seguros emitidos', 'Criativo'),
+  ('Pré-Produção', 4, 'Seguros emitidos',
+    'Aprovação da estética na PPM com o cliente e emissão dos seguros.',
+    'Avançar para: PPM aprovada pelo cliente', 'Produção'),
+  ('Pré-Produção', 5, 'PPM aprovada pelo cliente',
+    'Aprovação da estética na PPM com o cliente e emissão dos seguros.',
+    'Avançar para: Ordem do Dia (OD) elaborada', 'Criativo'),
+  ('Pré-Produção', 6, 'Ordem do Dia (OD) elaborada',
+    'Aprovação da estética na PPM com o cliente e emissão dos seguros.',
+    'Avançar para: OD enviada com 24h de antecedência', 'Criativo'),
+  ('Pré-Produção', 7, 'OD enviada com 24h de antecedência',
     'Aprovação da estética na PPM com o cliente e emissão dos seguros.',
     'Assistente de Direção (AD) envia a Ordem do Dia (OD) com 24h de antecedência', 'Criativo'),
 
-  ('Captação (Set de Gravação)', 1, 'Pré-Light',
+  ('Captação', 1, 'Pré-Light',
     'Executar as gravações respeitando a política máxima de 12h a 14h.',
     'Avançar para: Em Captação', 'Elétrica/Maquinaria'),
-  ('Captação (Set de Gravação)', 2, 'Em Captação',
+  ('Captação', 2, 'Em Captação',
     'Executar as gravações respeitando a política máxima de 12h a 14h.',
     'Avançar para: Desmontagem', 'Técnica/Imagem'),
-  ('Captação (Set de Gravação)', 3, 'Desmontagem',
+  ('Captação', 3, 'Desmontagem',
     'Executar as gravações respeitando a política máxima de 12h a 14h.',
-    'Avançar para: Prestação de Contas', 'Elétrica/Maquinaria'),
-  ('Captação (Set de Gravação)', 4, 'Prestação de Contas',
+    'Avançar para: Backup em HD realizado (Logger)', 'Elétrica/Maquinaria'),
+  ('Captação', 4, 'Backup em HD realizado (Logger)',
+    'Executar as gravações respeitando a política máxima de 12h a 14h.',
+    'Avançar para: Prestação de Contas', 'Técnica/Imagem'),
+  ('Captação', 5, 'Prestação de Contas',
+    'Executar as gravações respeitando a política máxima de 12h a 14h.',
+    'Avançar para: "Realizado" finalizado pela Produção', 'Produção Executiva'),
+  ('Captação', 6, '"Realizado" finalizado pela Produção',
     'Executar as gravações respeitando a política máxima de 12h a 14h.',
     'Logger realiza backup em HD e Produção finaliza o "Realizado"', 'Produção Executiva'),
 
   ('Pós-Produção', 1, 'Ingest / Decupagem',
     'Edição completa, aprovação interna (QC) e envio ao cliente.',
-    'Avançar para: Montagem / Cor / Motion', 'Pós'),
-  ('Pós-Produção', 2, 'Montagem / Cor / Motion',
+    'Avançar para: Montagem', 'Pós'),
+  ('Pós-Produção', 2, 'Montagem',
+    'Edição completa, aprovação interna (QC) e envio ao cliente.',
+    'Avançar para: Cor', 'Pós'),
+  ('Pós-Produção', 3, 'Cor',
+    'Edição completa, aprovação interna (QC) e envio ao cliente.',
+    'Avançar para: Motion', 'Pós'),
+  ('Pós-Produção', 4, 'Motion',
     'Edição completa, aprovação interna (QC) e envio ao cliente.',
     'Avançar para: QC Interno', 'Pós'),
-  ('Pós-Produção', 3, 'QC Interno',
+  ('Pós-Produção', 5, 'QC Interno',
     'Edição completa, aprovação interna (QC) e envio ao cliente.',
     'Avançar para: Aprovação do Cliente', 'Pós'),
-  ('Pós-Produção', 4, 'Aprovação do Cliente',
+  ('Pós-Produção', 6, 'Aprovação do Cliente',
     'Edição completa, aprovação interna (QC) e envio ao cliente.',
-    'Avançar para: Acessibilidade', 'Atendimento'),
-  ('Pós-Produção', 5, 'Acessibilidade',
+    'Avançar para: De Acordo / Aceite Final do cliente', 'Atendimento'),
+  ('Pós-Produção', 7, 'De Acordo / Aceite Final do cliente',
+    'Edição completa, aprovação interna (QC) e envio ao cliente.',
+    'Avançar para: Libras/Legendas finalizados', 'Atendimento'),
+  ('Pós-Produção', 8, 'Libras/Legendas finalizados',
     'Edição completa, aprovação interna (QC) e envio ao cliente.',
     'Cliente dá o "De Acordo/Aceite Final" e recursos como Libras/Legendas são finalizados', 'Pós'),
 
-  ('Encerramento e Auditoria', 1, 'Entrega Final (Mestres)',
+  ('Encerramento', 1, 'Entrega Final (Mestres)',
     'Material vai para Cold Storage, avaliações são colhidas e dados financeiros finais são fechados.',
-    'Avançar para: Pesquisa NPS', 'Qualidade e RH'),
-  ('Encerramento e Auditoria', 2, 'Pesquisa NPS',
+    'Avançar para: Material enviado para Cold Storage', 'Qualidade e RH'),
+  ('Encerramento', 2, 'Material enviado para Cold Storage',
+    'Material vai para Cold Storage, avaliações são colhidas e dados financeiros finais são fechados.',
+    'Avançar para: Pesquisa NPS enviada/respondida', 'Qualidade e RH'),
+  ('Encerramento', 3, 'Pesquisa NPS enviada/respondida',
     'Material vai para Cold Storage, avaliações são colhidas e dados financeiros finais são fechados.',
     'Avançar para: Fechamento Orçado x Dotado x Realizado', 'Qualidade e RH'),
-  ('Encerramento e Auditoria', 3, 'Fechamento Orçado x Dotado x Realizado',
+  ('Encerramento', 4, 'Fechamento Orçado x Dotado x Realizado',
     'Material vai para Cold Storage, avaliações são colhidas e dados financeiros finais são fechados.',
     'Avançar para: Arquivamento', 'Produção Executiva'),
-  ('Encerramento e Auditoria', 4, 'Arquivamento',
+  ('Encerramento', 5, 'Arquivamento',
+    'Material vai para Cold Storage, avaliações são colhidas e dados financeiros finais são fechados.',
+    'Avançar para: Todos os checkboxes preenchidos — Job concluído', 'Qualidade e RH'),
+  ('Encerramento', 6, 'Todos os checkboxes preenchidos — Job concluído',
     'Material vai para Cold Storage, avaliações são colhidas e dados financeiros finais são fechados.',
     'Todos os checkboxes preenchidos — Job concluído', 'Qualidade e RH')
 ) AS v(phase_name, "order", name, action_required, trigger_label, primary_role)
