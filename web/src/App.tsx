@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { Login } from './pages/Login';
-import { Dashboard } from './pages/Dashboard';
+import { Board } from './pages/Board';
 
 function RequireAuth({ children }: { children: ReactElement }) {
   const { user, loading, logout } = useAuth();
@@ -22,8 +22,6 @@ function RequireAuth({ children }: { children: ReactElement }) {
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          maxWidth: 640,
-          margin: '0 auto',
           padding: '1rem',
         }}
       >
@@ -59,7 +57,7 @@ function AppRoutes() {
         path="/"
         element={
           <RequireAuth>
-            <Dashboard />
+            <Board />
           </RequireAuth>
         }
       />

@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { Dashboard } from '../src/pages/Dashboard';
+import { MemoryRouter } from 'react-router-dom';
+import { Board } from '../src/pages/Board';
 import { api } from '../src/api/client';
 
 vi.mock('../src/api/client', async () => {
@@ -11,27 +12,44 @@ vi.mock('../src/api/client', async () => {
     api: {
       listJobs: vi.fn(),
       createJob: vi.fn(),
+      getReference: vi.fn(),
     },
   };
 });
 
 const mockedApi = vi.mocked(api);
 
-describe('Dashboard', () => {
+const twoPhases = [
+  { id: 1, order: 1, name: 'Comercial e Orçamento', roles: ['Comercial'], statuses: [] },
+  { id: 2, order: 2, name: 'Dotação Financeira e Burocracia (Set-up)', roles: ['Financeiro'], statuses: [] },
+];
+
+function renderBoard() {
+  return render(
+    <MemoryRouter>
+      <Board />
+    </MemoryRouter>,
+  );
+}
+
+describe('Board', () => {
   beforeEach(() => {
     mockedApi.listJobs.mockReset();
     mockedApi.createJob.mockReset();
+    mockedApi.getReference.mockReset();
+    mockedApi.getReference.mockResolvedValue({ phases: twoPhases });
   });
 
-  it('shows a message when there are no jobs', async () => {
+  it('shows a column per phase and no jobs message when empty', async () => {
     mockedApi.listJobs.mockResolvedValue({ jobs: [] });
 
-    render(<Dashboard />);
+    renderBoard();
 
-    expect(await screen.findByText('Nenhum job cadastrado ainda.')).toBeInTheDocument();
+    expect(await screen.findByText('Comercial e Orçamento')).toBeInTheDocument();
+    expect(await screen.findByText('Dotação Financeira e Burocracia (Set-up)')).toBeInTheDocument();
   });
 
-  it('lists jobs returned by the API', async () => {
+  it('places a job card under its phase column with status and highlighted person', async () => {
     mockedApi.listJobs.mockResolvedValue({
       jobs: [
         {
@@ -41,16 +59,25 @@ describe('Dashboard', () => {
           client: 'Colgate',
           createdAt: '2026-08-18T00:00:00.000Z',
           updatedAt: '2026-08-18T00:00:00.000Z',
+          statusId: 10,
+          statusName: 'Prospecção',
+          phaseId: 1,
+          phaseName: 'Comercial e Orçamento',
+          completedAt: null,
+          alertLevel: 'green',
+          highlightedPersonName: 'Anne',
         },
       ],
     });
 
-    render(<Dashboard />);
+    renderBoard();
 
     expect(await screen.findByText(/Colgate - Color Correct Wave 2/)).toBeInTheDocument();
+    expect(await screen.findByText('Prospecção')).toBeInTheDocument();
+    expect(await screen.findByText('Anne')).toBeInTheDocument();
   });
 
-  it('creates a job and refreshes the list', async () => {
+  it('creates a job and refreshes the board', async () => {
     mockedApi.listJobs
       .mockResolvedValueOnce({ jobs: [] })
       .mockResolvedValueOnce({
@@ -62,6 +89,13 @@ describe('Dashboard', () => {
             client: null,
             createdAt: '2026-08-18T00:00:00.000Z',
             updatedAt: '2026-08-18T00:00:00.000Z',
+            statusId: 10,
+            statusName: 'Prospecção',
+            phaseId: 1,
+            phaseName: 'Comercial e Orçamento',
+            completedAt: null,
+            alertLevel: 'green',
+            highlightedPersonName: null,
           },
         ],
       });
@@ -73,13 +107,20 @@ describe('Dashboard', () => {
         client: null,
         createdAt: '2026-08-18T00:00:00.000Z',
         updatedAt: '2026-08-18T00:00:00.000Z',
+        statusId: 10,
+        statusName: 'Prospecção',
+        phaseId: 1,
+        phaseName: 'Comercial e Orçamento',
+        completedAt: null,
+        alertLevel: 'green',
+        highlightedPersonName: null,
       },
     });
 
     const user = userEvent.setup();
-    render(<Dashboard />);
+    renderBoard();
 
-    await screen.findByText('Nenhum job cadastrado ainda.');
+    await screen.findByText('Comercial e Orçamento');
 
     await user.type(screen.getByLabelText('Nome'), 'Novo job');
     await user.click(screen.getByRole('button', { name: 'Adicionar job' }));
