@@ -3,6 +3,7 @@ import request from 'supertest';
 import { createApp } from '../src/app';
 import type { AppDatabase } from '../src/db';
 import type { GoogleProfile } from '../src/routes/auth';
+import type { Classifier, RawSuggestion } from '../src/services/classifier';
 import { withTestTransaction } from './helpers/testDb';
 
 const JWT_SECRET = 'test-secret';
@@ -424,6 +425,88 @@ describe('PATCH /api/jobs/:id/last-activity', () => {
       const res = await agent
         .patch(`/api/jobs/${created.body.job.id}/last-activity`)
         .send({});
+
+      expect(res.status).toBe(400);
+    });
+  });
+});
+
+function fakeClassifier(suggestions: RawSuggestion[]): Classifier {
+  return { classify: async () => suggestions };
+}
+
+describe('POST /api/jobs/:id/classify', () => {
+  it('returns 503 when no classifier is configured', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+
+      const created = await agent.post('/api/jobs').send({ name: 'Job Classify Sem IA Teste' });
+      const res = await agent
+        .post(`/api/jobs/${created.body.job.id}/classify`)
+        .send({ text: 'qualquer coisa' });
+
+      expect(res.status).toBe(503);
+    });
+  });
+
+  it('classifies pasted text and returns resolved suggestions', async () => {
+    await withTestTransaction(async (db) => {
+      const app = createApp({
+        db,
+        verifyIdToken: async () => ({
+          sub: 'google-sub-1',
+          email: 'wilka@ilhacrossmidia.com.br',
+          name: 'Wilka',
+        }),
+        jwtSecret: JWT_SECRET,
+        allowedDomain: ALLOWED_DOMAIN,
+        frontendUrl: FRONTEND_URL,
+        classifier: fakeClassifier([
+          {
+            tipo: 'checklist_item',
+            valor: 'Briefing Recebido',
+            confidence: 0.9,
+            evidencia: 'Cliente confirmou o briefing',
+          },
+        ]),
+      });
+      const agent = await loggedInAgent(app);
+
+      const created = await agent.post('/api/jobs').send({ name: 'Job Classify Com IA Teste' });
+      const res = await agent
+        .post(`/api/jobs/${created.body.job.id}/classify`)
+        .send({ text: 'Cliente confirmou o briefing agora' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.suggestions).toHaveLength(1);
+      expect(res.body.suggestions[0].outcome).toBe('auto_aplicado');
+    });
+  });
+
+  it('rejects empty text', async () => {
+    await withTestTransaction(async (db) => {
+      // Uses createApp(...) with a fake classifier configured (rather than the
+      // no-classifier buildApp(db) used elsewhere in this file) because the route
+      // checks classifier availability before validating the body — without a
+      // classifier this request would short-circuit to 503 before ever reaching
+      // the empty-text check this test exists to exercise.
+      const app = createApp({
+        db,
+        verifyIdToken: async () => ({
+          sub: 'google-sub-1',
+          email: 'wilka@ilhacrossmidia.com.br',
+          name: 'Wilka',
+        }),
+        jwtSecret: JWT_SECRET,
+        allowedDomain: ALLOWED_DOMAIN,
+        frontendUrl: FRONTEND_URL,
+        classifier: fakeClassifier([]),
+      });
+      const agent = await loggedInAgent(app);
+
+      const created = await agent.post('/api/jobs').send({ name: 'Job Classify Texto Vazio Teste' });
+      const res = await agent.post(`/api/jobs/${created.body.job.id}/classify`).send({ text: '' });
 
       expect(res.status).toBe(400);
     });

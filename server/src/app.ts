@@ -6,6 +6,7 @@ import { createAuthRouter, type VerifyIdToken } from './routes/auth';
 import { createJobsRouter } from './routes/jobs';
 import { createReferenceRouter } from './routes/reference';
 import { createUsersRouter } from './routes/users';
+import type { Classifier } from './services/classifier';
 
 export interface AppDeps {
   db: AppDatabase;
@@ -13,6 +14,7 @@ export interface AppDeps {
   jwtSecret: string;
   allowedDomain: string;
   frontendUrl: string;
+  classifier?: Classifier;
 }
 
 export function createApp(deps: AppDeps): Express {

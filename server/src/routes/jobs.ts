@@ -4,12 +4,15 @@ import { createJob, listJobs, getJobById, advanceJobStatus, setJobStatus, setLas
 import { setBolaCom, getBolaComDayCounts } from '../models/bolaCom';
 import { getJobStatusHistory } from '../models/jobStatusHistory';
 import { getJobRoleAssignments, setJobRoleAssignment } from '../models/jobRoleAssignments';
+import { classifyAndApply } from '../models/classification';
 import { requireAuth, requireActiveUser } from '../auth/middleware';
 import { asyncHandler } from '../utils/asyncHandler';
+import type { Classifier } from '../services/classifier';
 
 export interface JobsRouterDeps {
   db: AppDatabase;
   jwtSecret: string;
+  classifier?: Classifier;
 }
 
 function parseId(raw: string): number | null {
@@ -250,6 +253,37 @@ export function createJobsRouter(deps: JobsRouterDeps): Router {
       await setLastWhatsappActivity(deps.db, jobId, lastWhatsappActivityAt ?? null);
       const job = await getJobById(deps.db, jobId);
       res.json({ job });
+    }),
+  );
+
+  router.post(
+    '/:id/classify',
+    asyncHandler(async (req, res) => {
+      const jobId = parseId(req.params.id);
+      if (jobId === null) {
+        res.status(400).json({ error: 'invalid job id' });
+        return;
+      }
+
+      if (!deps.classifier) {
+        res.status(503).json({ error: 'ia_nao_configurada' });
+        return;
+      }
+
+      const { text } = req.body as { text?: string };
+      if (!text || !text.trim()) {
+        res.status(400).json({ error: 'text is required' });
+        return;
+      }
+
+      const existing = await getJobById(deps.db, jobId);
+      if (!existing) {
+        res.status(404).json({ error: 'Job not found' });
+        return;
+      }
+
+      const suggestions = await classifyAndApply(deps.db, deps.classifier, jobId, text);
+      res.json({ suggestions });
     }),
   );
 
