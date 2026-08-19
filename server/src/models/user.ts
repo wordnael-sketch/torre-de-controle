@@ -38,6 +38,23 @@ export async function findOrCreateUser(
     return toUser(existing.rows[0]);
   }
 
+  const byEmail = await db.query<UserRow>('SELECT * FROM users WHERE email = $1', [
+    input.email,
+  ]);
+
+  if (byEmail.rows[0]) {
+    const user = byEmail.rows[0];
+    // If the user was seeded with null google_sub/name, update them
+    if (!user.google_sub || !user.name) {
+      const updated = await db.query<UserRow>(
+        'UPDATE users SET google_sub = $1, name = $2 WHERE id = $3 RETURNING *',
+        [input.googleSub, input.name, user.id],
+      );
+      return toUser(updated.rows[0]);
+    }
+    return toUser(user);
+  }
+
   const inserted = await db.query<UserRow>(
     'INSERT INTO users (google_sub, email, name) VALUES ($1, $2, $3) RETURNING *',
     [input.googleSub, input.email, input.name],
