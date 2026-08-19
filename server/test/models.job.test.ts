@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createJob, listJobs } from '../src/models/job';
+import { createJob, listJobs, getJobById, advanceJobStatus, setJobStatus } from '../src/models/job';
 import { withTestTransaction } from './helpers/testDb';
 
 describe('job model', () => {
@@ -41,6 +41,84 @@ describe('job model', () => {
       expect(indexSegundo).toBeGreaterThanOrEqual(0);
       expect(indexPrimeiro).toBeGreaterThanOrEqual(0);
       expect(indexSegundo).toBeLessThan(indexPrimeiro);
+    });
+  });
+});
+
+describe('job status lifecycle', () => {
+  it('defaults a new job to the first status of the first phase', async () => {
+    await withTestTransaction(async (db) => {
+      const job = await createJob(db, { name: 'Job Status Inicial Teste' });
+
+      expect(job.statusName).toBe('Prospecção');
+      expect(job.phaseName).toBe('Comercial e Orçamento');
+      expect(job.completedAt).toBeNull();
+    });
+  });
+
+  it('enriches listJobs with status, phase, and alertLevel', async () => {
+    await withTestTransaction(async (db) => {
+      await createJob(db, { name: 'Job Listagem Enriquecida Teste' });
+
+      const jobs = await listJobs(db);
+      const found = jobs.find((j) => j.name === 'Job Listagem Enriquecida Teste');
+
+      expect(found).toBeDefined();
+      expect(found!.statusName).toBe('Prospecção');
+      expect(['green', 'yellow', 'red']).toContain(found!.alertLevel);
+    });
+  });
+
+  it('getJobById returns the enriched job, and null for a nonexistent id', async () => {
+    await withTestTransaction(async (db) => {
+      const created = await createJob(db, { name: 'Job Detalhe Teste' });
+
+      const found = await getJobById(db, created.id);
+      expect(found).not.toBeNull();
+      expect(found!.id).toBe(created.id);
+
+      const notFound = await getJobById(db, -1);
+      expect(notFound).toBeNull();
+    });
+  });
+
+  it('advanceJobStatus moves to the next status in order and records history', async () => {
+    await withTestTransaction(async (db) => {
+      const created = await createJob(db, { name: 'Job Avanço Teste' });
+
+      const advanced = await advanceJobStatus(db, created.id, 'Avanço automático de teste');
+
+      expect(advanced.statusName).toBe('Briefing Recebido');
+    });
+  });
+
+  it('setJobStatus moves to an arbitrary status chosen manually', async () => {
+    await withTestTransaction(async (db) => {
+      const created = await createJob(db, { name: 'Job Status Manual Teste' });
+
+      const targetStatus = await db.query<{ id: number }>(
+        `SELECT id FROM statuses WHERE name = 'Aprovação PPM'`,
+      );
+
+      const updated = await setJobStatus(db, created.id, targetStatus.rows[0].id, 'Pulo manual de teste');
+
+      expect(updated.statusName).toBe('Aprovação PPM');
+      expect(updated.phaseName).toBe('Pré-Produção');
+    });
+  });
+
+  it('marks the job completed when it reaches the final status', async () => {
+    await withTestTransaction(async (db) => {
+      const created = await createJob(db, { name: 'Job Conclusão Teste' });
+
+      const finalStatus = await db.query<{ id: number }>(
+        `SELECT id FROM statuses WHERE name = 'Arquivamento'`,
+      );
+
+      const completed = await setJobStatus(db, created.id, finalStatus.rows[0].id);
+
+      expect(completed.statusName).toBe('Arquivamento');
+      expect(completed.completedAt).not.toBeNull();
     });
   });
 });
