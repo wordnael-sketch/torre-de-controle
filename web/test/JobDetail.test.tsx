@@ -124,7 +124,7 @@ describe('JobDetailPage', () => {
     await waitFor(() => expect(screen.getAllByText(/Prospecção/)).toHaveLength(2));
   });
 
-  it('hides the trigger button when the job is at the last status of its phase', async () => {
+  it('shows the trigger button when there is a next status in the same phase', async () => {
     mockedApi.getJob.mockResolvedValue({
       job: { ...jobDetail, statusId: 11, statusName: 'Briefing Recebido', triggerLabel: 'Avançar para: Orçamento e Decupagem' },
     });
