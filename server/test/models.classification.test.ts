@@ -188,4 +188,98 @@ describe('classifyAndApply', () => {
       expect(resolved[0].outcome).toBe('descartado');
     });
   });
+
+  it('discards a checklist suggestion that only re-confirms the job\'s current status, without writing a no-op history row', async () => {
+    await withTestTransaction(async (db) => {
+      const job = await createJob(db, { name: 'Job Classificação Reconfirma Status Teste' });
+      // createJob starts the job at "Prospecção" (order 1) in "Comercial e Orçamento".
+
+      const classifier = fakeClassifier([
+        {
+          tipo: 'checklist_item',
+          valor: job.statusName!,
+          confidence: 0.95,
+          evidencia: 'confirma que já estava feito',
+        },
+      ]);
+
+      const resolved = await classifyAndApply(db, classifier, job.id, 'texto colado qualquer');
+
+      expect(resolved[0].outcome).toBe('descartado');
+
+      // Only the single initial row createJob writes should exist — a naive
+      // re-apply would insert a second row and reset the alert-level clock.
+      const history = await db.query<{ count: string }>(
+        'SELECT count(*) FROM job_status_history WHERE job_id = $1',
+        [job.id],
+      );
+      expect(Number(history.rows[0].count)).toBe(1);
+    });
+  });
+
+  it('discards a bola-com suggestion that only re-confirms the side the ball is already with, without writing a no-op history row', async () => {
+    await withTestTransaction(async (db) => {
+      const job = await createJob(db, { name: 'Job Classificação Reconfirma Bola Com Teste' });
+      // createJob starts the job with bolaCom 'ilha'.
+
+      const classifier = fakeClassifier([
+        {
+          tipo: 'bola_com',
+          valor: 'ilha',
+          confidence: 0.95,
+          evidencia: 'confirma que a bola ainda está com a Ilha',
+        },
+      ]);
+
+      const resolved = await classifyAndApply(db, classifier, job.id, 'texto colado qualquer');
+
+      expect(resolved[0].outcome).toBe('descartado');
+
+      // Only the single initial row recordInitialBolaCom writes should exist —
+      // a naive re-apply would insert a second row and zero an in-progress streak.
+      const history = await db.query<{ count: string }>(
+        'SELECT count(*) FROM job_bola_com_history WHERE job_id = $1',
+        [job.id],
+      );
+      expect(Number(history.rows[0].count)).toBe(1);
+    });
+  });
+
+  it('discards a suggestion with a malformed (non-numeric) confidence instead of throwing', async () => {
+    await withTestTransaction(async (db) => {
+      const job = await createJob(db, { name: 'Job Classificação Confidence Malformada Teste' });
+
+      const classifier = fakeClassifier([
+        {
+          tipo: 'checklist_item',
+          valor: 'Briefing Recebido',
+          confidence: '0.9' as unknown as number,
+          evidencia: 'texto',
+        },
+      ]);
+
+      const resolved = await classifyAndApply(db, classifier, job.id, 'texto colado qualquer');
+
+      expect(resolved[0].outcome).toBe('descartado');
+    });
+  });
+
+  it('discards a suggestion with an unrecognized tipo instead of falling through to the bola_com branch', async () => {
+    await withTestTransaction(async (db) => {
+      const job = await createJob(db, { name: 'Job Classificação Tipo Inválido Teste' });
+
+      const classifier = fakeClassifier([
+        {
+          tipo: 'unknown_type' as unknown as 'checklist_item',
+          valor: 'Briefing Recebido',
+          confidence: 0.95,
+          evidencia: 'texto',
+        },
+      ]);
+
+      const resolved = await classifyAndApply(db, classifier, job.id, 'texto colado qualquer');
+
+      expect(resolved[0].outcome).toBe('descartado');
+    });
+  });
 });

@@ -486,23 +486,10 @@ describe('POST /api/jobs/:id/classify', () => {
 
   it('rejects empty text', async () => {
     await withTestTransaction(async (db) => {
-      // Uses createApp(...) with a fake classifier configured (rather than the
-      // no-classifier buildApp(db) used elsewhere in this file) because the route
-      // checks classifier availability before validating the body — without a
-      // classifier this request would short-circuit to 503 before ever reaching
-      // the empty-text check this test exists to exercise.
-      const app = createApp({
-        db,
-        verifyIdToken: async () => ({
-          sub: 'google-sub-1',
-          email: 'wilka@ilhacrossmidia.com.br',
-          name: 'Wilka',
-        }),
-        jwtSecret: JWT_SECRET,
-        allowedDomain: ALLOWED_DOMAIN,
-        frontendUrl: FRONTEND_URL,
-        classifier: fakeClassifier([]),
-      });
+      // The route validates `text` before checking classifier availability, so
+      // this can use the plain no-classifier buildApp(db) helper like the 503
+      // test above — an empty-text request never reaches the classifier check.
+      const app = buildApp(db);
       const agent = await loggedInAgent(app);
 
       const created = await agent.post('/api/jobs').send({ name: 'Job Classify Texto Vazio Teste' });

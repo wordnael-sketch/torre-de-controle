@@ -265,14 +265,14 @@ export function createJobsRouter(deps: JobsRouterDeps): Router {
         return;
       }
 
-      if (!deps.classifier) {
-        res.status(503).json({ error: 'ia_nao_configurada' });
-        return;
-      }
-
       const { text } = req.body as { text?: string };
       if (!text || !text.trim()) {
         res.status(400).json({ error: 'text is required' });
+        return;
+      }
+
+      if (!deps.classifier) {
+        res.status(503).json({ error: 'ia_nao_configurada' });
         return;
       }
 

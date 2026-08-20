@@ -131,8 +131,10 @@ export async function createJob(
 async function isFinalStatus(db: AppDatabase, statusId: number): Promise<boolean> {
   // Must compare (phase order, status order) as a pair — comparing status "order"
   // within the same phase alone would call the LAST STATUS OF EVERY PHASE "final"
-  // (e.g. "Defesa da Proposta", the end of Phase 1), not just the true final status
-  // of the final phase ("Arquivamento", end of Phase 6).
+  // (e.g. the end of Phase 1), not just the true final status of the final
+  // phase. This intentionally never names that status: whichever status
+  // currently sits at the highest (phase order, status order) pair IS final,
+  // by definition, regardless of what it's called or renamed to later.
   const result = await db.query<{ is_final: boolean }>(
     `SELECT NOT EXISTS (
        SELECT 1 FROM statuses s2
