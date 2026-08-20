@@ -30,9 +30,15 @@ export function JobDetailPage() {
     navigate('/');
   }
 
+  // ConfirmDialog registers its own document-level Escape listener to dismiss
+  // itself. When it's open on top of this drawer, both listeners fire on the same
+  // keydown event, so this handler must skip closing the whole drawer and let
+  // ConfirmDialog's own listener handle dismissing just the confirmation.
+  const pendingCompleteStatusIdRef = useRef<number | null>(null);
+
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
+      if (event.key === 'Escape' && pendingCompleteStatusIdRef.current === null) {
         handleClose();
       }
     }
@@ -54,6 +60,10 @@ export function JobDetailPage() {
   const [suggestions, setSuggestions] = useState<ClassifySuggestion[] | null>(null);
   const [classifying, setClassifying] = useState(false);
   const [pendingCompleteStatusId, setPendingCompleteStatusId] = useState<number | null>(null);
+
+  useEffect(() => {
+    pendingCompleteStatusIdRef.current = pendingCompleteStatusId;
+  }, [pendingCompleteStatusId]);
 
   async function refresh() {
     const [jobRes, referenceRes, peopleRes] = await Promise.all([

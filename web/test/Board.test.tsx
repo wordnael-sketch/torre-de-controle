@@ -191,4 +191,50 @@ describe('Board', () => {
     expect(matches.length).toBeGreaterThanOrEqual(2);
     expect(screen.getByRole('cell', { name: /Job Aberto Teste/ })).toBeInTheDocument();
   });
+
+  it('refetches the job list when the drawer closes, so edits made inside it are reflected', async () => {
+    mockedApi.listJobs.mockResolvedValue({ jobs: [makeJob({ id: 42, name: 'Job Aberto Teste' })] });
+    mockedApi.getJob.mockResolvedValue({
+      job: {
+        id: 42,
+        name: 'Job Aberto Teste',
+        code: null,
+        client: null,
+        createdAt: '2026-08-18T00:00:00.000Z',
+        updatedAt: '2026-08-18T00:00:00.000Z',
+        statusId: 10,
+        statusName: 'Prospecção',
+        phaseId: 1,
+        phaseName: 'Comercial e Orçamento',
+        completedAt: null,
+        alertLevel: 'green',
+        highlightedPersonName: null,
+        bolaCom: 'ilha',
+        lastWhatsappActivityAt: null,
+        actionRequired: null,
+        triggerLabel: null,
+        bolaComDayCounts: { ilhaDays: 0, clienteDays: 0, currentSide: 'ilha', currentStreakDays: 0 },
+        roleAssignments: [],
+        statusHistory: [],
+      },
+    });
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter initialEntries={['/jobs/42']}>
+        <Routes>
+          <Route path="/" element={<Board />} />
+          <Route path="/jobs/:id" element={<Board />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole('dialog');
+    expect(mockedApi.listJobs).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole('button', { name: 'Fechar' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitFor(() => expect(mockedApi.listJobs).toHaveBeenCalledTimes(2));
+  });
 });

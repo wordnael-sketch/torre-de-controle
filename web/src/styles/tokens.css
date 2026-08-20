@@ -12,7 +12,7 @@
   /* farol (semantic, not brand-derived) */
   --farol-travado: #d31f1f;
   --farol-atencao: #a06707;
-  --farol-fluindo: #16a34a;
+  --farol-fluindo: #12823b; /* darkened from #16a34a for AA contrast under white text (Toast.css) */
   --farol-travado-bg: #fef2f2;
   --farol-atencao-bg: #fffbeb;
 
@@ -32,7 +32,7 @@
   --radius-lg: 12px;
   --shadow-sm: 0 1px 2px rgba(20, 20, 30, 0.06);
   --shadow-md: 0 4px 16px rgba(20, 20, 30, 0.1);
-  --focus-ring: 0 0 0 3px rgba(27, 158, 140, 0.5);
+  --focus-ring: 0 0 0 3px rgba(20, 122, 108, 0.9); /* new --fase-4 at higher opacity for 3:1 non-text contrast on white */
 }
 
 *,

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Plus, X, SlidersHorizontal } from 'lucide-react';
 import { api, type AlertLevel, type Job, type Phase } from '../api/client';
@@ -40,6 +40,18 @@ export function Board() {
   useEffect(() => {
     refresh().catch(() => setError('Não foi possível carregar o board.'));
   }, []);
+
+  // Board and JobDetailPage render from the same Board component instance at both
+  // "/" and "/jobs/:id" (no remount happens when navigating between them), so the
+  // job list fetched once on mount goes stale after any edit made in the drawer.
+  // Refetch whenever the drawer just closed (openJobId went from set to unset).
+  const previousOpenJobIdRef = useRef(openJobId);
+  useEffect(() => {
+    if (previousOpenJobIdRef.current && !openJobId) {
+      refresh().catch(() => setError('Não foi possível carregar o board.'));
+    }
+    previousOpenJobIdRef.current = openJobId;
+  }, [openJobId]);
 
   const activeJobs = useMemo(() => jobs.filter((j) => !j.completedAt), [jobs]);
 

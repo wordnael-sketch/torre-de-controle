@@ -266,4 +266,35 @@ describe('JobDetailPage', () => {
 
     await waitFor(() => expect(mockedApi.setJobStatus).toHaveBeenCalledWith(1, 99));
   });
+
+  it('pressing Escape while the completion confirmation is open only dismisses the confirmation, not the drawer', async () => {
+    const finalPhaseReference = [
+      ...referencePhases,
+      {
+        id: 2,
+        order: 2,
+        name: 'Encerramento',
+        roles: [],
+        statuses: [
+          { id: 99, phaseId: 2, order: 1, name: 'Arquivamento', actionRequired: '', triggerLabel: '', primaryRole: '' },
+        ],
+      },
+    ];
+    mockedApi.getReference.mockResolvedValue({ phases: finalPhaseReference });
+    const user = userEvent.setup();
+
+    renderJobDetail();
+
+    const panel = await screen.findByRole('dialog');
+    await user.click(within(panel).getByText('Encerramento'));
+    await user.click(within(panel).getByText('Arquivamento'));
+
+    expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
+    expect(mockedApi.setJobStatus).not.toHaveBeenCalled();
+
+    await user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
 });
