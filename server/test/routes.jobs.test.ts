@@ -33,6 +33,13 @@ async function loggedInAgent(app: ReturnType<typeof buildApp>) {
   return agent;
 }
 
+async function getAtendimentoPersonId(db: AppDatabase): Promise<number> {
+  const result = await db.query<{ id: number }>(
+    `SELECT id FROM people WHERE name = 'Wilka' AND area = 'Atendimento'`,
+  );
+  return result.rows[0].id;
+}
+
 describe('GET /api/jobs', () => {
   it('returns 401 when not logged in', async () => {
     await withTestTransaction(async (db) => {
@@ -46,8 +53,9 @@ describe('GET /api/jobs', () => {
     await withTestTransaction(async (db) => {
       const app = buildApp(db);
       const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
 
-      await agent.post('/api/jobs').send({ name: 'Job criado no teste GET /api/jobs' });
+      await agent.post('/api/jobs').send({ name: 'Job criado no teste GET /api/jobs', atendimentoPersonId });
       const res = await agent.get('/api/jobs');
 
       expect(res.status).toBe(200);
@@ -61,8 +69,9 @@ describe('GET /api/jobs', () => {
     await withTestTransaction(async (db) => {
       const app = buildApp(db);
       const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
 
-      await agent.post('/api/jobs').send({ name: 'Job Listagem Enriquecida Rota Teste' });
+      await agent.post('/api/jobs').send({ name: 'Job Listagem Enriquecida Rota Teste', atendimentoPersonId });
       const res = await agent.get('/api/jobs');
 
       const found = res.body.jobs.find(
@@ -86,13 +95,15 @@ describe('POST /api/jobs', () => {
     await withTestTransaction(async (db) => {
       const app = buildApp(db);
       const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
 
       const res = await agent
         .post('/api/jobs')
-        .send({ name: 'Colgate - Color Correct Wave 2', code: '0307-2026', client: 'Colgate' });
+        .send({ name: 'Colgate - Color Correct Wave 2', code: '0307-2026', client: 'Colgate', atendimentoPersonId });
 
       expect(res.status).toBe(201);
       expect(res.body.job.name).toBe('Colgate - Color Correct Wave 2');
+      expect(res.body.job.atendimentoPersonId).toBe(atendimentoPersonId);
 
       const list = await agent.get('/api/jobs');
       expect(
@@ -137,8 +148,9 @@ describe('GET /api/jobs/:id', () => {
     await withTestTransaction(async (db) => {
       const app = buildApp(db);
       const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
 
-      const created = await agent.post('/api/jobs').send({ name: 'Job Detalhe Rota Teste' });
+      const created = await agent.post('/api/jobs').send({ name: 'Job Detalhe Rota Teste', atendimentoPersonId });
       const res = await agent.get(`/api/jobs/${created.body.job.id}`);
 
       expect(res.status).toBe(200);
@@ -149,6 +161,8 @@ describe('GET /api/jobs/:id', () => {
         'Produção Executiva',
       ]);
       expect(res.body.job.statusHistory.length).toBeGreaterThanOrEqual(1);
+      expect(res.body.job.atendimentoPersonId).toBe(atendimentoPersonId);
+      expect(res.body.job.atendimentoPersonName).toBe('Wilka');
     });
   });
 
@@ -169,8 +183,9 @@ describe('POST /api/jobs/:id/advance', () => {
     await withTestTransaction(async (db) => {
       const app = buildApp(db);
       const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
 
-      const created = await agent.post('/api/jobs').send({ name: 'Job Avanço Rota Teste' });
+      const created = await agent.post('/api/jobs').send({ name: 'Job Avanço Rota Teste', atendimentoPersonId });
       const res = await agent.post(`/api/jobs/${created.body.job.id}/advance`).send({});
 
       expect(res.status).toBe(200);
@@ -184,8 +199,9 @@ describe('POST /api/jobs/:id/status', () => {
     await withTestTransaction(async (db) => {
       const app = buildApp(db);
       const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
 
-      const created = await agent.post('/api/jobs').send({ name: 'Job Status Manual Rota Teste' });
+      const created = await agent.post('/api/jobs').send({ name: 'Job Status Manual Rota Teste', atendimentoPersonId });
       const targetStatus = await db.query<{ id: number }>(
         `SELECT id FROM statuses WHERE name = 'PPM aprovada pelo cliente'`,
       );
@@ -203,8 +219,9 @@ describe('POST /api/jobs/:id/status', () => {
     await withTestTransaction(async (db) => {
       const app = buildApp(db);
       const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
 
-      const created = await agent.post('/api/jobs').send({ name: 'Job Status Manual Inválido Teste' });
+      const created = await agent.post('/api/jobs').send({ name: 'Job Status Manual Inválido Teste', atendimentoPersonId });
       const res = await agent.post(`/api/jobs/${created.body.job.id}/status`).send({});
 
       expect(res.status).toBe(400);
@@ -217,8 +234,9 @@ describe('PUT /api/jobs/:id/roles/:area', () => {
     await withTestTransaction(async (db) => {
       const app = buildApp(db);
       const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
 
-      const created = await agent.post('/api/jobs').send({ name: 'Job Atribuição Rota Teste' });
+      const created = await agent.post('/api/jobs').send({ name: 'Job Atribuição Rota Teste', atendimentoPersonId });
       const personRow = await db.query<{ id: number }>(
         `SELECT id FROM people WHERE name = 'Anne' AND area = 'Comercial'`,
       );
@@ -236,11 +254,12 @@ describe('PUT /api/jobs/:id/roles/:area', () => {
     await withTestTransaction(async (db) => {
       const app = buildApp(db);
       const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
 
       // Job starts in Fase 1 ("Comercial e Orçamento"), which does not have a
       // "Financeiro" role (that's a Fase 2 role) — this must be rejected, not
       // silently insert an orphan row.
-      const created = await agent.post('/api/jobs').send({ name: 'Job Área Inválida Rota Teste' });
+      const created = await agent.post('/api/jobs').send({ name: 'Job Área Inválida Rota Teste', atendimentoPersonId });
 
       const res = await agent.put(`/api/jobs/${created.body.job.id}/roles/Financeiro`).send({ personId: null });
 
@@ -252,10 +271,11 @@ describe('PUT /api/jobs/:id/roles/:area', () => {
     await withTestTransaction(async (db) => {
       const app = buildApp(db);
       const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
 
       // Job starts in Fase 1, which doesn't have "Jurídico/Base" — move it to
       // Fase 2 first (which does) via the manual status route.
-      const created = await agent.post('/api/jobs').send({ name: 'Job Área Com Barra Teste' });
+      const created = await agent.post('/api/jobs').send({ name: 'Job Área Com Barra Teste', atendimentoPersonId });
       const fase2Status = await db.query<{ id: number }>(
         `SELECT id FROM statuses WHERE name = 'Contrato assinado pelo cliente'`,
       );
@@ -307,7 +327,8 @@ describe('error handling on jobs routes', () => {
     await withTestTransaction(async (db) => {
       const app = buildApp(db);
       const agent = await loggedInAgent(app);
-      const created = await agent.post('/api/jobs').send({ name: 'Job Limite de Fase Teste' });
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+      const created = await agent.post('/api/jobs').send({ name: 'Job Limite de Fase Teste', atendimentoPersonId });
       const lastStatus = await db.query<{ id: number }>(
         `SELECT id FROM statuses WHERE name = 'Defesa da Proposta'`,
       );
@@ -323,7 +344,8 @@ describe('error handling on jobs routes', () => {
     await withTestTransaction(async (db) => {
       const app = buildApp(db);
       const agent = await loggedInAgent(app);
-      const created = await agent.post('/api/jobs').send({ name: 'Job Status Inexistente Teste' });
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+      const created = await agent.post('/api/jobs').send({ name: 'Job Status Inexistente Teste', atendimentoPersonId });
 
       const res = await agent.post(`/api/jobs/${created.body.job.id}/status`).send({ statusId: 999999999 });
 
@@ -335,7 +357,8 @@ describe('error handling on jobs routes', () => {
     await withTestTransaction(async (db) => {
       const app = buildApp(db);
       const agent = await loggedInAgent(app);
-      const created = await agent.post('/api/jobs').send({ name: 'Job Pessoa Inexistente Teste' });
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+      const created = await agent.post('/api/jobs').send({ name: 'Job Pessoa Inexistente Teste', atendimentoPersonId });
 
       const res = await agent
         .put(`/api/jobs/${created.body.job.id}/roles/Comercial`)
@@ -351,8 +374,9 @@ describe('PATCH /api/jobs/:id/bola-com', () => {
     await withTestTransaction(async (db) => {
       const app = buildApp(db);
       const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
 
-      const created = await agent.post('/api/jobs').send({ name: 'Job Bola Com Rota Teste' });
+      const created = await agent.post('/api/jobs').send({ name: 'Job Bola Com Rota Teste', atendimentoPersonId });
       const res = await agent
         .patch(`/api/jobs/${created.body.job.id}/bola-com`)
         .send({ bolaCom: 'cliente' });
@@ -367,8 +391,9 @@ describe('PATCH /api/jobs/:id/bola-com', () => {
     await withTestTransaction(async (db) => {
       const app = buildApp(db);
       const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
 
-      const created = await agent.post('/api/jobs').send({ name: 'Job Bola Com Inválida Teste' });
+      const created = await agent.post('/api/jobs').send({ name: 'Job Bola Com Inválida Teste', atendimentoPersonId });
       const res = await agent
         .patch(`/api/jobs/${created.body.job.id}/bola-com`)
         .send({ bolaCom: 'terceiro' });
@@ -394,8 +419,9 @@ describe('PATCH /api/jobs/:id/last-activity', () => {
     await withTestTransaction(async (db) => {
       const app = buildApp(db);
       const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
 
-      const created = await agent.post('/api/jobs').send({ name: 'Job Última Atividade Rota Teste' });
+      const created = await agent.post('/api/jobs').send({ name: 'Job Última Atividade Rota Teste', atendimentoPersonId });
       const timestamp = '2026-08-18T10:00:00.000Z';
       const res = await agent
         .patch(`/api/jobs/${created.body.job.id}/last-activity`)
@@ -410,8 +436,9 @@ describe('PATCH /api/jobs/:id/last-activity', () => {
     await withTestTransaction(async (db) => {
       const app = buildApp(db);
       const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
 
-      const created = await agent.post('/api/jobs').send({ name: 'Job Limpar Última Atividade Teste' });
+      const created = await agent.post('/api/jobs').send({ name: 'Job Limpar Última Atividade Teste', atendimentoPersonId });
       await agent
         .patch(`/api/jobs/${created.body.job.id}/last-activity`)
         .send({ lastWhatsappActivityAt: '2026-08-18T10:00:00.000Z' });
@@ -429,8 +456,9 @@ describe('PATCH /api/jobs/:id/last-activity', () => {
     await withTestTransaction(async (db) => {
       const app = buildApp(db);
       const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
 
-      const created = await agent.post('/api/jobs').send({ name: 'Job Data Inválida Teste' });
+      const created = await agent.post('/api/jobs').send({ name: 'Job Data Inválida Teste', atendimentoPersonId });
       const res = await agent
         .patch(`/api/jobs/${created.body.job.id}/last-activity`)
         .send({ lastWhatsappActivityAt: 'não é uma data' });
@@ -443,8 +471,9 @@ describe('PATCH /api/jobs/:id/last-activity', () => {
     await withTestTransaction(async (db) => {
       const app = buildApp(db);
       const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
 
-      const created = await agent.post('/api/jobs').send({ name: 'Job Campo Omitido Teste' });
+      const created = await agent.post('/api/jobs').send({ name: 'Job Campo Omitido Teste', atendimentoPersonId });
       const res = await agent
         .patch(`/api/jobs/${created.body.job.id}/last-activity`)
         .send({});
@@ -463,8 +492,9 @@ describe('POST /api/jobs/:id/classify', () => {
     await withTestTransaction(async (db) => {
       const app = buildApp(db);
       const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
 
-      const created = await agent.post('/api/jobs').send({ name: 'Job Classify Sem IA Teste' });
+      const created = await agent.post('/api/jobs').send({ name: 'Job Classify Sem IA Teste', atendimentoPersonId });
       const res = await agent
         .post(`/api/jobs/${created.body.job.id}/classify`)
         .send({ text: 'qualquer coisa' });
@@ -495,8 +525,9 @@ describe('POST /api/jobs/:id/classify', () => {
         ]),
       });
       const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
 
-      const created = await agent.post('/api/jobs').send({ name: 'Job Classify Com IA Teste' });
+      const created = await agent.post('/api/jobs').send({ name: 'Job Classify Com IA Teste', atendimentoPersonId });
       const res = await agent
         .post(`/api/jobs/${created.body.job.id}/classify`)
         .send({ text: 'Cliente confirmou o briefing agora' });
@@ -514,11 +545,146 @@ describe('POST /api/jobs/:id/classify', () => {
       // test above — an empty-text request never reaches the classifier check.
       const app = buildApp(db);
       const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
 
-      const created = await agent.post('/api/jobs').send({ name: 'Job Classify Texto Vazio Teste' });
+      const created = await agent.post('/api/jobs').send({ name: 'Job Classify Texto Vazio Teste', atendimentoPersonId });
       const res = await agent.post(`/api/jobs/${created.body.job.id}/classify`).send({ text: '' });
 
       expect(res.status).toBe(400);
+    });
+  });
+});
+
+describe('POST /api/jobs — atendimentoPersonId validation', () => {
+  it('rejects a job without atendimentoPersonId', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+
+      const res = await agent.post('/api/jobs').send({ name: 'Job Sem Atendimento Teste' });
+
+      expect(res.status).toBe(400);
+    });
+  });
+
+  it('rejects an atendimentoPersonId that belongs to a different area', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+      const anne = await db.query<{ id: number }>(
+        `SELECT id FROM people WHERE name = 'Anne' AND area = 'Comercial'`,
+      );
+
+      const res = await agent
+        .post('/api/jobs')
+        .send({ name: 'Job Atendimento Área Errada Teste', atendimentoPersonId: anne.rows[0].id });
+
+      expect(res.status).toBe(400);
+    });
+  });
+
+  it('rejects an inactive atendimentoPersonId', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+      const wilka = await db.query<{ id: number }>(
+        `SELECT id FROM people WHERE name = 'Wilka' AND area = 'Atendimento'`,
+      );
+      await db.query('UPDATE people SET active = false WHERE id = $1', [wilka.rows[0].id]);
+
+      const res = await agent
+        .post('/api/jobs')
+        .send({ name: 'Job Atendimento Inativo Teste', atendimentoPersonId: wilka.rows[0].id });
+
+      expect(res.status).toBe(400);
+    });
+  });
+
+  it('rejects a nonexistent atendimentoPersonId', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+
+      const res = await agent
+        .post('/api/jobs')
+        .send({ name: 'Job Atendimento Inexistente Teste', atendimentoPersonId: 999999999 });
+
+      expect(res.status).toBe(400);
+    });
+  });
+});
+
+describe('PATCH /api/jobs/:id/atendimento', () => {
+  it('reassigns the responsible person and returns the updated job', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+      const created = await agent
+        .post('/api/jobs')
+        .send({ name: 'Job Reatribuição Rota Teste', atendimentoPersonId });
+
+      const camila = await db.query<{ id: number }>(
+        `SELECT id FROM people WHERE name = 'Camila' AND area = 'Atendimento'`,
+      );
+
+      const res = await agent
+        .patch(`/api/jobs/${created.body.job.id}/atendimento`)
+        .send({ personId: camila.rows[0].id });
+
+      expect(res.status).toBe(200);
+      expect(res.body.job.atendimentoPersonId).toBe(camila.rows[0].id);
+      expect(res.body.job.atendimentoPersonName).toBe('Camila');
+    });
+  });
+
+  it('rejects a personId from a different area', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+      const created = await agent
+        .post('/api/jobs')
+        .send({ name: 'Job Reatribuição Área Errada Teste', atendimentoPersonId });
+
+      const anne = await db.query<{ id: number }>(
+        `SELECT id FROM people WHERE name = 'Anne' AND area = 'Comercial'`,
+      );
+
+      const res = await agent
+        .patch(`/api/jobs/${created.body.job.id}/atendimento`)
+        .send({ personId: anne.rows[0].id });
+
+      expect(res.status).toBe(400);
+    });
+  });
+
+  it('rejects a missing personId', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+      const created = await agent
+        .post('/api/jobs')
+        .send({ name: 'Job Reatribuição Sem Pessoa Teste', atendimentoPersonId });
+
+      const res = await agent.patch(`/api/jobs/${created.body.job.id}/atendimento`).send({});
+
+      expect(res.status).toBe(400);
+    });
+  });
+
+  it('returns 404 for a nonexistent job', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+
+      const res = await agent
+        .patch('/api/jobs/999999999/atendimento')
+        .send({ personId: atendimentoPersonId });
+
+      expect(res.status).toBe(404);
     });
   });
 });

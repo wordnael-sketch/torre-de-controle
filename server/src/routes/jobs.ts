@@ -1,6 +1,14 @@
 import { Router } from 'express';
 import type { AppDatabase } from '../db';
-import { createJob, listJobs, getJobById, advanceJobStatus, setJobStatus, setLastWhatsappActivity } from '../models/job';
+import {
+  createJob,
+  listJobs,
+  getJobById,
+  advanceJobStatus,
+  setJobStatus,
+  setLastWhatsappActivity,
+  setAtendimento,
+} from '../models/job';
 import { setBolaCom, getBolaComDayCounts, getBolaComDayCountsForJobs } from '../models/bolaCom';
 import { getJobStatusHistory } from '../models/jobStatusHistory';
 import { getJobRoleAssignments, setJobRoleAssignment } from '../models/jobRoleAssignments';
@@ -49,14 +57,39 @@ export function createJobsRouter(deps: JobsRouterDeps): Router {
   router.post(
     '/',
     asyncHandler(async (req, res) => {
-      const { name, code, client } = req.body as { name?: string; code?: string; client?: string };
+      const { name, code, client, atendimentoPersonId } = req.body as {
+        name?: string;
+        code?: string;
+        client?: string;
+        atendimentoPersonId?: number;
+      };
 
       if (!name || !name.trim()) {
         res.status(400).json({ error: 'name is required' });
         return;
       }
 
-      const job = await createJob(deps.db, { name: name.trim(), code, client });
+      if (!Number.isInteger(atendimentoPersonId)) {
+        res.status(400).json({ error: 'atendimentoPersonId is required' });
+        return;
+      }
+
+      const atendimentoPerson = await deps.db.query<{ area: string; active: boolean }>(
+        'SELECT area, active FROM people WHERE id = $1',
+        [atendimentoPersonId],
+      );
+      if (
+        atendimentoPerson.rows.length === 0 ||
+        atendimentoPerson.rows[0].area !== 'Atendimento' ||
+        !atendimentoPerson.rows[0].active
+      ) {
+        res.status(400).json({
+          error: 'atendimentoPersonId must reference an active person in the Atendimento area',
+        });
+        return;
+      }
+
+      const job = await createJob(deps.db, { name: name.trim(), code, client, atendimentoPersonId });
       res.status(201).json({ job });
     }),
   );
@@ -196,6 +229,44 @@ export function createJobsRouter(deps: JobsRouterDeps): Router {
         personId ?? null,
       );
       res.json({ roleAssignment });
+    }),
+  );
+
+  router.patch(
+    '/:id/atendimento',
+    asyncHandler(async (req, res) => {
+      const jobId = parseId(req.params.id);
+      if (jobId === null) {
+        res.status(400).json({ error: 'invalid job id' });
+        return;
+      }
+
+      const { personId } = req.body as { personId?: number };
+
+      if (!Number.isInteger(personId)) {
+        res.status(400).json({ error: 'personId is required' });
+        return;
+      }
+
+      const existing = await getJobById(deps.db, jobId);
+      if (!existing) {
+        res.status(404).json({ error: 'Job not found' });
+        return;
+      }
+
+      const person = await deps.db.query<{ area: string; active: boolean }>(
+        'SELECT area, active FROM people WHERE id = $1',
+        [personId],
+      );
+      if (person.rows.length === 0 || person.rows[0].area !== 'Atendimento' || !person.rows[0].active) {
+        res.status(400).json({
+          error: 'personId must reference an active person in the Atendimento area',
+        });
+        return;
+      }
+
+      const job = await setAtendimento(deps.db, jobId, personId!);
+      res.json({ job });
     }),
   );
 
