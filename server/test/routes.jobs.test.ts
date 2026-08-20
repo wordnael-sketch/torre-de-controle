@@ -56,6 +56,29 @@ describe('GET /api/jobs', () => {
       ).toBe(true);
     });
   });
+
+  it('includes bolaComDayCounts and triggerLabel on every job in the list', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+
+      await agent.post('/api/jobs').send({ name: 'Job Listagem Enriquecida Rota Teste' });
+      const res = await agent.get('/api/jobs');
+
+      const found = res.body.jobs.find(
+        (j: { name: string }) => j.name === 'Job Listagem Enriquecida Rota Teste',
+      );
+
+      expect(found).toBeDefined();
+      expect(found.bolaComDayCounts).toEqual({
+        ilhaDays: 0,
+        clienteDays: 0,
+        currentSide: 'ilha',
+        currentStreakDays: 0,
+      });
+      expect(found.triggerLabel).toBe('Avançar para: Briefing Recebido');
+    });
+  });
 });
 
 describe('POST /api/jobs', () => {

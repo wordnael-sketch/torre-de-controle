@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { AppDatabase } from '../db';
 import { createJob, listJobs, getJobById, advanceJobStatus, setJobStatus, setLastWhatsappActivity } from '../models/job';
-import { setBolaCom, getBolaComDayCounts } from '../models/bolaCom';
+import { setBolaCom, getBolaComDayCounts, getBolaComDayCountsForJobs } from '../models/bolaCom';
 import { getJobStatusHistory } from '../models/jobStatusHistory';
 import { getJobRoleAssignments, setJobRoleAssignment } from '../models/jobRoleAssignments';
 import { classifyAndApply } from '../models/classification';
@@ -29,7 +29,20 @@ export function createJobsRouter(deps: JobsRouterDeps): Router {
   router.get(
     '/',
     asyncHandler(async (_req, res) => {
-      res.json({ jobs: await listJobs(deps.db) });
+      const jobs = await listJobs(deps.db);
+      const dayCounts = await getBolaComDayCountsForJobs(deps.db, jobs.map((j) => j.id));
+
+      res.json({
+        jobs: jobs.map((job) => ({
+          ...job,
+          bolaComDayCounts: dayCounts.get(job.id) ?? {
+            ilhaDays: 0,
+            clienteDays: 0,
+            currentSide: job.bolaCom,
+            currentStreakDays: 0,
+          },
+        })),
+      });
     }),
   );
 
@@ -64,11 +77,7 @@ export function createJobsRouter(deps: JobsRouterDeps): Router {
         return;
       }
 
-      const [statusRow, roleAssignments, statusHistory, bolaComDayCounts] = await Promise.all([
-        deps.db.query<{ action_required: string; trigger_label: string }>(
-          'SELECT action_required, trigger_label FROM statuses WHERE id = $1',
-          [job.statusId],
-        ),
+      const [roleAssignments, statusHistory, bolaComDayCounts] = await Promise.all([
         job.phaseId ? getJobRoleAssignments(deps.db, jobId, job.phaseId) : Promise.resolve([]),
         getJobStatusHistory(deps.db, jobId),
         getBolaComDayCounts(deps.db, jobId),
@@ -77,8 +86,6 @@ export function createJobsRouter(deps: JobsRouterDeps): Router {
       res.json({
         job: {
           ...job,
-          actionRequired: statusRow.rows[0]?.action_required ?? null,
-          triggerLabel: statusRow.rows[0]?.trigger_label ?? null,
           roleAssignments,
           statusHistory,
           bolaComDayCounts,

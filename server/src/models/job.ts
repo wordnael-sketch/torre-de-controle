@@ -19,6 +19,8 @@ export interface Job {
   highlightedPersonName: string | null;
   bolaCom: 'ilha' | 'cliente';
   lastWhatsappActivityAt: string | null;
+  actionRequired: string | null;
+  triggerLabel: string | null;
 }
 
 interface JobRow {
@@ -36,6 +38,8 @@ interface JobRow {
   highlighted_person_name: string | null;
   bola_com: 'ilha' | 'cliente';
   last_whatsapp_activity_at: string | Date | null;
+  status_action_required: string | null;
+  status_trigger_label: string | null;
 }
 
 const JOB_SELECT = `
@@ -43,6 +47,8 @@ const JOB_SELECT = `
     j.*,
     s.id AS status_id,
     s.name AS status_name,
+    s.action_required AS status_action_required,
+    s.trigger_label AS status_trigger_label,
     p.id AS phase_id,
     p.name AS phase_name,
     (
@@ -79,6 +85,8 @@ async function rowToJob(db: AppDatabase, row: JobRow): Promise<Job> {
     lastWhatsappActivityAt: row.last_whatsapp_activity_at
       ? new Date(row.last_whatsapp_activity_at).toISOString()
       : null,
+    actionRequired: row.status_action_required,
+    triggerLabel: row.status_trigger_label,
   };
 }
 

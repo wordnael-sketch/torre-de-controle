@@ -15,6 +15,7 @@ interface HistoryRow {
 }
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const SECONDS_PER_DAY = 24 * 60 * 60;
 
 export async function setBolaCom(
   db: AppDatabase,
@@ -79,4 +80,56 @@ export async function getBolaComDayCounts(
     currentSide,
     currentStreakDays,
   };
+}
+
+export async function getBolaComDayCountsForJobs(
+  db: AppDatabase,
+  jobIds: number[],
+  now: Date = new Date(),
+): Promise<Map<number, BolaComDayCounts>> {
+  if (jobIds.length === 0) {
+    return new Map();
+  }
+
+  const result = await db.query<{
+    job_id: number;
+    ilha_seconds: number | null;
+    cliente_seconds: number | null;
+    current_side: BolaCom;
+    last_changed_at: string | Date;
+  }>(
+    `WITH ordered AS (
+       SELECT
+         job_id,
+         id,
+         bola_com,
+         changed_at,
+         LEAD(changed_at) OVER (PARTITION BY job_id ORDER BY changed_at, id) AS next_changed_at
+       FROM job_bola_com_history
+       WHERE job_id = ANY($1::int[])
+     )
+     SELECT
+       job_id,
+       SUM(EXTRACT(EPOCH FROM (COALESCE(next_changed_at, now()) - changed_at)))
+         FILTER (WHERE bola_com = 'ilha') AS ilha_seconds,
+       SUM(EXTRACT(EPOCH FROM (COALESCE(next_changed_at, now()) - changed_at)))
+         FILTER (WHERE bola_com = 'cliente') AS cliente_seconds,
+       (array_agg(bola_com ORDER BY changed_at DESC, id DESC))[1] AS current_side,
+       MAX(changed_at) AS last_changed_at
+     FROM ordered
+     GROUP BY job_id`,
+    [jobIds],
+  );
+
+  const map = new Map<number, BolaComDayCounts>();
+  for (const row of result.rows) {
+    const lastChangedAt = new Date(row.last_changed_at);
+    map.set(row.job_id, {
+      ilhaDays: Math.floor((row.ilha_seconds ?? 0) / SECONDS_PER_DAY),
+      clienteDays: Math.floor((row.cliente_seconds ?? 0) / SECONDS_PER_DAY),
+      currentSide: row.current_side,
+      currentStreakDays: Math.floor((now.getTime() - lastChangedAt.getTime()) / MS_PER_DAY),
+    });
+  }
+  return map;
 }

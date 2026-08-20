@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createJob } from '../src/models/job';
-import { setBolaCom, getBolaComDayCounts } from '../src/models/bolaCom';
+import { setBolaCom, getBolaComDayCounts, getBolaComDayCountsForJobs } from '../src/models/bolaCom';
 import { withTestTransaction } from './helpers/testDb';
 
 describe('bola com', () => {
@@ -49,6 +49,32 @@ describe('bola com', () => {
       expect(counts.clienteDays).toBe(2);
       expect(counts.currentSide).toBe('cliente');
       expect(counts.currentStreakDays).toBe(2);
+    });
+  });
+
+  it('getBolaComDayCountsForJobs computes counts for multiple jobs in one call', async () => {
+    await withTestTransaction(async (db) => {
+      const jobA = await createJob(db, { name: 'Job Bola Com Lote A Teste' });
+      const jobB = await createJob(db, { name: 'Job Bola Com Lote B Teste' });
+
+      await db.query(
+        `UPDATE job_bola_com_history SET changed_at = now() - interval '4 days' WHERE job_id = $1`,
+        [jobA.id],
+      );
+      await setBolaCom(db, jobB.id, 'cliente');
+
+      const counts = await getBolaComDayCountsForJobs(db, [jobA.id, jobB.id]);
+
+      expect(counts.get(jobA.id)?.currentSide).toBe('ilha');
+      expect(counts.get(jobA.id)?.ilhaDays).toBe(4);
+      expect(counts.get(jobB.id)?.currentSide).toBe('cliente');
+    });
+  });
+
+  it('getBolaComDayCountsForJobs returns an empty map for an empty id list', async () => {
+    await withTestTransaction(async (db) => {
+      const counts = await getBolaComDayCountsForJobs(db, []);
+      expect(counts.size).toBe(0);
     });
   });
 });
