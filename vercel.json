@@ -3,12 +3,12 @@
   "outputDirectory": "web/dist",
   "installCommand": "echo 'root install skipped, each package installs its own deps'",
   "functions": {
-    "server/api/index.ts": {
+    "api/index.ts": {
       "includeFiles": "server/src/db/schema.sql"
     }
   },
   "rewrites": [
-    { "source": "/api/:path*", "destination": "/server/api/index.ts" },
+    { "source": "/api/:path*", "destination": "/api/index" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

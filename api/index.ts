@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { createAppFromEnv } from '../src/createAppFromEnv';
+import { createAppFromEnv } from '../server/src/createAppFromEnv';
 import type { Express } from 'express';
 
 let appPromise: Promise<Express> | undefined;

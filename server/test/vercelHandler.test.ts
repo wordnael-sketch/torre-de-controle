@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import request from 'supertest';
-import handler from '../api/index';
+import handler from '../../api/index';
 import type { IncomingMessage, ServerResponse } from 'http';
 
 describe('Vercel handler', () => {
@@ -22,7 +22,7 @@ describe('Vercel handler', () => {
     // Use a fresh module instance so this test's memoized `appPromise` is
     // isolated from the ones already warmed up by the tests above.
     vi.resetModules();
-    const { default: freshHandler } = await import('../api/index');
+    const { default: freshHandler } = await import('../../api/index');
 
     const originalDatabaseUrl = process.env.DATABASE_URL;
     delete process.env.DATABASE_URL;

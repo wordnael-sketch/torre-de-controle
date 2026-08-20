@@ -10,3 +10,5 @@ data/
 .worktrees/
 .superpowers/
 *.tsbuildinfo
+.vercel
+.env*
