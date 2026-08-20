@@ -106,6 +106,29 @@ O frontend decide o que fazer com a lista:
 Corpo: `{ trelloCardId: string | null }` (`null` desvincula). Grava
 `trello_card_id` e `trello_linked_at` (ou limpa ambos).
 
+## Responsável pelo Atendimento (e demais papéis) via membros do card
+
+Cada card do Trello tem pessoas atribuídas (avatares). O card traz esses
+nomes (`getCard(...).members`), mas eles **não** passam pelo classificador
+de IA — atribuição de responsável é uma correspondência de identidade
+literal (nome da pessoa no Trello = nome cadastrado em `people`), não uma
+inferência textual, então é resolvida de forma determinística:
+
+- Pra cada área de responsabilidade da fase atual do job que **ainda não
+  tem ninguém atribuído** (`personId` nulo), procura entre os membros do
+  card do Trello um nome que bata com alguém cadastrado em `people` para
+  aquela área (comparação sem acento/maiúsculas, por substring — "Wilka"
+  bate com "Wilka Nepomoceno").
+- Se achar, atribui automaticamente (mesmo mecanismo já usado pela
+  atribuição manual — `job_role_assignments`).
+- **Nunca sobrescreve uma atribuição já existente** — só preenche o que
+  está vazio.
+- Isso cobre diretamente "quem do Atendimento é responsável pelo job",
+  já que Atendimento é uma das áreas de responsabilidade já cadastradas
+  em `phase_roles` para as fases "Dotação e Burocracia" e "Pós-Produção".
+- O resultado aparece automaticamente na mesma interface de atribuição de
+  responsáveis que já existe no painel do job — não precisa de UI nova.
+
 ## Sincronização (a cada abertura do job)
 
 **Endpoint:** `POST /api/jobs/:id/trello-sync`
@@ -126,13 +149,17 @@ Só funciona se `job.trelloCardId` estiver preenchido. Passos:
    Prazo: 28 de agosto
    Comentário mais recente: "Cliente aprovou o orçamento hoje"
    ```
-3. Chama a função **já existente** `classifyAndApply(db, classifier,
+3. Tenta atribuir automaticamente os membros do card às áreas de
+   responsabilidade vazias da fase atual (ver seção "Responsável pelo
+   Atendimento (e demais papéis) via membros do card" acima) —
+   determinístico, não passa pela IA.
+4. Chama a função **já existente** `classifyAndApply(db, classifier,
    jobId, textoDeEvidencia)` (de `server/src/models/classification.ts`,
    construída no plano de backend anterior) — nenhuma lógica nova de
    classificação, threshold ou proteção contra retrocesso: é o mesmo
    caminho de código que `POST /api/jobs/:id/classify` já usa para texto
    colado manualmente.
-4. Responde `{ suggestions: ResolvedSuggestion[] }` — mesmo formato que
+5. Responde `{ suggestions: ResolvedSuggestion[] }` — mesmo formato que
    `/classify` já retorna hoje.
 
 Se `ANTHROPIC_API_KEY` não estiver configurada (o classificador de IA
