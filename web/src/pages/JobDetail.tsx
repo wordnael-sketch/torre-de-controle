@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   api,
   ApiError,
@@ -18,6 +18,26 @@ function hoursSince(iso: string): number {
 export function JobDetailPage() {
   const { id } = useParams<{ id: string }>();
   const jobId = Number(id);
+
+  const navigate = useNavigate();
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  function handleClose() {
+    navigate('/');
+  }
+
+  useEffect(() => {
+    closeButtonRef.current?.focus();
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        handleClose();
+      }
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [job, setJob] = useState<JobDetailType | null>(null);
   const [phases, setPhases] = useState<Phase[]>([]);
@@ -145,10 +165,17 @@ export function JobDetailPage() {
   const peopleByArea = (area: string) => people.filter((p) => p.area === area && p.active);
 
   if (!job) {
-    return error ? (
-      <p role="alert">{error}</p>
-    ) : (
-      <p>Carregando...</p>
+    return (
+      <div className="job-detail-page" onClick={handleClose}>
+        <div
+          className="job-detail-panel"
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {error ? <p role="alert">{error}</p> : <p>Carregando...</p>}
+        </div>
+      </div>
     );
   }
 
@@ -161,21 +188,33 @@ export function JobDetailPage() {
     phases.find((p) => p.id === job.phaseId)?.statuses.find((s) => s.id === job.statusId)?.order ?? 0;
 
   return (
-    <div className="job-detail-page">
-      <div className="job-detail-panel">
+    <div className="job-detail-page" onClick={handleClose}>
+      <div
+        className="job-detail-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="job-detail-title"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="job-detail-header">
           <div>
             <p className="label-caps">
               {job.client ?? 'Sem cliente'} · {job.code ?? `J${job.id}`}
             </p>
-            <h1>{job.name}</h1>
+            <h1 id="job-detail-title">{job.name}</h1>
             <p className="job-detail-phase" style={{ color: phaseColor(currentPhaseOrder) }}>
               FASE {currentPhaseOrder} · {job.phaseName?.toUpperCase()}
             </p>
           </div>
-          <Link to="/" className="job-detail-close" aria-label="Fechar">
+          <button
+            type="button"
+            ref={closeButtonRef}
+            className="job-detail-close"
+            aria-label="Fechar"
+            onClick={handleClose}
+          >
             ×
-          </Link>
+          </button>
         </div>
 
         {isStuck && counts && (

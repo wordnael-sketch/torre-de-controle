@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { api, type AlertLevel, type Job, type Phase } from '../api/client';
 import { FAROL_COLOR_VARS, FAROL_LABELS, phaseColor } from '../theme/phase';
+import { JobDetailPage } from './JobDetail';
 import './Board.css';
 
 const FAROL_ORDER: AlertLevel[] = ['red', 'yellow', 'green'];
@@ -18,6 +19,7 @@ function matchesSearch(job: Job, term: string): boolean {
 }
 
 export function Board() {
+  const { id: openJobId } = useParams<{ id?: string }>();
   const [phases, setPhases] = useState<Phase[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [search, setSearch] = useState('');
@@ -316,6 +318,8 @@ export function Board() {
           </tbody>
         </table>
       </main>
+
+      {openJobId && <JobDetailPage />}
     </div>
   );
 }

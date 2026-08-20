@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { Board } from '../src/pages/Board';
 import { api } from '../src/api/client';
 
@@ -13,6 +13,13 @@ vi.mock('../src/api/client', async () => {
       listJobs: vi.fn(),
       createJob: vi.fn(),
       getReference: vi.fn(),
+      getJob: vi.fn(),
+      listPeople: vi.fn(),
+      setJobStatus: vi.fn(),
+      assignRole: vi.fn(),
+      setBolaCom: vi.fn(),
+      setLastActivity: vi.fn(),
+      classifyJob: vi.fn(),
     },
   };
 });
@@ -62,6 +69,13 @@ describe('Board', () => {
     mockedApi.createJob.mockReset();
     mockedApi.getReference.mockReset();
     mockedApi.getReference.mockResolvedValue({ phases: twoPhases });
+    mockedApi.getJob.mockReset();
+    mockedApi.listPeople.mockReset();
+    mockedApi.setJobStatus.mockReset();
+    mockedApi.assignRole.mockReset();
+    mockedApi.setBolaCom.mockReset();
+    mockedApi.setLastActivity.mockReset();
+    mockedApi.classifyJob.mockReset();
   });
 
   it('shows a fase filter row per phase and no jobs when empty', async () => {
@@ -134,5 +148,47 @@ describe('Board', () => {
 
     expect(screen.queryByText('Job Fase 1')).not.toBeInTheDocument();
     expect(screen.getByText('Job Fase 2')).toBeInTheDocument();
+  });
+
+  it('keeps the job table visible when a job is open in the drawer', async () => {
+    mockedApi.listJobs.mockResolvedValue({ jobs: [makeJob({ id: 42, name: 'Job Aberto Teste' })] });
+    mockedApi.getJob.mockResolvedValue({
+      job: {
+        id: 42,
+        name: 'Job Aberto Teste',
+        code: null,
+        client: null,
+        createdAt: '2026-08-18T00:00:00.000Z',
+        updatedAt: '2026-08-18T00:00:00.000Z',
+        statusId: 10,
+        statusName: 'Prospecção',
+        phaseId: 1,
+        phaseName: 'Comercial e Orçamento',
+        completedAt: null,
+        alertLevel: 'green',
+        highlightedPersonName: null,
+        bolaCom: 'ilha',
+        lastWhatsappActivityAt: null,
+        actionRequired: null,
+        triggerLabel: null,
+        bolaComDayCounts: { ilhaDays: 0, clienteDays: 0, currentSide: 'ilha', currentStreakDays: 0 },
+        roleAssignments: [],
+        statusHistory: [],
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/jobs/42']}>
+        <Routes>
+          <Route path="/" element={<Board />} />
+          <Route path="/jobs/:id" element={<Board />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    const matches = await screen.findAllByText('Job Aberto Teste');
+    expect(matches.length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByRole('cell', { name: /Job Aberto Teste/ })).toBeInTheDocument();
   });
 });

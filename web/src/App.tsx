@@ -3,7 +3,6 @@ import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { Login } from './pages/Login';
 import { Board } from './pages/Board';
-import { JobDetailPage } from './pages/JobDetail';
 import { UsersPage } from './pages/Users';
 import './App.css';
 
@@ -86,7 +85,7 @@ function AppRoutes() {
         path="/jobs/:id"
         element={
           <RequireAuth>
-            <JobDetailPage />
+            <Board />
           </RequireAuth>
         }
       />

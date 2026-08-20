@@ -1,6 +1,8 @@
 .job-detail-page {
-  min-height: 100vh;
-  background: var(--bg-subtle);
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(20, 20, 30, 0.4);
   display: flex;
   justify-content: flex-end;
 }

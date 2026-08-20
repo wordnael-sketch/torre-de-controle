@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { JobDetailPage } from '../src/pages/JobDetail';
+import { Board } from '../src/pages/Board';
 import { api, ApiError } from '../src/api/client';
 
 vi.mock('../src/api/client', async () => {
@@ -18,6 +18,8 @@ vi.mock('../src/api/client', async () => {
       setBolaCom: vi.fn(),
       setLastActivity: vi.fn(),
       classifyJob: vi.fn(),
+      listJobs: vi.fn(),
+      createJob: vi.fn(),
     },
   };
 });
@@ -69,7 +71,8 @@ function renderJobDetail() {
   return render(
     <MemoryRouter initialEntries={['/jobs/1']}>
       <Routes>
-        <Route path="/jobs/:id" element={<JobDetailPage />} />
+        <Route path="/" element={<Board />} />
+        <Route path="/jobs/:id" element={<Board />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -85,6 +88,9 @@ describe('JobDetailPage', () => {
     mockedApi.setBolaCom.mockReset();
     mockedApi.setLastActivity.mockReset();
     mockedApi.classifyJob.mockReset();
+    mockedApi.listJobs.mockReset();
+    mockedApi.createJob.mockReset();
+    mockedApi.listJobs.mockResolvedValue({ jobs: [] });
 
     mockedApi.getJob.mockResolvedValue({ job: jobDetail });
     mockedApi.getReference.mockResolvedValue({ phases: referencePhases });
@@ -131,7 +137,7 @@ describe('JobDetailPage', () => {
 
     renderJobDetail();
 
-    await user.click(await screen.findByText(/Bola com o cliente/));
+    await user.click(await screen.findByRole('button', { name: /Bola com o cliente/ }));
 
     await waitFor(() => expect(mockedApi.setBolaCom).toHaveBeenCalledWith(1, 'cliente'));
   });
