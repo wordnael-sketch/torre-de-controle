@@ -325,3 +325,33 @@ CREATE TABLE IF NOT EXISTS job_bola_com_history (
 );
 
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS last_whatsapp_activity_at TIMESTAMPTZ;
+
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS atendimento_person_id INTEGER REFERENCES people(id);
+ALTER TABLE people ADD COLUMN IF NOT EXISTS title TEXT;
+
+-- Atendimento stops being a per-phase role assignment and becomes a
+-- single job-level field. Any existing job_role_assignments row for the
+-- Atendimento area is migrated onto the new column before the old rows
+-- (and the phase_roles entries that made them possible) are removed.
+UPDATE jobs j
+SET atendimento_person_id = jra.person_id
+FROM job_role_assignments jra
+WHERE jra.job_id = j.id
+  AND jra.area = 'Atendimento'
+  AND j.atendimento_person_id IS NULL
+  AND jra.person_id IS NOT NULL;
+
+DELETE FROM job_role_assignments WHERE area = 'Atendimento';
+DELETE FROM phase_roles WHERE area = 'Atendimento';
+
+INSERT INTO people (name, area, title) VALUES
+  ('Camila', 'Atendimento', 'Executiva de Contas'),
+  ('Andrea', 'Atendimento', 'Executiva de Contas'),
+  ('Larissa (Brasília)', 'Atendimento', 'Executiva de Contas'),
+  ('Karina', 'Atendimento', 'Executiva de Contas'),
+  ('Isabela', 'Atendimento', 'Executiva de Contas'),
+  ('Bianca (Brasília)', 'Atendimento', 'Executiva de Contas'),
+  ('Renata (RJ)', 'Atendimento', 'Executiva de Contas')
+ON CONFLICT (name, area) DO NOTHING;
+
+UPDATE people SET title = 'Head' WHERE name = 'Wilka' AND area = 'Atendimento';

@@ -32,11 +32,15 @@ describe('pipeline schema', () => {
       const countResult = await db.query<{ count: string }>('SELECT count(*) FROM statuses');
       expect(Number(countResult.rows[0].count)).toBe(40);
 
+      // 'Atendimento' is intentionally excluded: it's a job-level field
+      // (jobs.atendimento_person_id), not a phase_roles entry, even though
+      // several statuses still have primary_role = 'Atendimento'.
       const orphanRoles = await db.query(
         `SELECT s.id FROM statuses s
-         WHERE NOT EXISTS (
-           SELECT 1 FROM phase_roles pr WHERE pr.phase_id = s.phase_id AND pr.area = s.primary_role
-         )`,
+         WHERE s.primary_role <> 'Atendimento'
+           AND NOT EXISTS (
+             SELECT 1 FROM phase_roles pr WHERE pr.phase_id = s.phase_id AND pr.area = s.primary_role
+           )`,
       );
       expect(orphanRoles.rows).toEqual([]);
     } finally {
@@ -87,6 +91,61 @@ describe('pipeline schema', () => {
       );
       const names = result.rows.map((r) => r.column_name).sort();
       expect(names).toEqual(['completed_at', 'status_id']);
+    } finally {
+      await db.end();
+    }
+  });
+
+  it('never lists Atendimento as a phase_roles entry — it is assigned at the job level now', async () => {
+    const db = await createDb(connectionString);
+    try {
+      const result = await db.query('SELECT 1 FROM phase_roles WHERE area = $1', ['Atendimento']);
+      expect(result.rows).toEqual([]);
+    } finally {
+      await db.end();
+    }
+  });
+
+  it('adds atendimento_person_id to jobs and title to people', async () => {
+    const db = await createDb(connectionString);
+    try {
+      const jobsCol = await db.query<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = 'jobs' AND column_name = 'atendimento_person_id'`,
+      );
+      expect(jobsCol.rows).toHaveLength(1);
+
+      const peopleCol = await db.query<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = 'people' AND column_name = 'title'`,
+      );
+      expect(peopleCol.rows).toHaveLength(1);
+    } finally {
+      await db.end();
+    }
+  });
+
+  it('seeds 8 people in the Atendimento area: Wilka as Head, the rest as Executiva de Contas', async () => {
+    const db = await createDb(connectionString);
+    try {
+      const result = await db.query<{ name: string; title: string | null }>(
+        `SELECT name, title FROM people WHERE area = 'Atendimento'`,
+      );
+      const byName = new Map(result.rows.map((r) => [r.name, r.title]));
+
+      expect(byName.size).toBe(8);
+      expect(byName.get('Wilka')).toBe('Head');
+      for (const name of [
+        'Camila',
+        'Andrea',
+        'Larissa (Brasília)',
+        'Karina',
+        'Isabela',
+        'Bianca (Brasília)',
+        'Renata (RJ)',
+      ]) {
+        expect(byName.get(name)).toBe('Executiva de Contas');
+      }
     } finally {
       await db.end();
     }
