@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { X } from 'lucide-react';
 import {
   api,
   ApiError,
@@ -249,7 +250,7 @@ export function JobDetailPage() {
             aria-label="Fechar"
             onClick={handleClose}
           >
-            ×
+            <X size={20} aria-hidden="true" />
           </button>
         </div>
 

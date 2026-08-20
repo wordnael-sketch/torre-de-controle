@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { Plus, X, SlidersHorizontal } from 'lucide-react';
 import { api, type AlertLevel, type Job, type Phase } from '../api/client';
 import { FAROL_COLOR_VARS, FAROL_LABELS, phaseColor } from '../theme/phase';
 import { JobDetailPage } from './JobDetail';
@@ -121,6 +122,14 @@ export function Board() {
   return (
     <div className="board">
       <aside className={`board-sidebar${showFilters ? ' is-open' : ''}`}>
+        <button
+          type="button"
+          className="board-filters-close"
+          aria-label="Fechar filtros"
+          onClick={() => setShowFilters(false)}
+        >
+          <X size={18} aria-hidden="true" />
+        </button>
         <input
           className="board-search"
           placeholder="Cliente, job ou responsável"
@@ -180,10 +189,10 @@ export function Board() {
             aria-expanded={showFilters}
             onClick={() => setShowFilters((v) => !v)}
           >
-            Filtros
+            <SlidersHorizontal size={16} aria-hidden="true" /> Filtros
           </button>
           <button type="button" className="board-new-job-btn" onClick={() => setShowNewJobForm((v) => !v)}>
-            + Novo job
+            <Plus size={16} aria-hidden="true" /> Criar novo job
           </button>
         </header>
 

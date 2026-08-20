@@ -105,7 +105,7 @@ describe('Board', () => {
     renderBoard();
 
     await screen.findByText('Comercial e Orçamento');
-    await user.click(screen.getByRole('button', { name: '+ Novo job' }));
+    await user.click(screen.getByRole('button', { name: /Criar novo job/ }));
     await user.type(screen.getByLabelText('Nome do job'), 'Novo job');
     await user.click(screen.getByRole('button', { name: 'Adicionar' }));
 

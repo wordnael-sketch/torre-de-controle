@@ -101,6 +101,8 @@
 }
 
 .board-new-job-btn {
+  display: inline-flex;
+  align-items: center;
   padding: 0.5rem 1rem;
   border: none;
   border-radius: var(--radius);
@@ -321,7 +323,28 @@
   display: none;
 }
 
+.board-new-job-btn,
+.board-filters-toggle {
+  gap: 0.4rem;
+}
+
+.board-filters-close {
+  display: none;
+}
+
 @media (max-width: 1023px) {
+  .board-filters-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 48px;
+    min-height: 48px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    margin-bottom: 0.5rem;
+  }
+
   .board-filters-toggle {
     display: inline-flex;
     align-items: center;
