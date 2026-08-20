@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createJob, listJobs, getJobById, advanceJobStatus, setJobStatus } from '../src/models/job';
+import { createJob, listJobs, getJobById, advanceJobStatus, setJobStatus, setAtendimento } from '../src/models/job';
 import { withTestTransaction } from './helpers/testDb';
 
 describe('job model', () => {
@@ -25,6 +25,8 @@ describe('job model', () => {
 
       expect(job.code).toBeNull();
       expect(job.client).toBeNull();
+      expect(job.atendimentoPersonId).toBeNull();
+      expect(job.atendimentoPersonName).toBeNull();
     });
   });
 
@@ -162,6 +164,58 @@ describe('job status lifecycle', () => {
 
       expect(completed.completedAt).not.toBeNull();
       expect(completed.alertLevel).toBe('green');
+    });
+  });
+});
+
+describe('atendimento responsável', () => {
+  it('creates a job with an atendimentoPersonId and returns it', async () => {
+    await withTestTransaction(async (db) => {
+      const wilka = await db.query<{ id: number }>(
+        `SELECT id FROM people WHERE name = 'Wilka' AND area = 'Atendimento'`,
+      );
+
+      const job = await createJob(db, {
+        name: 'Job Atendimento Definido Teste',
+        atendimentoPersonId: wilka.rows[0].id,
+      });
+
+      expect(job.atendimentoPersonId).toBe(wilka.rows[0].id);
+      expect(job.atendimentoPersonName).toBe('Wilka');
+    });
+  });
+
+  it('setAtendimento updates the responsible person and returns the updated job', async () => {
+    await withTestTransaction(async (db) => {
+      const created = await createJob(db, { name: 'Job Reatribuição Teste' });
+      const wilka = await db.query<{ id: number }>(
+        `SELECT id FROM people WHERE name = 'Wilka' AND area = 'Atendimento'`,
+      );
+
+      const updated = await setAtendimento(db, created.id, wilka.rows[0].id);
+
+      expect(updated.atendimentoPersonId).toBe(wilka.rows[0].id);
+      expect(updated.atendimentoPersonName).toBe('Wilka');
+    });
+  });
+
+  it('highlightedPersonName resolves from atendimentoPersonId when the current status is primarily Atendimento', async () => {
+    await withTestTransaction(async (db) => {
+      const wilka = await db.query<{ id: number }>(
+        `SELECT id FROM people WHERE name = 'Wilka' AND area = 'Atendimento'`,
+      );
+      const created = await createJob(db, {
+        name: 'Job Destaque Atendimento Teste',
+        atendimentoPersonId: wilka.rows[0].id,
+      });
+
+      const targetStatus = await db.query<{ id: number }>(
+        `SELECT id FROM statuses WHERE name = 'Atendimento da conta definida'`,
+      );
+      const updated = await setJobStatus(db, created.id, targetStatus.rows[0].id);
+
+      expect(updated.statusName).toBe('Atendimento da conta definida');
+      expect(updated.highlightedPersonName).toBe('Wilka');
     });
   });
 });

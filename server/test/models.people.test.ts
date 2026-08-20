@@ -35,4 +35,15 @@ describe('people model', () => {
       expect(activeOnly.some((p) => p.id === created.id)).toBe(false);
     });
   });
+
+  it('exposes title on each person, populated for Atendimento and null elsewhere', async () => {
+    await withTestTransaction(async (db) => {
+      const people = await listPeople(db);
+      const wilka = people.find((p) => p.name === 'Wilka' && p.area === 'Atendimento');
+      const anne = people.find((p) => p.name === 'Anne' && p.area === 'Comercial');
+
+      expect(wilka?.title).toBe('Head');
+      expect(anne?.title).toBeNull();
+    });
+  });
 });

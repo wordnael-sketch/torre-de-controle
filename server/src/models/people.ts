@@ -5,6 +5,7 @@ export interface Person {
   name: string;
   area: string;
   active: boolean;
+  title: string | null;
 }
 
 interface PersonRow {
@@ -12,6 +13,7 @@ interface PersonRow {
   name: string;
   area: string;
   active: boolean;
+  title: string | null;
 }
 
 function toPerson(row: PersonRow): Person {
@@ -20,6 +22,7 @@ function toPerson(row: PersonRow): Person {
     name: row.name,
     area: row.area,
     active: row.active,
+    title: row.title,
   };
 }
 

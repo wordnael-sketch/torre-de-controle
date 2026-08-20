@@ -21,6 +21,8 @@ export interface Job {
   lastWhatsappActivityAt: string | null;
   actionRequired: string | null;
   triggerLabel: string | null;
+  atendimentoPersonId: number | null;
+  atendimentoPersonName: string | null;
 }
 
 interface JobRow {
@@ -40,6 +42,8 @@ interface JobRow {
   last_whatsapp_activity_at: string | Date | null;
   status_action_required: string | null;
   status_trigger_label: string | null;
+  atendimento_person_id: number | null;
+  atendimento_person_name: string | null;
 }
 
 const JOB_SELECT = `
@@ -51,16 +55,23 @@ const JOB_SELECT = `
     s.trigger_label AS status_trigger_label,
     p.id AS phase_id,
     p.name AS phase_name,
+    atendimento.name AS atendimento_person_name,
     (
-      SELECT person.name
-      FROM job_role_assignments jra
-      JOIN people person ON person.id = jra.person_id
-      WHERE jra.job_id = j.id AND jra.phase_id = s.phase_id AND jra.area = s.primary_role
-      LIMIT 1
+      CASE
+        WHEN s.primary_role = 'Atendimento' THEN atendimento.name
+        ELSE (
+          SELECT person.name
+          FROM job_role_assignments jra
+          JOIN people person ON person.id = jra.person_id
+          WHERE jra.job_id = j.id AND jra.phase_id = s.phase_id AND jra.area = s.primary_role
+          LIMIT 1
+        )
+      END
     ) AS highlighted_person_name
   FROM jobs j
   LEFT JOIN statuses s ON s.id = j.status_id
   LEFT JOIN phases p ON p.id = s.phase_id
+  LEFT JOIN people atendimento ON atendimento.id = j.atendimento_person_id
 `;
 
 async function rowToJob(db: AppDatabase, row: JobRow): Promise<Job> {
@@ -87,6 +98,8 @@ async function rowToJob(db: AppDatabase, row: JobRow): Promise<Job> {
       : null,
     actionRequired: row.status_action_required,
     triggerLabel: row.status_trigger_label,
+    atendimentoPersonId: row.atendimento_person_id,
+    atendimentoPersonName: row.atendimento_person_name,
   };
 }
 
@@ -115,19 +128,19 @@ export async function getJobById(db: AppDatabase, id: number): Promise<Job | nul
 
 export async function createJob(
   db: AppDatabase,
-  input: { name: string; code?: string; client?: string },
+  input: { name: string; code?: string; client?: string; atendimentoPersonId?: number | null },
 ): Promise<Job> {
   const firstStatusId = await getFirstStatusId(db);
 
   const inserted = await db.query<{ id: number }>(
     `WITH new_job AS (
-       INSERT INTO jobs (name, code, client, status_id) VALUES ($1, $2, $3, $4) RETURNING id
+       INSERT INTO jobs (name, code, client, status_id, atendimento_person_id) VALUES ($1, $2, $3, $4, $5) RETURNING id
      ), history AS (
        INSERT INTO job_status_history (job_id, from_status_id, to_status_id)
        SELECT id, NULL, $4 FROM new_job
      )
      SELECT id FROM new_job`,
-    [input.name, input.code ?? null, input.client ?? null, firstStatusId],
+    [input.name, input.code ?? null, input.client ?? null, firstStatusId, input.atendimentoPersonId ?? null],
   );
 
   const jobId = inserted.rows[0].id;
@@ -224,4 +237,13 @@ export async function setLastWhatsappActivity(
     value,
     jobId,
   ]);
+}
+
+export async function setAtendimento(db: AppDatabase, jobId: number, personId: number): Promise<Job> {
+  await db.query('UPDATE jobs SET atendimento_person_id = $1, updated_at = now() WHERE id = $2', [
+    personId,
+    jobId,
+  ]);
+  const job = await getJobById(db, jobId);
+  return job!;
 }
