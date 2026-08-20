@@ -154,6 +154,13 @@
   font-weight: 600;
 }
 
+.job-detail-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex: 0 0 auto;
+}
+
 .job-detail-phase-name {
   flex: 1;
 }

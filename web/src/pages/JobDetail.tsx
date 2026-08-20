@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   api,
+  ApiError,
   type ClassifySuggestion,
   type JobDetail as JobDetailType,
   type Phase,
@@ -110,8 +111,12 @@ export function JobDetailPage() {
       setSuggestions(res.suggestions);
       setPasteText('');
       await refresh();
-    } catch {
-      setError('Não foi possível analisar o texto colado.');
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 503) {
+        setError('A classificação por IA ainda não está configurada neste ambiente.');
+      } else {
+        setError('Não foi possível analisar o texto colado.');
+      }
     } finally {
       setClassifying(false);
     }
@@ -148,7 +153,7 @@ export function JobDetailPage() {
   }
 
   const counts = job.bolaComDayCounts;
-  const isStuck = job.alertLevel !== 'green';
+  const isStuck = job.alertLevel === 'red';
   const pendingSuggestions = suggestions?.filter((s) => s.outcome === 'pendente') ?? [];
   const appliedSuggestions = suggestions?.filter((s) => s.outcome === 'auto_aplicado') ?? [];
 
@@ -175,7 +180,7 @@ export function JobDetailPage() {
 
         {isStuck && counts && (
           <p className="job-detail-warning job-detail-warning--red">
-            {counts.currentStreakDays} dias parado com {job.bolaCom === 'cliente' ? 'o cliente' : 'a Ilha'}
+            {counts.currentStreakDays} dias com {job.bolaCom === 'cliente' ? 'o cliente' : 'a Ilha'}
           </p>
         )}
 
@@ -278,7 +283,7 @@ export function JobDetailPage() {
                   className="job-detail-phase-header"
                   onClick={() => setExpandedPhaseId(isExpanded ? null : phase.id)}
                 >
-                  <span className="board-swatch" style={{ background: phaseColor(phase.order) }} />
+                  <span className="job-detail-swatch" style={{ background: phaseColor(phase.order) }} />
                   <span className="job-detail-phase-name">{phase.name}</span>
                   <span className="job-detail-phase-count">
                     {itemsDone}/{phase.statuses.length}
@@ -301,6 +306,8 @@ export function JobDetailPage() {
                             <button
                               type="button"
                               className={`job-detail-checklist-item${checked ? ' is-checked' : ''}`}
+                              role="checkbox"
+                              aria-checked={checked}
                               onClick={() => void handleStatusClick(status.id)}
                             >
                               <span className="job-detail-checkbox">{checked ? '✓' : ''}</span>

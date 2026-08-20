@@ -133,6 +133,7 @@ export function Board() {
               key={level}
               type="button"
               className={`board-filter-row${farolFilter.has(level) ? ' is-active' : ''}`}
+              aria-pressed={farolFilter.has(level)}
               onClick={() => toggleFarol(level)}
             >
               <span className="board-dot" style={{ background: FAROL_COLOR_VARS[level] }} />
@@ -149,6 +150,7 @@ export function Board() {
               key={phase.id}
               type="button"
               className={`board-filter-row${faseFilter.has(phase.id) ? ' is-active' : ''}`}
+              aria-pressed={faseFilter.has(phase.id)}
               onClick={() => toggleFase(phase.id)}
             >
               <span className="board-swatch" style={{ background: phaseColor(phase.order) }} />
@@ -164,7 +166,7 @@ export function Board() {
           <div>
             <p className="label-caps">Ilha Crossmídia · Atendimento</p>
             <h1>
-              Torre de Controle <span className="board-header-count">/ {jobs.length} jobs</span>
+              Torre de Controle <span className="board-header-count">/ {activeJobs.length} jobs</span>
             </h1>
           </div>
           <button type="button" className="board-new-job-btn" onClick={() => setShowNewJobForm((v) => !v)}>
@@ -197,7 +199,7 @@ export function Board() {
                   <Link to={`/jobs/${job.id}`} className="board-stuck-job">
                     <span className="board-stuck-name">{job.client ?? job.name}</span>
                     <span className="board-stuck-days">
-                      {job.bolaComDayCounts?.currentStreakDays ?? 0} dias parado com{' '}
+                      {job.bolaComDayCounts?.currentStreakDays ?? 0} dias com{' '}
                       {job.bolaCom === 'cliente' ? 'o cliente' : 'a Ilha'}
                     </span>
                   </Link>
@@ -258,7 +260,12 @@ export function Board() {
               const currentOrder = phaseOrderOf(phases, job.phaseId) ?? 0;
               const counts = job.bolaComDayCounts;
               const totalDays = (counts?.ilhaDays ?? 0) + (counts?.clienteDays ?? 0);
-              const ilhaPct = totalDays === 0 ? 100 : ((counts?.ilhaDays ?? 0) / totalDays) * 100;
+              const ilhaPct =
+                totalDays === 0
+                  ? job.bolaCom === 'cliente'
+                    ? 0
+                    : 100
+                  : ((counts?.ilhaDays ?? 0) / totalDays) * 100;
 
               return (
                 <tr key={job.id}>

@@ -116,7 +116,7 @@ describe('Board', () => {
     renderBoard();
 
     expect(await screen.findByText(/JOB TRAVADO/)).toBeInTheDocument();
-    expect(await screen.findByText(/9 dias parado com o cliente/)).toBeInTheDocument();
+    expect(await screen.findByText(/9 dias com o cliente/)).toBeInTheDocument();
   });
 
   it('filters the table when a fase filter row is clicked', async () => {

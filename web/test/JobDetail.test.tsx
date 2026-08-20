@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { JobDetailPage } from '../src/pages/JobDetail';
-import { api } from '../src/api/client';
+import { api, ApiError } from '../src/api/client';
 
 vi.mock('../src/api/client', async () => {
   const actual = await vi.importActual<typeof import('../src/api/client')>('../src/api/client');
@@ -136,12 +136,23 @@ describe('JobDetailPage', () => {
     await waitFor(() => expect(mockedApi.setBolaCom).toHaveBeenCalledWith(1, 'cliente'));
   });
 
-  it('shows the stuck warning only when alertLevel is not green', async () => {
+  it('shows the stuck warning only when alertLevel is red', async () => {
     mockedApi.getJob.mockResolvedValue({ job: { ...jobDetail, alertLevel: 'red' } });
 
     renderJobDetail();
 
-    expect(await screen.findByText(/dias parado com a Ilha/)).toBeInTheDocument();
+    const warning = await screen.findByText(/dias com a Ilha/);
+    expect(warning).toBeInTheDocument();
+    expect(warning.textContent).not.toMatch(/parado/);
+  });
+
+  it('does not show the stuck warning when alertLevel is yellow', async () => {
+    mockedApi.getJob.mockResolvedValue({ job: { ...jobDetail, alertLevel: 'yellow' } });
+
+    renderJobDetail();
+
+    await screen.findByText('Colgate - Color Correct Wave 2');
+    expect(screen.queryByText(/dias com a Ilha/)).not.toBeInTheDocument();
   });
 
   it('does not show the WhatsApp inactivity line when lastWhatsappActivityAt is null', async () => {
@@ -175,5 +186,19 @@ describe('JobDetailPage', () => {
 
     await waitFor(() => expect(mockedApi.classifyJob).toHaveBeenCalledWith(1, 'Briefing recebido ontem'));
     expect(await screen.findByRole('button', { name: 'Aplicar' })).toBeInTheDocument();
+  });
+
+  it('shows a specific message when the AI classifier is not configured (503)', async () => {
+    mockedApi.classifyJob.mockRejectedValue(new ApiError(503, 'ia_nao_configurada'));
+    const user = userEvent.setup();
+
+    renderJobDetail();
+
+    await user.type(await screen.findByLabelText('Colar mensagens do WhatsApp'), 'Briefing recebido ontem');
+    await user.click(screen.getByRole('button', { name: 'Analisar com IA' }));
+
+    expect(
+      await screen.findByText('A classificação por IA ainda não está configurada neste ambiente.'),
+    ).toBeInTheDocument();
   });
 });
