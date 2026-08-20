@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "builds": [
+    { "src": "web/package.json", "use": "@vercel/static-build", "config": { "distDir": "dist" } },
+    {
+      "src": "server/api/index.ts",
+      "use": "@vercel/node",
+      "config": { "includeFiles": "server/src/db/schema.sql" }
+    }
+  ],
+  "routes": [
+    { "src": "/api/(.*)", "dest": "server/api/index.ts" },
+    { "src": "/(.*)", "dest": "web/dist/$1" }
+  ]
+}
