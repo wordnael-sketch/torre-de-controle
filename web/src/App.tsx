@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './auth/AuthContext';
 import { Login } from './pages/Login';
 import { Board } from './pages/Board';
 import { UsersPage } from './pages/Users';
+import { ToastHost } from './components/Toast';
 import './App.css';
 
 function RequireAuth({ children }: { children: ReactElement }) {
@@ -108,6 +109,7 @@ export function App() {
     <BrowserRouter>
       <AuthProvider>
         <AppRoutes />
+        <ToastHost />
       </AuthProvider>
     </BrowserRouter>
   );

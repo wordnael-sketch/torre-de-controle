@@ -9,6 +9,8 @@ import {
   type Person,
 } from '../api/client';
 import { phaseColor } from '../theme/phase';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import { showToast } from '../components/Toast';
 import './JobDetail.css';
 
 function hoursSince(iso: string): number {
@@ -50,6 +52,7 @@ export function JobDetailPage() {
   const [pasteText, setPasteText] = useState('');
   const [suggestions, setSuggestions] = useState<ClassifySuggestion[] | null>(null);
   const [classifying, setClassifying] = useState(false);
+  const [pendingCompleteStatusId, setPendingCompleteStatusId] = useState<number | null>(null);
 
   async function refresh() {
     const [jobRes, referenceRes, peopleRes] = await Promise.all([
@@ -80,15 +83,38 @@ export function JobDetailPage() {
     [phases, job],
   );
 
+  function isFinalStatus(statusId: number): boolean {
+    const lastPhase = phases[phases.length - 1];
+    if (!lastPhase) return false;
+    const lastStatus = lastPhase.statuses[lastPhase.statuses.length - 1];
+    return lastStatus?.id === statusId;
+  }
+
   async function handleStatusClick(statusId: number) {
     if (!job || statusId === job.statusId) return;
+    if (isFinalStatus(statusId)) {
+      setPendingCompleteStatusId(statusId);
+      return;
+    }
+    await applyStatusChange(statusId);
+  }
+
+  async function applyStatusChange(statusId: number, successMessage = 'Status atualizado.') {
     setError(null);
     try {
       await api.setJobStatus(jobId, statusId);
       await refresh();
+      showToast(successMessage);
     } catch {
       setError('Não foi possível mudar o status.');
     }
+  }
+
+  async function confirmComplete() {
+    if (pendingCompleteStatusId === null) return;
+    const statusId = pendingCompleteStatusId;
+    setPendingCompleteStatusId(null);
+    await applyStatusChange(statusId, 'Job concluído!');
   }
 
   async function handleBolaComToggle(side: 'ilha' | 'cliente') {
@@ -396,6 +422,16 @@ export function JobDetailPage() {
             );
           })}
         </div>
+
+        {pendingCompleteStatusId !== null && (
+          <ConfirmDialog
+            title="Concluir job"
+            message="Marcar job como concluído? Isso completa o ciclo do job."
+            confirmLabel="Concluir"
+            onConfirm={() => void confirmComplete()}
+            onCancel={() => setPendingCompleteStatusId(null)}
+          />
+        )}
       </div>
     </div>
   );

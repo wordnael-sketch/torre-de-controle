@@ -1,5 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, type User, type UserRole } from '../api/client';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import { showToast } from '../components/Toast';
 import './Users.css';
 
 export function UsersPage() {
@@ -7,6 +9,7 @@ export function UsersPage() {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<UserRole>('member');
   const [error, setError] = useState<string | null>(null);
+  const [userPendingRevoke, setUserPendingRevoke] = useState<User | null>(null);
 
   async function refresh() {
     const res = await api.listUsers();
@@ -31,6 +34,7 @@ export function UsersPage() {
       setEmail('');
       setRole('member');
       await refresh();
+      showToast(`Convite enviado para ${email.trim()}.`);
     } catch {
       setError('Não foi possível convidar esse usuário.');
     }
@@ -46,11 +50,30 @@ export function UsersPage() {
     }
   }
 
-  async function handleStatusChange(id: number, newStatus: 'active' | 'revoked') {
+  async function handleStatusChange(id: number, newStatus: 'active' | 'revoked', user: User) {
+    if (newStatus === 'revoked') {
+      setUserPendingRevoke(user);
+      return;
+    }
     setError(null);
     try {
       await api.setUserStatus(id, newStatus);
       await refresh();
+      showToast(`Acesso de ${user.email} reativado.`);
+    } catch {
+      setError('Não foi possível mudar o status desse usuário.');
+    }
+  }
+
+  async function confirmRevoke() {
+    if (!userPendingRevoke) return;
+    const user = userPendingRevoke;
+    setUserPendingRevoke(null);
+    setError(null);
+    try {
+      await api.setUserStatus(user.id, 'revoked');
+      await refresh();
+      showToast(`Acesso de ${user.email} revogado.`);
     } catch {
       setError('Não foi possível mudar o status desse usuário.');
     }
@@ -108,11 +131,11 @@ export function UsersPage() {
               </td>
               <td>
                 {u.status === 'revoked' ? (
-                  <button type="button" onClick={() => void handleStatusChange(u.id, 'active')}>
+                  <button type="button" onClick={() => void handleStatusChange(u.id, 'active', u)}>
                     Reativar
                   </button>
                 ) : (
-                  <button type="button" onClick={() => void handleStatusChange(u.id, 'revoked')}>
+                  <button type="button" onClick={() => void handleStatusChange(u.id, 'revoked', u)}>
                     Revogar
                   </button>
                 )}
@@ -121,6 +144,16 @@ export function UsersPage() {
           ))}
         </tbody>
       </table>
+
+      {userPendingRevoke && (
+        <ConfirmDialog
+          title="Revogar acesso"
+          message={`Revogar acesso de ${userPendingRevoke.email}? Essa pessoa perde acesso ao sistema até ser reativada.`}
+          confirmLabel="Revogar"
+          onConfirm={() => void confirmRevoke()}
+          onCancel={() => setUserPendingRevoke(null)}
+        />
+      )}
     </div>
   );
 }

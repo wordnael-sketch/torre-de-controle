@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { Board } from '../src/pages/Board';
@@ -119,6 +119,24 @@ describe('JobDetailPage', () => {
   });
 
   it('advances the status when an unchecked checklist item is clicked', async () => {
+    // referencePhases has a single phase, so its last status (11) would otherwise be
+    // treated as the final status of the whole flow (see isFinalStatus in JobDetail.tsx)
+    // and require confirmation. Add a trailing phase so this test exercises the plain,
+    // non-final status advance it's meant to cover.
+    mockedApi.getReference.mockResolvedValue({
+      phases: [
+        ...referencePhases,
+        {
+          id: 2,
+          order: 2,
+          name: 'Produção',
+          roles: [],
+          statuses: [
+            { id: 20, phaseId: 2, order: 1, name: 'Em produção', actionRequired: '', triggerLabel: '', primaryRole: '' },
+          ],
+        },
+      ],
+    });
     mockedApi.setJobStatus.mockResolvedValue({ job: { ...jobDetail, statusId: 11 } });
     const user = userEvent.setup();
 
@@ -214,5 +232,38 @@ describe('JobDetailPage', () => {
     expect(
       await screen.findByText('A classificação por IA ainda não está configurada neste ambiente.'),
     ).toBeInTheDocument();
+  });
+
+  it('shows a confirmation dialog before completing the job at the final status', async () => {
+    const finalPhaseReference = [
+      ...referencePhases,
+      {
+        id: 2,
+        order: 2,
+        name: 'Encerramento',
+        roles: [],
+        statuses: [
+          { id: 99, phaseId: 2, order: 1, name: 'Arquivamento', actionRequired: '', triggerLabel: '', primaryRole: '' },
+        ],
+      },
+    ];
+    mockedApi.getReference.mockResolvedValue({ phases: finalPhaseReference });
+    mockedApi.setJobStatus.mockResolvedValue({ job: { ...jobDetail, statusId: 99 } });
+    const user = userEvent.setup();
+
+    renderJobDetail();
+
+    // Scope queries to the JobDetail panel: Board's sidebar also renders a phase
+    // filter button named "Encerramento" from the same reference data.
+    const panel = await screen.findByRole('dialog');
+    await user.click(within(panel).getByText('Encerramento'));
+    await user.click(within(panel).getByText('Arquivamento'));
+
+    expect(await screen.findByText('Concluir job')).toBeInTheDocument();
+    expect(mockedApi.setJobStatus).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Concluir' }));
+
+    await waitFor(() => expect(mockedApi.setJobStatus).toHaveBeenCalledWith(1, 99));
   });
 });

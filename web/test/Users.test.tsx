@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { UsersPage } from '../src/pages/Users';
 import { api } from '../src/api/client';
@@ -75,6 +75,30 @@ describe('UsersPage', () => {
     render(<UsersPage />);
 
     await user.click(await screen.findByRole('button', { name: 'Revogar' }));
+    const dialog = await screen.findByRole('alertdialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Revogar' }));
+
+    await waitFor(() => expect(mockedApi.setUserStatus).toHaveBeenCalledWith(3, 'revoked'));
+  });
+
+  it('shows a confirmation dialog before revoking access', async () => {
+    mockedApi.listUsers.mockResolvedValue({
+      users: [{ id: 3, email: 'revogavel@ilhacrossmidia.com.br', name: 'Pessoa', role: 'member', status: 'active' }],
+    });
+    const user = userEvent.setup();
+
+    render(<UsersPage />);
+
+    await user.click(await screen.findByRole('button', { name: 'Revogar' }));
+
+    expect(await screen.findByText(/Revogar acesso de revogavel@ilhacrossmidia.com.br/)).toBeInTheDocument();
+    expect(mockedApi.setUserStatus).not.toHaveBeenCalled();
+
+    mockedApi.setUserStatus.mockResolvedValue({
+      user: { id: 3, email: 'revogavel@ilhacrossmidia.com.br', name: 'Pessoa', role: 'member', status: 'revoked' },
+    });
+    const dialog = screen.getByRole('alertdialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Revogar' }));
 
     await waitFor(() => expect(mockedApi.setUserStatus).toHaveBeenCalledWith(3, 'revoked'));
   });
