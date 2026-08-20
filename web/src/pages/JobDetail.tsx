@@ -21,14 +21,13 @@ export function JobDetailPage() {
 
   const navigate = useNavigate();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const hasFocusedRef = useRef(false);
 
   function handleClose() {
     navigate('/');
   }
 
   useEffect(() => {
-    closeButtonRef.current?.focus();
-
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
         handleClose();
@@ -38,6 +37,10 @@ export function JobDetailPage() {
     return () => document.removeEventListener('keydown', onKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    hasFocusedRef.current = false;
+  }, [jobId]);
 
   const [job, setJob] = useState<JobDetailType | null>(null);
   const [phases, setPhases] = useState<Phase[]>([]);
@@ -64,6 +67,13 @@ export function JobDetailPage() {
     refresh().catch(() => setError('Não foi possível carregar o job.'));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
+
+  useEffect(() => {
+    if (job && !hasFocusedRef.current) {
+      closeButtonRef.current?.focus();
+      hasFocusedRef.current = true;
+    }
+  }, [job]);
 
   const currentPhaseOrder = useMemo(
     () => phases.find((p) => p.id === job?.phaseId)?.order ?? 0,

@@ -110,6 +110,14 @@ describe('JobDetailPage', () => {
     expect(await screen.findByText('1/2')).toBeInTheDocument();
   });
 
+  it('moves keyboard focus to the close button once the job has loaded', async () => {
+    renderJobDetail();
+
+    await screen.findByText('Colgate - Color Correct Wave 2');
+
+    expect(screen.getByRole('button', { name: 'Fechar' })).toHaveFocus();
+  });
+
   it('advances the status when an unchecked checklist item is clicked', async () => {
     mockedApi.setJobStatus.mockResolvedValue({ job: { ...jobDetail, statusId: 11 } });
     const user = userEvent.setup();
