@@ -59,6 +59,15 @@ export interface User {
 
 export type AlertLevel = 'green' | 'yellow' | 'red';
 
+export type BolaCom = 'ilha' | 'cliente';
+
+export interface BolaComDayCounts {
+  ilhaDays: number;
+  clienteDays: number;
+  currentSide: BolaCom;
+  currentStreakDays: number;
+}
+
 export interface Job {
   id: number;
   name: string;
@@ -73,6 +82,11 @@ export interface Job {
   completedAt: string | null;
   alertLevel: AlertLevel;
   highlightedPersonName: string | null;
+  bolaCom: BolaCom;
+  lastWhatsappActivityAt: string | null;
+  actionRequired: string | null;
+  triggerLabel: string | null;
+  bolaComDayCounts?: BolaComDayCounts;
 }
 
 export interface RoleAssignment {
@@ -90,10 +104,19 @@ export interface StatusHistoryEntry {
 }
 
 export interface JobDetail extends Job {
-  actionRequired: string | null;
-  triggerLabel: string | null;
   roleAssignments: RoleAssignment[];
   statusHistory: StatusHistoryEntry[];
+  bolaComDayCounts: BolaComDayCounts;
+}
+
+export type SuggestionOutcome = 'auto_aplicado' | 'pendente' | 'descartado';
+
+export interface ClassifySuggestion {
+  tipo: 'checklist_item' | 'bola_com';
+  valor: string;
+  confidence: number;
+  evidencia: string;
+  outcome: SuggestionOutcome;
 }
 
 export interface Status {
@@ -144,6 +167,21 @@ export const api = {
     request<{ roleAssignment: RoleAssignment }>(`/api/jobs/${id}/roles/${encodeURIComponent(area)}`, {
       method: 'PUT',
       body: JSON.stringify({ personId }),
+    }),
+  setBolaCom: (id: number, bolaCom: BolaCom) =>
+    request<{ job: Job; bolaComDayCounts: BolaComDayCounts }>(`/api/jobs/${id}/bola-com`, {
+      method: 'PATCH',
+      body: JSON.stringify({ bolaCom }),
+    }),
+  setLastActivity: (id: number, lastWhatsappActivityAt: string | null) =>
+    request<{ job: Job }>(`/api/jobs/${id}/last-activity`, {
+      method: 'PATCH',
+      body: JSON.stringify({ lastWhatsappActivityAt }),
+    }),
+  classifyJob: (id: number, text: string) =>
+    request<{ suggestions: ClassifySuggestion[] }>(`/api/jobs/${id}/classify`, {
+      method: 'POST',
+      body: JSON.stringify({ text }),
     }),
   getReference: () => request<{ phases: Phase[] }>('/api/reference'),
   listPeople: () => request<{ people: Person[] }>('/api/people'),

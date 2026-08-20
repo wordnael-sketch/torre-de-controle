@@ -138,6 +138,66 @@ describe('api.getJob / api.advanceJob / api.setJobStatus / api.assignRole', () =
   });
 });
 
+describe('api.setBolaCom / api.setLastActivity / api.classifyJob', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('setBolaCom PATCHes the bola-com side', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        job: { id: 1, bolaCom: 'cliente' },
+        bolaComDayCounts: { ilhaDays: 1, clienteDays: 0, currentSide: 'cliente', currentStreakDays: 0 },
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.setBolaCom(1, 'cliente');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/jobs/1/bola-com'),
+      expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ bolaCom: 'cliente' }) }),
+    );
+  });
+
+  it('setLastActivity PATCHes the last WhatsApp activity timestamp', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ job: { id: 1, lastWhatsappActivityAt: '2026-08-19T00:00:00.000Z' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.setLastActivity(1, '2026-08-19T00:00:00.000Z');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/jobs/1/last-activity'),
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ lastWhatsappActivityAt: '2026-08-19T00:00:00.000Z' }),
+      }),
+    );
+  });
+
+  it('classifyJob POSTs pasted text and returns suggestions', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ suggestions: [] }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.classifyJob(1, 'texto colado');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/jobs/1/classify'),
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ text: 'texto colado' }) }),
+    );
+  });
+});
+
 describe('api.listUsers / api.inviteUser / api.setUserRole / api.setUserStatus', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
