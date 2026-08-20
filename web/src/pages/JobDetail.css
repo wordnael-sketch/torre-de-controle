@@ -239,4 +239,8 @@
   .job-detail-phase-header {
     min-height: 48px;
   }
+
+  .job-detail-close {
+    min-width: 48px;
+  }
 }
