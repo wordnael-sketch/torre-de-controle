@@ -1,0 +1,63 @@
+.users-page {
+  max-width: 720px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+.users-invite-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 1rem;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.users-invite-form input,
+.users-invite-form select {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.users-error {
+  color: var(--farol-travado);
+}
+
+.users-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.users-table th,
+.users-table td {
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.users-status-badge {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg-hover);
+}
+
+.users-status-badge--active {
+  color: var(--farol-fluindo);
+}
+
+.users-status-badge--revoked {
+  color: var(--farol-travado);
+}
+
+.users-status-badge--invited {
+  color: var(--farol-atencao);
+}

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { GoogleLogin } from '@react-oauth/google';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
+import './Login.css';
 
 export function Login() {
   const { loginWithGoogle } = useAuth();
@@ -23,10 +24,11 @@ export function Login() {
   }
 
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', marginTop: '4rem' }}>
-      <div>
-        <h1>Ilha Crossmídia</h1>
-        <p>Acompanhamento de Jobs — entre com sua conta @ilhacrossmidia.com.br</p>
+    <div className="login-page">
+      <div className="login-card">
+        <p className="label-caps">Ilha Crossmídia</p>
+        <h1>Torre de Controle</h1>
+        <p className="login-subtitle">Acompanhamento de Jobs — entre com sua conta @ilhacrossmidia.com.br</p>
         <GoogleLogin
           onSuccess={(credentialResponse) => {
             if (credentialResponse.credential) {
@@ -35,7 +37,11 @@ export function Login() {
           }}
           onError={() => setError('Falha no login com Google.')}
         />
-        {error && <p role="alert">{error}</p>}
+        {error && (
+          <p role="alert" className="login-error">
+            {error}
+          </p>
+        )}
       </div>
     </div>
   );

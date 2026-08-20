@@ -5,12 +5,13 @@ import { Login } from './pages/Login';
 import { Board } from './pages/Board';
 import { JobDetailPage } from './pages/JobDetail';
 import { UsersPage } from './pages/Users';
+import './App.css';
 
 function RequireAuth({ children }: { children: ReactElement }) {
   const { user, loading, logout } = useAuth();
 
   if (loading) {
-    return <p>Carregando...</p>;
+    return <p className="app-loading">Carregando...</p>;
   }
 
   if (!user) {
@@ -18,19 +19,16 @@ function RequireAuth({ children }: { children: ReactElement }) {
   }
 
   return (
-    <div>
-      <header
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          padding: '1rem',
-        }}
-      >
-        <span>{user.email}</span>
-        <nav style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-          {user.role === 'admin' && <Link to="/usuarios">Usuários</Link>}
-          <button type="button" onClick={() => void logout()}>
+    <div className="app-shell">
+      <header className="app-header">
+        <span className="app-header-email">{user.email}</span>
+        <nav className="app-nav">
+          {user.role === 'admin' && (
+            <Link to="/usuarios" className="app-nav-link">
+              Usuários
+            </Link>
+          )}
+          <button type="button" className="app-logout-btn" onClick={() => void logout()}>
             Sair
           </button>
         </nav>

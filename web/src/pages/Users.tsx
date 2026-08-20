@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, type User, type UserRole } from '../api/client';
+import './Users.css';
 
 export function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -56,10 +57,10 @@ export function UsersPage() {
   }
 
   return (
-    <div style={{ maxWidth: 720, margin: '2rem auto', padding: '0 1rem' }}>
+    <div className="users-page">
       <h1>Usuários</h1>
 
-      <form onSubmit={handleInvite} style={{ marginBottom: '2rem' }}>
+      <form onSubmit={handleInvite} className="users-invite-form">
         <div>
           <label htmlFor="invite-email">E-mail</label>
           <input id="invite-email" value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -72,33 +73,54 @@ export function UsersPage() {
           </select>
         </div>
         <button type="submit">Convidar</button>
-        {error && <p role="alert">{error}</p>}
+        {error && (
+          <p role="alert" className="users-error">
+            {error}
+          </p>
+        )}
       </form>
 
-      <ul>
-        {users.map((u) => (
-          <li key={u.id}>
-            <span>{u.email}</span> — {u.status} —{' '}
-            <select
-              aria-label={`Papel de ${u.email}`}
-              value={u.role}
-              onChange={(e) => void handleRoleChange(u.id, e.target.value as UserRole)}
-            >
-              <option value="member">Member</option>
-              <option value="admin">Admin</option>
-            </select>{' '}
-            {u.status === 'revoked' ? (
-              <button type="button" onClick={() => void handleStatusChange(u.id, 'active')}>
-                Reativar
-              </button>
-            ) : (
-              <button type="button" onClick={() => void handleStatusChange(u.id, 'revoked')}>
-                Revogar
-              </button>
-            )}
-          </li>
-        ))}
-      </ul>
+      <table className="users-table">
+        <thead>
+          <tr>
+            <th>E-mail</th>
+            <th>Status</th>
+            <th>Papel</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {users.map((u) => (
+            <tr key={u.id}>
+              <td>{u.email}</td>
+              <td>
+                <span className={`users-status-badge users-status-badge--${u.status}`}>{u.status}</span>
+              </td>
+              <td>
+                <select
+                  aria-label={`Papel de ${u.email}`}
+                  value={u.role}
+                  onChange={(e) => void handleRoleChange(u.id, e.target.value as UserRole)}
+                >
+                  <option value="member">Member</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </td>
+              <td>
+                {u.status === 'revoked' ? (
+                  <button type="button" onClick={() => void handleStatusChange(u.id, 'active')}>
+                    Reativar
+                  </button>
+                ) : (
+                  <button type="button" onClick={() => void handleStatusChange(u.id, 'revoked')}>
+                    Revogar
+                  </button>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

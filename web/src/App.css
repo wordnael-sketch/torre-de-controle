@@ -1,0 +1,44 @@
+.app-loading {
+  padding: 2rem;
+  font-family: var(--font-heading);
+  color: var(--text-secondary);
+}
+
+.app-shell {
+  min-height: 100vh;
+}
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.6rem 1.5rem;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.app-header-email {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.app-nav {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.app-nav-link {
+  text-decoration: none;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+}
+
+.app-logout-btn {
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  border-radius: var(--radius-sm);
+  padding: 0.3rem 0.75rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
