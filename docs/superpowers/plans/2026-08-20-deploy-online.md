@@ -369,6 +369,40 @@ These steps provision real external infrastructure (a GitHub repository, a Verce
 
 ---
 
+## Post-merge correction: `vercel.json` and the function's location
+
+Executing this runbook against the real Vercel account surfaced two problems in Task 2's `vercel.json` (the legacy `builds`/`routes` schema) that no amount of local review could have caught — only a real deploy exercises Vercel's actual file-routing behavior:
+
+1. **The legacy `builds`/`routes` schema mapped the static output to the wrong path.** `dest: "web/dist/index.html"` and `dest: "web/dist/$1"` never matched any real file in the deployment — every non-`/api` request 404'd, including `/` itself. Root-caused by comparing against Vercel's own current documentation, which shows the **modern** `outputDirectory`/`rewrites` schema as the supported, well-documented pattern for this — not the legacy `builds` array.
+2. **The `functions` config key only recognizes files under a root-level `api/` directory.** `server/api/index.ts` (Task 2's location) is invisible to it — Vercel's build failed outright with "The pattern `server/api/index.ts` defined in `functions` doesn't match any Serverless Functions inside the `api` directory." The entry point had to move to `api/index.ts` at the repo root (importing `../server/src/createAppFromEnv`, one directory further up than before); `server/test/vercelHandler.test.ts` still lives in `server/test/` and now imports `../../api/index`.
+
+**Final, working `vercel.json`:**
+
+```json
+{
+  "buildCommand": "cd web && npm install --include=dev && npm run build",
+  "outputDirectory": "web/dist",
+  "installCommand": "echo 'root install skipped, each package installs its own deps'",
+  "functions": {
+    "api/index.ts": {
+      "includeFiles": "server/src/db/schema.sql"
+    }
+  },
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "/api/index" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
+```
+
+Two more real deploy failures along the way, both fixed the same way (push a fix, watch the next build):
+- **`npm install --include=dev` is required in `buildCommand`.** Setting `NODE_ENV=production` as a Vercel project env var (per this plan's Global Constraints) also applies during the build step, so a plain `npm install` silently skipped `web`'s `devDependencies` — including `typescript` and `vite` themselves — failing with `tsc: command not found`.
+- **The deferred `schema.sql` path-resolution risk (flagged non-blocking in the SDD ledger) turned out to need exactly the fix predicted**: `functions.["api/index.ts"].includeFiles: "server/src/db/schema.sql"` bundles the file Vercel's automatic import-tracing can't see (since `createDb` reads it via `fs.readFileSync` at runtime, not a static `import`). Confirmed working: `/api/health` connects to the real Postgres database and returns `200 {"status":"ok"}` in production.
+
+Also required, not code: the local git identity (`Wilka <wilka@ilhacrossmidia.com.br>`, a leftover from the fictional persona used throughout this project's test/seed data) had to be corrected to the real account owner's identity before Vercel's Hobby-team commit-author verification would allow GitHub-triggered deploys through at all — otherwise every git-triggered deployment sits `BLOCKED` (see [Troubleshoot project collaboration](https://vercel.com/docs/deployments/troubleshoot-project-collaboration#team-configuration)).
+
+---
+
 ## Self-review notes
 
 - **Spec coverage**: every section of the spec maps to a task or a runbook step — architecture (Tasks 1-2), env vars (runbook step 3), Google OAuth (runbook step 5), pipeline (runbook step 4), non-goals (deliberately not built: no preview deploys, no custom domain, no split Vercel projects, no per-route functions, no CI).
