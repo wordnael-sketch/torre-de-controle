@@ -15,6 +15,7 @@ vi.mock('../src/api/client', async () => {
       listPeople: vi.fn(),
       setJobStatus: vi.fn(),
       assignRole: vi.fn(),
+      setAtendimento: vi.fn(),
       setBolaCom: vi.fn(),
       setLastActivity: vi.fn(),
       classifyJob: vi.fn(),
@@ -40,6 +41,8 @@ const jobDetail = {
   completedAt: null,
   alertLevel: 'green' as const,
   highlightedPersonName: 'Anne',
+  atendimentoPersonId: 7,
+  atendimentoPersonName: 'Wilka',
   bolaCom: 'ilha' as const,
   lastWhatsappActivityAt: null,
   actionRequired: 'Preenchimento do Briefing Padronizado.',
@@ -85,6 +88,7 @@ describe('JobDetailPage', () => {
     mockedApi.listPeople.mockReset();
     mockedApi.setJobStatus.mockReset();
     mockedApi.assignRole.mockReset();
+    mockedApi.setAtendimento.mockReset();
     mockedApi.setBolaCom.mockReset();
     mockedApi.setLastActivity.mockReset();
     mockedApi.classifyJob.mockReset();
@@ -96,8 +100,9 @@ describe('JobDetailPage', () => {
     mockedApi.getReference.mockResolvedValue({ phases: referencePhases });
     mockedApi.listPeople.mockResolvedValue({
       people: [
-        { id: 5, name: 'Anne', area: 'Comercial', active: true },
-        { id: 6, name: 'Adriano', area: 'Produção Executiva', active: true },
+        { id: 5, name: 'Anne', area: 'Comercial', active: true, title: null },
+        { id: 6, name: 'Adriano', area: 'Produção Executiva', active: true, title: null },
+        { id: 7, name: 'Wilka', area: 'Atendimento', active: true, title: 'Head' },
       ],
     });
   });
@@ -152,6 +157,37 @@ describe('JobDetailPage', () => {
 
     expect(await screen.findByLabelText('Comercial')).toBeInTheDocument();
     expect(await screen.findByLabelText('Produção Executiva')).toBeInTheDocument();
+  });
+
+  it('shows the Atendimento responsável name and title', async () => {
+    renderJobDetail();
+
+    expect(await screen.findByLabelText('Atendimento responsável')).toHaveValue('7');
+    expect(screen.getByRole('option', { name: 'Wilka · Head' })).toBeInTheDocument();
+  });
+
+  it('shows a warning when no Atendimento responsável is assigned', async () => {
+    mockedApi.getJob.mockResolvedValue({
+      job: { ...jobDetail, atendimentoPersonId: null, atendimentoPersonName: null },
+    });
+
+    renderJobDetail();
+
+    expect(
+      await screen.findByText('Nenhum Atendimento responsável atribuído — selecione um acima.'),
+    ).toBeInTheDocument();
+  });
+
+  it('reassigns the Atendimento responsável via the select', async () => {
+    mockedApi.setAtendimento.mockResolvedValue({ job: { ...jobDetail, atendimentoPersonId: 7 } });
+    const user = userEvent.setup();
+
+    renderJobDetail();
+
+    await screen.findByText('Colgate - Color Correct Wave 2');
+    await user.selectOptions(screen.getByLabelText('Atendimento responsável'), '7');
+
+    await waitFor(() => expect(mockedApi.setAtendimento).toHaveBeenCalledWith(1, 7));
   });
 
   it('toggles bola-com when a toggle button is clicked', async () => {

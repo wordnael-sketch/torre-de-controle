@@ -86,6 +86,8 @@ export interface Job {
   lastWhatsappActivityAt: string | null;
   actionRequired: string | null;
   triggerLabel: string | null;
+  atendimentoPersonId: number | null;
+  atendimentoPersonName: string | null;
   bolaComDayCounts?: BolaComDayCounts;
 }
 
@@ -142,6 +144,7 @@ export interface Person {
   name: string;
   area: string;
   active: boolean;
+  title: string | null;
 }
 
 export const api = {
@@ -153,7 +156,7 @@ export const api = {
     }),
   logout: () => request<void>('/api/auth/logout', { method: 'POST' }),
   listJobs: () => request<{ jobs: Job[] }>('/api/jobs'),
-  createJob: (job: { name: string; code?: string; client?: string }) =>
+  createJob: (job: { name: string; code?: string; client?: string; atendimentoPersonId: number }) =>
     request<{ job: Job }>('/api/jobs', { method: 'POST', body: JSON.stringify(job) }),
   getJob: (id: number) => request<{ job: JobDetail }>(`/api/jobs/${id}`),
   advanceJob: (id: number, note?: string) =>
@@ -166,6 +169,11 @@ export const api = {
   assignRole: (id: number, area: string, personId: number | null) =>
     request<{ roleAssignment: RoleAssignment }>(`/api/jobs/${id}/roles/${encodeURIComponent(area)}`, {
       method: 'PUT',
+      body: JSON.stringify({ personId }),
+    }),
+  setAtendimento: (id: number, personId: number) =>
+    request<{ job: Job }>(`/api/jobs/${id}/atendimento`, {
+      method: 'PATCH',
       body: JSON.stringify({ personId }),
     }),
   setBolaCom: (id: number, bolaCom: BolaCom) =>

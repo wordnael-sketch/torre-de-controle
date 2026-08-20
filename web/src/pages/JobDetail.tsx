@@ -169,6 +169,17 @@ export function JobDetailPage() {
     }
   }
 
+  async function handleAssignAtendimento(personId: number) {
+    if (!personId) return;
+    setError(null);
+    try {
+      await api.setAtendimento(jobId, personId);
+      await refresh();
+    } catch {
+      setError('Não foi possível atualizar o Atendimento responsável.');
+    }
+  }
+
   async function handleClassify() {
     if (!pasteText.trim()) return;
     setError(null);
@@ -263,6 +274,30 @@ export function JobDetailPage() {
             <X size={20} aria-hidden="true" />
           </button>
         </div>
+
+        <div className="job-detail-atendimento">
+          <span className="label-caps">Atendimento responsável</span>
+          <select
+            aria-label="Atendimento responsável"
+            value={job.atendimentoPersonId ?? ''}
+            onChange={(e) => handleAssignAtendimento(Number(e.target.value))}
+          >
+            <option value="" disabled>
+              (selecionar)
+            </option>
+            {peopleByArea('Atendimento').map((person) => (
+              <option key={person.id} value={person.id}>
+                {person.name}
+                {person.title ? ` · ${person.title}` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+        {!job.atendimentoPersonId && (
+          <p className="job-detail-warning job-detail-warning--red">
+            Nenhum Atendimento responsável atribuído — selecione um acima.
+          </p>
+        )}
 
         {isStuck && counts && (
           <p className="job-detail-warning job-detail-warning--red">

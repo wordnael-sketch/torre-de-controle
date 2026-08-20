@@ -17,6 +17,7 @@ vi.mock('../src/api/client', async () => {
       listPeople: vi.fn(),
       setJobStatus: vi.fn(),
       assignRole: vi.fn(),
+      setAtendimento: vi.fn(),
       setBolaCom: vi.fn(),
       setLastActivity: vi.fn(),
       classifyJob: vi.fn(),
@@ -46,6 +47,8 @@ function makeJob(overrides: Record<string, unknown> = {}) {
     completedAt: null,
     alertLevel: 'green' as const,
     highlightedPersonName: 'Anne',
+    atendimentoPersonId: null,
+    atendimentoPersonName: null,
     bolaCom: 'ilha' as const,
     lastWhatsappActivityAt: null,
     actionRequired: null,
@@ -71,8 +74,10 @@ describe('Board', () => {
     mockedApi.getReference.mockResolvedValue({ phases: twoPhases });
     mockedApi.getJob.mockReset();
     mockedApi.listPeople.mockReset();
+    mockedApi.listPeople.mockResolvedValue({ people: [] });
     mockedApi.setJobStatus.mockReset();
     mockedApi.assignRole.mockReset();
+    mockedApi.setAtendimento.mockReset();
     mockedApi.setBolaCom.mockReset();
     mockedApi.setLastActivity.mockReset();
     mockedApi.classifyJob.mockReset();
@@ -99,6 +104,9 @@ describe('Board', () => {
 
   it('creates a job via the new-job form and refreshes the board', async () => {
     mockedApi.listJobs.mockResolvedValueOnce({ jobs: [] }).mockResolvedValueOnce({ jobs: [makeJob({ name: 'Novo job', client: null, highlightedPersonName: null })] });
+    mockedApi.listPeople.mockResolvedValue({
+      people: [{ id: 7, name: 'Wilka', area: 'Atendimento', active: true, title: 'Head' }],
+    });
     mockedApi.createJob.mockResolvedValue({ job: makeJob({ name: 'Novo job' }) });
 
     const user = userEvent.setup();
@@ -107,10 +115,28 @@ describe('Board', () => {
     await screen.findByText('Comercial e Orçamento');
     await user.click(screen.getByRole('button', { name: /Criar novo job/ }));
     await user.type(screen.getByLabelText('Nome do job'), 'Novo job');
+    await user.selectOptions(screen.getByLabelText('Atendimento responsável'), '7');
     await user.click(screen.getByRole('button', { name: 'Adicionar' }));
 
-    await waitFor(() => expect(mockedApi.createJob).toHaveBeenCalledWith({ name: 'Novo job' }));
+    await waitFor(() =>
+      expect(mockedApi.createJob).toHaveBeenCalledWith({ name: 'Novo job', atendimentoPersonId: 7 }),
+    );
     expect(await screen.findByText('Novo job')).toBeInTheDocument();
+  });
+
+  it('does not submit the new-job form without an Atendimento responsável selected', async () => {
+    mockedApi.listJobs.mockResolvedValue({ jobs: [] });
+    const user = userEvent.setup();
+
+    renderBoard();
+
+    await screen.findByText('Comercial e Orçamento');
+    await user.click(screen.getByRole('button', { name: /Criar novo job/ }));
+    await user.type(screen.getByLabelText('Nome do job'), 'Job Sem Atendimento');
+    await user.click(screen.getByRole('button', { name: 'Adicionar' }));
+
+    expect(screen.getByText('Selecione o Atendimento responsável.')).toBeInTheDocument();
+    expect(mockedApi.createJob).not.toHaveBeenCalled();
   });
 
   it('does not show a completed job on the board', async () => {
@@ -167,6 +193,8 @@ describe('Board', () => {
         completedAt: null,
         alertLevel: 'green',
         highlightedPersonName: null,
+        atendimentoPersonId: null,
+        atendimentoPersonName: null,
         bolaCom: 'ilha',
         lastWhatsappActivityAt: null,
         actionRequired: null,
@@ -209,6 +237,8 @@ describe('Board', () => {
         completedAt: null,
         alertLevel: 'green',
         highlightedPersonName: null,
+        atendimentoPersonId: null,
+        atendimentoPersonName: null,
         bolaCom: 'ilha',
         lastWhatsappActivityAt: null,
         actionRequired: null,

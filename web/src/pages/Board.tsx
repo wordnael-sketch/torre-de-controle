@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Plus, X, SlidersHorizontal } from 'lucide-react';
-import { api, type AlertLevel, type Job, type Phase } from '../api/client';
+import { api, type AlertLevel, type Job, type Person, type Phase } from '../api/client';
 import { FAROL_COLOR_VARS, FAROL_LABELS, phaseColor } from '../theme/phase';
 import { JobDetailPage } from './JobDetail';
 import './Board.css';
@@ -23,18 +23,25 @@ export function Board() {
   const { id: openJobId } = useParams<{ id?: string }>();
   const [phases, setPhases] = useState<Phase[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [people, setPeople] = useState<Person[]>([]);
   const [search, setSearch] = useState('');
   const [farolFilter, setFarolFilter] = useState<Set<AlertLevel>>(new Set());
   const [faseFilter, setFaseFilter] = useState<Set<number>>(new Set());
   const [name, setName] = useState('');
+  const [atendimentoPersonId, setAtendimentoPersonId] = useState('');
   const [showNewJobForm, setShowNewJobForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
 
   async function refresh() {
-    const [referenceRes, jobsRes] = await Promise.all([api.getReference(), api.listJobs()]);
+    const [referenceRes, jobsRes, peopleRes] = await Promise.all([
+      api.getReference(),
+      api.listJobs(),
+      api.listPeople(),
+    ]);
     setPhases(referenceRes.phases);
     setJobs(jobsRes.jobs);
+    setPeople(peopleRes.people);
   }
 
   useEffect(() => {
@@ -120,10 +127,15 @@ export function Board() {
       setError('Informe o nome do job.');
       return;
     }
+    if (!atendimentoPersonId) {
+      setError('Selecione o Atendimento responsável.');
+      return;
+    }
 
     try {
-      await api.createJob({ name: name.trim() });
+      await api.createJob({ name: name.trim(), atendimentoPersonId: Number(atendimentoPersonId) });
       setName('');
+      setAtendimentoPersonId('');
       setShowNewJobForm(false);
       await refresh();
     } catch {
@@ -212,6 +224,21 @@ export function Board() {
           <form onSubmit={handleCreateJob} className="board-new-job-form">
             <label htmlFor="job-name">Nome do job</label>
             <input id="job-name" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+            <label htmlFor="job-atendimento">Atendimento responsável</label>
+            <select
+              id="job-atendimento"
+              value={atendimentoPersonId}
+              onChange={(e) => setAtendimentoPersonId(e.target.value)}
+            >
+              <option value="">(selecionar)</option>
+              {people
+                .filter((p) => p.area === 'Atendimento' && p.active)
+                .map((person) => (
+                  <option key={person.id} value={person.id}>
+                    {person.name}
+                  </option>
+                ))}
+            </select>
             <button type="submit">Adicionar</button>
           </form>
         )}

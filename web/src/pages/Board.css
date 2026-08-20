@@ -122,7 +122,8 @@
   margin-bottom: 1rem;
 }
 
-.board-new-job-form input {
+.board-new-job-form input,
+.board-new-job-form select {
   padding: 0.4rem 0.6rem;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
