@@ -316,3 +316,120 @@
   color: var(--text-secondary);
   margin-top: 0.2rem;
 }
+
+.board-filters-toggle {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .board-filters-toggle {
+    display: inline-flex;
+    align-items: center;
+    min-height: 48px;
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-panel);
+    cursor: pointer;
+  }
+
+  .board-sidebar {
+    display: none;
+  }
+
+  .board-sidebar.is-open {
+    display: block;
+    position: fixed;
+    inset: 0 20% 0 0;
+    z-index: 60;
+    overflow-y: auto;
+    box-shadow: var(--shadow-md);
+  }
+
+  .board-sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    background: rgba(20, 20, 30, 0.4);
+  }
+
+  .board-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .board-sidebar-backdrop {
+    display: none;
+  }
+}
+
+@media (max-width: 639px) {
+  .board-sidebar.is-open {
+    inset: 0;
+  }
+
+  .board-main {
+    padding: 1rem;
+  }
+
+  .board-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .board-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .board-table thead {
+    display: none;
+  }
+
+  .board-table,
+  .board-table tbody,
+  .board-table tr,
+  .board-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .board-table tr {
+    border-bottom: 1px solid var(--border);
+    padding: 0.75rem 0;
+  }
+
+  .board-table td {
+    padding: 0.3rem 0;
+    border-bottom: none;
+  }
+
+  .board-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-bottom: 0.15rem;
+  }
+
+  .board-mini-bar,
+  .board-timeline {
+    width: 100%;
+  }
+}
+
+/* touch targets — mobile e tablet */
+@media (max-width: 1023px) {
+  .board-filter-row,
+  .board-new-job-btn,
+  .board-job-link {
+    min-height: 48px;
+  }
+
+  .board-filter-row {
+    padding: 0.6rem 0.5rem;
+  }
+}

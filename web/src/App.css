@@ -42,3 +42,18 @@
   cursor: pointer;
   font-size: 0.85rem;
 }
+
+@media (max-width: 639px) {
+  .app-header {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.6rem 1rem;
+  }
+}
+
+.app-logout-btn,
+.app-nav-link {
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+}

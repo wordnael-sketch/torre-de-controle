@@ -61,3 +61,27 @@
 .users-status-badge--invited {
   color: var(--farol-atencao);
 }
+
+@media (max-width: 639px) {
+  .users-invite-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .users-table thead {
+    display: none;
+  }
+
+  .users-table,
+  .users-table tbody,
+  .users-table tr,
+  .users-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .users-table tr {
+    border-bottom: 1px solid var(--border);
+    padding: 0.5rem 0;
+  }
+}

@@ -28,6 +28,7 @@ export function Board() {
   const [name, setName] = useState('');
   const [showNewJobForm, setShowNewJobForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
 
   async function refresh() {
     const [referenceRes, jobsRes] = await Promise.all([api.getReference(), api.listJobs()]);
@@ -119,7 +120,7 @@ export function Board() {
 
   return (
     <div className="board">
-      <aside className="board-sidebar">
+      <aside className={`board-sidebar${showFilters ? ' is-open' : ''}`}>
         <input
           className="board-search"
           placeholder="Cliente, job ou responsável"
@@ -163,6 +164,8 @@ export function Board() {
         </div>
       </aside>
 
+      {showFilters && <div className="board-sidebar-backdrop" onClick={() => setShowFilters(false)} />}
+
       <main className="board-main">
         <header className="board-header">
           <div>
@@ -171,6 +174,14 @@ export function Board() {
               Torre de Controle <span className="board-header-count">/ {activeJobs.length} jobs</span>
             </h1>
           </div>
+          <button
+            type="button"
+            className="board-filters-toggle"
+            aria-expanded={showFilters}
+            onClick={() => setShowFilters((v) => !v)}
+          >
+            Filtros
+          </button>
           <button type="button" className="board-new-job-btn" onClick={() => setShowNewJobForm((v) => !v)}>
             + Novo job
           </button>
@@ -271,7 +282,7 @@ export function Board() {
 
               return (
                 <tr key={job.id}>
-                  <td>
+                  <td data-label="Fases">
                     <div className="board-mini-bar">
                       {phases.map((phase) => (
                         <span
@@ -282,24 +293,24 @@ export function Board() {
                       ))}
                     </div>
                   </td>
-                  <td>
+                  <td data-label="Job">
                     <Link to={`/jobs/${job.id}`} className="board-job-link">
                       <span className="label-caps">{job.client ?? '—'}</span>
                       <span className="board-job-name">{job.name}</span>
                     </Link>
                   </td>
-                  <td>
+                  <td data-label="Etapa atual">
                     <p className="board-job-phase" style={{ color: phaseColor(currentOrder) }}>
                       F{currentOrder} · {job.phaseName ?? ''}
                     </p>
                     {job.triggerLabel && <p className="board-job-next">{job.triggerLabel}</p>}
                   </td>
-                  <td>
+                  <td data-label="Bola com">
                     <span className={`board-bola-tag board-bola-tag--${job.bolaCom}`}>
                       {job.highlightedPersonName ?? (job.bolaCom === 'cliente' ? 'Cliente' : 'Ilha')}
                     </span>
                   </td>
-                  <td>
+                  <td data-label="Relógio de responsabilidade">
                     <div className="board-timeline">
                       <div className="board-timeline-bar">
                         <span className="board-timeline-ilha" style={{ width: `${ilhaPct}%` }} />

@@ -225,3 +225,18 @@
   margin-top: 0.4rem;
   font-size: 0.85rem;
 }
+
+@media (max-width: 639px) {
+  .job-detail-panel {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 1023px) {
+  .job-detail-checklist-item,
+  .job-detail-bola-btn,
+  .job-detail-close,
+  .job-detail-phase-header {
+    min-height: 48px;
+  }
+}
