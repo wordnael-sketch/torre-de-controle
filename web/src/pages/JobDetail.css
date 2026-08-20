@@ -1,0 +1,218 @@
+.job-detail-page {
+  min-height: 100vh;
+  background: var(--bg-subtle);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.job-detail-panel {
+  width: 100%;
+  max-width: 560px;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border);
+  min-height: 100vh;
+  padding: 1.5rem;
+}
+
+.job-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.job-detail-header h1 {
+  margin: 0.15rem 0;
+  font-size: 1.3rem;
+}
+
+.job-detail-phase {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+.job-detail-close {
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--text-secondary);
+  text-decoration: none;
+  padding: 0.25rem;
+}
+
+.job-detail-warning {
+  margin: 0.75rem 0 0;
+  font-size: 0.85rem;
+}
+
+.job-detail-warning--red {
+  color: var(--farol-travado);
+  font-weight: 600;
+}
+
+.job-detail-warning--amber {
+  color: var(--farol-atencao);
+}
+
+.job-detail-link-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+  font-size: 0.8rem;
+  margin-top: 0.5rem;
+}
+
+.job-detail-error {
+  color: var(--farol-travado);
+}
+
+.job-detail-bola-toggle {
+  display: flex;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+
+.job-detail-bola-btn {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  cursor: pointer;
+}
+
+.job-detail-bola-btn.is-active {
+  background: var(--fase-4);
+  color: var(--text-inverse);
+  border-color: var(--fase-4);
+}
+
+.job-detail-bola-btn--cliente.is-active {
+  background: var(--farol-atencao);
+  border-color: var(--farol-atencao);
+}
+
+.job-detail-paste {
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 1rem 0;
+  margin: 1rem 0;
+}
+
+.job-detail-paste textarea {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin: 0.4rem 0;
+  resize: vertical;
+}
+
+.job-detail-suggestions {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.job-detail-suggestions li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.job-detail-suggestion-badge {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  background: var(--fase-4);
+  color: var(--text-inverse);
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--radius-sm);
+}
+
+.job-detail-phase-block {
+  border-bottom: 1px solid var(--border);
+}
+
+.job-detail-phase-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.6rem 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  font-weight: 600;
+}
+
+.job-detail-phase-name {
+  flex: 1;
+}
+
+.job-detail-phase-count {
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  font-weight: 400;
+  font-size: 0.8rem;
+}
+
+.job-detail-phase-body {
+  padding-bottom: 0.75rem;
+}
+
+.job-detail-phase-roles {
+  margin: 0 0 0.5rem;
+}
+
+.job-detail-checklist-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.job-detail-checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.3rem 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-primary);
+}
+
+.job-detail-checklist-item.is-checked {
+  color: var(--text-secondary);
+  text-decoration: line-through;
+}
+
+.job-detail-checkbox {
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  flex: 0 0 auto;
+}
+
+.job-detail-role-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.4rem;
+  font-size: 0.85rem;
+}

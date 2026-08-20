@@ -13,9 +13,11 @@ vi.mock('../src/api/client', async () => {
       getJob: vi.fn(),
       getReference: vi.fn(),
       listPeople: vi.fn(),
-      advanceJob: vi.fn(),
       setJobStatus: vi.fn(),
       assignRole: vi.fn(),
+      setBolaCom: vi.fn(),
+      setLastActivity: vi.fn(),
+      classifyJob: vi.fn(),
     },
   };
 });
@@ -36,8 +38,11 @@ const jobDetail = {
   completedAt: null,
   alertLevel: 'green' as const,
   highlightedPersonName: 'Anne',
+  bolaCom: 'ilha' as const,
+  lastWhatsappActivityAt: null,
   actionRequired: 'Preenchimento do Briefing Padronizado.',
   triggerLabel: 'Avançar para: Briefing Recebido',
+  bolaComDayCounts: { ilhaDays: 3, clienteDays: 0, currentSide: 'ilha' as const, currentStreakDays: 3 },
   roleAssignments: [
     { area: 'Comercial', personId: 5, personName: 'Anne' },
     { area: 'Produção Executiva', personId: null, personName: null },
@@ -75,9 +80,11 @@ describe('JobDetailPage', () => {
     mockedApi.getJob.mockReset();
     mockedApi.getReference.mockReset();
     mockedApi.listPeople.mockReset();
-    mockedApi.advanceJob.mockReset();
     mockedApi.setJobStatus.mockReset();
     mockedApi.assignRole.mockReset();
+    mockedApi.setBolaCom.mockReset();
+    mockedApi.setLastActivity.mockReset();
+    mockedApi.classifyJob.mockReset();
 
     mockedApi.getJob.mockResolvedValue({ job: jobDetail });
     mockedApi.getReference.mockResolvedValue({ phases: referencePhases });
@@ -89,84 +96,84 @@ describe('JobDetailPage', () => {
     });
   });
 
-  it('shows the current status, action required, and trigger button', async () => {
+  it('shows the job name, phase, and checklist for the current phase', async () => {
     renderJobDetail();
 
-    expect(await screen.findByText('Prospecção')).toBeInTheDocument();
-    expect(await screen.findByText(/Preenchimento do Briefing Padronizado/)).toBeInTheDocument();
-    expect(await screen.findByRole('button', { name: 'Avançar para: Briefing Recebido' })).toBeInTheDocument();
+    expect(await screen.findByText('Colgate - Color Correct Wave 2')).toBeInTheDocument();
+    expect(await screen.findByText(/FASE 1/)).toBeInTheDocument();
+    expect(await screen.findByText('1/2')).toBeInTheDocument();
   });
 
-  it('advances the status when the trigger button is clicked', async () => {
-    mockedApi.advanceJob.mockResolvedValue({ job: { ...jobDetail, statusId: 11, statusName: 'Briefing Recebido' } });
+  it('advances the status when an unchecked checklist item is clicked', async () => {
+    mockedApi.setJobStatus.mockResolvedValue({ job: { ...jobDetail, statusId: 11 } });
     const user = userEvent.setup();
 
     renderJobDetail();
 
-    await user.click(await screen.findByRole('button', { name: 'Avançar para: Briefing Recebido' }));
+    await user.click(await screen.findByText('Briefing Recebido'));
 
-    await waitFor(() => expect(mockedApi.advanceJob).toHaveBeenCalledWith(1, undefined));
+    await waitFor(() => expect(mockedApi.setJobStatus).toHaveBeenCalledWith(1, 11));
   });
 
-  it('shows the role assignments for the current phase', async () => {
+  it('shows the role assignment dropdowns for the current phase', async () => {
     renderJobDetail();
 
-    expect(await screen.findByText('Comercial')).toBeInTheDocument();
-    expect(await screen.findByText('Produção Executiva')).toBeInTheDocument();
+    expect(await screen.findByLabelText('Comercial')).toBeInTheDocument();
+    expect(await screen.findByLabelText('Produção Executiva')).toBeInTheDocument();
   });
 
-  it('shows the status history', async () => {
-    renderJobDetail();
-
-    // "Prospecção" appears both in the current-status line and in the history
-    // entry below it — asserting 2 matches proves the history list actually
-    // rendered, not just the status line.
-    await waitFor(() => expect(screen.getAllByText(/Prospecção/)).toHaveLength(2));
-  });
-
-  it('shows the trigger button when there is a next status in the same phase', async () => {
-    mockedApi.getJob.mockResolvedValue({
-      job: { ...jobDetail, statusId: 11, statusName: 'Briefing Recebido', triggerLabel: 'Avançar para: Orçamento e Decupagem' },
+  it('toggles bola-com when a toggle button is clicked', async () => {
+    mockedApi.setBolaCom.mockResolvedValue({
+      job: { ...jobDetail, bolaCom: 'cliente' },
+      bolaComDayCounts: { ilhaDays: 3, clienteDays: 0, currentSide: 'cliente', currentStreakDays: 0 },
     });
-    mockedApi.getReference.mockResolvedValue({
-      phases: [
-        {
-          ...referencePhases[0],
-          statuses: [
-            ...referencePhases[0].statuses,
-            { id: 12, phaseId: 1, order: 3, name: 'Orçamento e Decupagem', actionRequired: '', triggerLabel: '', primaryRole: 'Produção Executiva' },
-            { id: 13, phaseId: 1, order: 4, name: 'Defesa da Proposta', actionRequired: '', triggerLabel: 'Tocar a Buzina', primaryRole: 'Comercial' },
-          ],
-        },
+    const user = userEvent.setup();
+
+    renderJobDetail();
+
+    await user.click(await screen.findByText(/Bola com o cliente/));
+
+    await waitFor(() => expect(mockedApi.setBolaCom).toHaveBeenCalledWith(1, 'cliente'));
+  });
+
+  it('shows the stuck warning only when alertLevel is not green', async () => {
+    mockedApi.getJob.mockResolvedValue({ job: { ...jobDetail, alertLevel: 'red' } });
+
+    renderJobDetail();
+
+    expect(await screen.findByText(/dias parado com a Ilha/)).toBeInTheDocument();
+  });
+
+  it('does not show the WhatsApp inactivity line when lastWhatsappActivityAt is null', async () => {
+    renderJobDetail();
+
+    await screen.findByText('Colgate - Color Correct Wave 2');
+    expect(screen.queryByText(/Grupo sem movimento/)).not.toBeInTheDocument();
+  });
+
+  it('shows the WhatsApp inactivity line when lastWhatsappActivityAt is set', async () => {
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    mockedApi.getJob.mockResolvedValue({ job: { ...jobDetail, lastWhatsappActivityAt: twoHoursAgo } });
+
+    renderJobDetail();
+
+    expect(await screen.findByText(/Grupo sem movimento há/)).toBeInTheDocument();
+  });
+
+  it('classifies pasted text and shows suggestions', async () => {
+    mockedApi.classifyJob.mockResolvedValue({
+      suggestions: [
+        { tipo: 'checklist_item', valor: 'Briefing Recebido', confidence: 0.7, evidencia: 'texto', outcome: 'pendente' },
       ],
     });
+    const user = userEvent.setup();
 
     renderJobDetail();
 
-    await screen.findByText('Briefing Recebido');
-    expect(screen.getByRole('button', { name: 'Avançar para: Orçamento e Decupagem' })).toBeInTheDocument();
-  });
+    await user.type(await screen.findByLabelText('Colar mensagens do WhatsApp'), 'Briefing recebido ontem');
+    await user.click(screen.getByRole('button', { name: 'Analisar com IA' }));
 
-  it('does not render a trigger button at the last status of a phase', async () => {
-    mockedApi.getJob.mockResolvedValue({
-      job: { ...jobDetail, statusId: 13, statusName: 'Defesa da Proposta', triggerLabel: 'Tocar a Buzina' },
-    });
-    mockedApi.getReference.mockResolvedValue({
-      phases: [
-        {
-          ...referencePhases[0],
-          statuses: [
-            ...referencePhases[0].statuses,
-            { id: 12, phaseId: 1, order: 3, name: 'Orçamento e Decupagem', actionRequired: '', triggerLabel: '', primaryRole: 'Produção Executiva' },
-            { id: 13, phaseId: 1, order: 4, name: 'Defesa da Proposta', actionRequired: '', triggerLabel: 'Tocar a Buzina', primaryRole: 'Comercial' },
-          ],
-        },
-      ],
-    });
-
-    renderJobDetail();
-
-    await screen.findByText('Defesa da Proposta');
-    expect(screen.queryByRole('button', { name: 'Tocar a Buzina' })).not.toBeInTheDocument();
+    await waitFor(() => expect(mockedApi.classifyJob).toHaveBeenCalledWith(1, 'Briefing recebido ontem'));
+    expect(await screen.findByRole('button', { name: 'Aplicar' })).toBeInTheDocument();
   });
 });

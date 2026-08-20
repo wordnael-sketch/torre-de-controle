@@ -1,15 +1,31 @@
-import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { api, type JobDetail, type Phase, type Person } from '../api/client';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
+import {
+  api,
+  type ClassifySuggestion,
+  type JobDetail as JobDetailType,
+  type Phase,
+  type Person,
+} from '../api/client';
+import { phaseColor } from '../theme/phase';
+import './JobDetail.css';
+
+function hoursSince(iso: string): number {
+  return Math.floor((Date.now() - new Date(iso).getTime()) / (1000 * 60 * 60));
+}
 
 export function JobDetailPage() {
   const { id } = useParams<{ id: string }>();
   const jobId = Number(id);
 
-  const [job, setJob] = useState<JobDetail | null>(null);
+  const [job, setJob] = useState<JobDetailType | null>(null);
   const [phases, setPhases] = useState<Phase[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [expandedPhaseId, setExpandedPhaseId] = useState<number | null>(null);
+  const [pasteText, setPasteText] = useState('');
+  const [suggestions, setSuggestions] = useState<ClassifySuggestion[] | null>(null);
+  const [classifying, setClassifying] = useState(false);
 
   async function refresh() {
     const [jobRes, referenceRes, peopleRes] = await Promise.all([
@@ -20,29 +36,58 @@ export function JobDetailPage() {
     setJob(jobRes.job);
     setPhases(referenceRes.phases);
     setPeople(peopleRes.people);
+    setExpandedPhaseId((current) => current ?? jobRes.job.phaseId);
   }
 
   useEffect(() => {
     refresh().catch(() => setError('Não foi possível carregar o job.'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
 
-  async function handleAdvance() {
-    setError(null);
-    try {
-      await api.advanceJob(jobId, undefined);
-      await refresh();
-    } catch {
-      setError('Não foi possível avançar o status.');
-    }
-  }
+  const currentPhaseOrder = useMemo(
+    () => phases.find((p) => p.id === job?.phaseId)?.order ?? 0,
+    [phases, job],
+  );
 
-  async function handleManualStatus(statusId: number) {
+  async function handleStatusClick(statusId: number) {
+    if (!job || statusId === job.statusId) return;
     setError(null);
     try {
       await api.setJobStatus(jobId, statusId);
       await refresh();
     } catch {
-      setError('Não foi possível mudar o status manualmente.');
+      setError('Não foi possível mudar o status.');
+    }
+  }
+
+  async function handleBolaComToggle(side: 'ilha' | 'cliente') {
+    if (!job || side === job.bolaCom) return;
+    setError(null);
+    try {
+      await api.setBolaCom(jobId, side);
+      await refresh();
+    } catch {
+      setError('Não foi possível trocar a bola.');
+    }
+  }
+
+  async function handleSetLastActivityNow() {
+    setError(null);
+    try {
+      await api.setLastActivity(jobId, new Date().toISOString());
+      await refresh();
+    } catch {
+      setError('Não foi possível atualizar a última atividade.');
+    }
+  }
+
+  async function handleClearLastActivity() {
+    setError(null);
+    try {
+      await api.setLastActivity(jobId, null);
+      await refresh();
+    } catch {
+      setError('Não foi possível limpar a última atividade.');
     }
   }
 
@@ -56,96 +101,246 @@ export function JobDetailPage() {
     }
   }
 
-  if (!job) {
-    return error ? <p role="alert">{error}</p> : <p>Carregando...</p>;
+  async function handleClassify() {
+    if (!pasteText.trim()) return;
+    setError(null);
+    setClassifying(true);
+    try {
+      const res = await api.classifyJob(jobId, pasteText);
+      setSuggestions(res.suggestions);
+      setPasteText('');
+      await refresh();
+    } catch {
+      setError('Não foi possível analisar o texto colado.');
+    } finally {
+      setClassifying(false);
+    }
   }
 
-  const allStatuses = phases.flatMap((phase) => phase.statuses);
-  const currentPhase = phases.find((phase) => phase.id === job.phaseId);
-  const currentStatusInPhase = currentPhase?.statuses.find((status) => status.id === job.statusId);
-  const hasNextStatusInPhase = Boolean(
-    currentPhase &&
-      currentStatusInPhase &&
-      currentPhase.statuses.some((status) => status.order === currentStatusInPhase.order + 1),
-  );
-  // Exclude the job's current status from the manual selector: it's not a
-  // meaningful "change to" target, and keeping it out avoids duplicating the
-  // status name's text in the DOM (it's already shown in the status line above).
-  const selectableStatuses = allStatuses.filter((status) => status.id !== job.statusId);
+  async function handleApplySuggestion(suggestion: ClassifySuggestion) {
+    setError(null);
+    try {
+      if (suggestion.tipo === 'bola_com' && (suggestion.valor === 'ilha' || suggestion.valor === 'cliente')) {
+        await api.setBolaCom(jobId, suggestion.valor);
+      } else {
+        const target = phases.flatMap((p) => p.statuses).find((s) => s.name === suggestion.valor);
+        if (target) await api.setJobStatus(jobId, target.id);
+      }
+      setSuggestions((prev) => prev?.filter((s) => s !== suggestion) ?? null);
+      await refresh();
+    } catch {
+      setError('Não foi possível aplicar a sugestão.');
+    }
+  }
+
+  function dismissSuggestion(suggestion: ClassifySuggestion) {
+    setSuggestions((prev) => prev?.filter((s) => s !== suggestion) ?? null);
+  }
+
   const peopleByArea = (area: string) => people.filter((p) => p.area === area && p.active);
 
+  if (!job) {
+    return error ? (
+      <p role="alert">{error}</p>
+    ) : (
+      <p>Carregando...</p>
+    );
+  }
+
+  const counts = job.bolaComDayCounts;
+  const isStuck = job.alertLevel !== 'green';
+  const pendingSuggestions = suggestions?.filter((s) => s.outcome === 'pendente') ?? [];
+  const appliedSuggestions = suggestions?.filter((s) => s.outcome === 'auto_aplicado') ?? [];
+
+  const currentStatusOrder =
+    phases.find((p) => p.id === job.phaseId)?.statuses.find((s) => s.id === job.statusId)?.order ?? 0;
+
   return (
-    <div style={{ maxWidth: 720, margin: '2rem auto', padding: '0 1rem' }}>
-      <h1>{job.name}</h1>
-      <p>
-        {job.phaseName} — <strong>{job.statusName}</strong>
-      </p>
+    <div className="job-detail-page">
+      <div className="job-detail-panel">
+        <div className="job-detail-header">
+          <div>
+            <p className="label-caps">
+              {job.client ?? 'Sem cliente'} · {job.code ?? `J${job.id}`}
+            </p>
+            <h1>{job.name}</h1>
+            <p className="job-detail-phase" style={{ color: phaseColor(currentPhaseOrder) }}>
+              FASE {currentPhaseOrder} · {job.phaseName?.toUpperCase()}
+            </p>
+          </div>
+          <Link to="/" className="job-detail-close" aria-label="Fechar">
+            ×
+          </Link>
+        </div>
 
-      {job.actionRequired && <p>{job.actionRequired}</p>}
+        {isStuck && counts && (
+          <p className="job-detail-warning job-detail-warning--red">
+            {counts.currentStreakDays} dias parado com {job.bolaCom === 'cliente' ? 'o cliente' : 'a Ilha'}
+          </p>
+        )}
 
-      {error && <p role="alert">{error}</p>}
+        {job.lastWhatsappActivityAt && (
+          <p className="job-detail-warning job-detail-warning--amber">
+            Grupo sem movimento há {hoursSince(job.lastWhatsappActivityAt)}h{' '}
+            <button type="button" className="job-detail-link-btn" onClick={handleClearLastActivity}>
+              limpar
+            </button>
+          </p>
+        )}
+        {!job.lastWhatsappActivityAt && (
+          <button type="button" className="job-detail-link-btn" onClick={handleSetLastActivityNow}>
+            Marcar atividade do grupo agora
+          </button>
+        )}
 
-      {job.triggerLabel && hasNextStatusInPhase && (
-        <button type="button" onClick={handleAdvance}>
-          {job.triggerLabel}
-        </button>
-      )}
+        {error && (
+          <p role="alert" className="job-detail-error">
+            {error}
+          </p>
+        )}
 
-      <div style={{ marginTop: '1rem' }}>
-        <label htmlFor="manual-status">Mudar status manualmente</label>
-        <select
-          id="manual-status"
-          value=""
-          onChange={(e) => {
-            if (e.target.value) {
-              void handleManualStatus(Number(e.target.value));
-            }
-          }}
-        >
-          <option value="">Selecione...</option>
-          {selectableStatuses.map((status) => (
-            <option key={status.id} value={status.id}>
-              {status.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <h2>Responsáveis nesta fase</h2>
-      <ul>
-        {job.roleAssignments.map((assignment) => (
-          <li key={assignment.area}>
-            <span>{assignment.area}</span>{': '}
-            <select
-              aria-label={assignment.area}
-              value={assignment.personId ?? ''}
-              onChange={(e) =>
-                void handleAssignRole(assignment.area, e.target.value ? Number(e.target.value) : null)
-              }
+        {counts && (
+          <div className="job-detail-bola-toggle">
+            <button
+              type="button"
+              className={`job-detail-bola-btn${job.bolaCom === 'ilha' ? ' is-active' : ''}`}
+              onClick={() => handleBolaComToggle('ilha')}
             >
-              <option value="">(não atribuído)</option>
-              {peopleByArea(assignment.area).map((person) => (
-                <option key={person.id} value={person.id}>
-                  {person.name}
-                </option>
-              ))}
-            </select>
-          </li>
-        ))}
-      </ul>
+              Bola com a Ilha · {counts.ilhaDays}d
+            </button>
+            <button
+              type="button"
+              className={`job-detail-bola-btn job-detail-bola-btn--cliente${job.bolaCom === 'cliente' ? ' is-active' : ''}`}
+              onClick={() => handleBolaComToggle('cliente')}
+            >
+              Bola com o cliente · {counts.clienteDays}d
+            </button>
+          </div>
+        )}
 
-      <h2>Histórico</h2>
-      <ul>
-        {job.statusHistory.map((entry) => {
-          const toStatus = allStatuses.find((s) => s.id === entry.toStatusId);
-          return (
-            <li key={entry.id}>
-              {new Date(entry.changedAt).toLocaleString('pt-BR')} — {toStatus?.name ?? entry.toStatusId}
-              {entry.note ? ` (${entry.note})` : ''}
-            </li>
-          );
-        })}
-      </ul>
+        <div className="job-detail-paste">
+          <label htmlFor="paste-text" className="label-caps">
+            Colar mensagens do WhatsApp
+          </label>
+          <textarea
+            id="paste-text"
+            value={pasteText}
+            onChange={(e) => setPasteText(e.target.value)}
+            rows={3}
+            placeholder="Cole aqui o texto da conversa do grupo..."
+          />
+          <button type="button" onClick={() => void handleClassify()} disabled={classifying || !pasteText.trim()}>
+            {classifying ? 'Analisando...' : 'Analisar com IA'}
+          </button>
+
+          {appliedSuggestions.length > 0 && (
+            <ul className="job-detail-suggestions job-detail-suggestions--applied">
+              {appliedSuggestions.map((s, i) => (
+                <li key={i}>
+                  <span className="job-detail-suggestion-badge">aplicado pela IA</span> {s.valor}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {pendingSuggestions.length > 0 && (
+            <ul className="job-detail-suggestions">
+              {pendingSuggestions.map((s, i) => (
+                <li key={i}>
+                  <span>{s.valor}</span>
+                  <button type="button" onClick={() => void handleApplySuggestion(s)}>
+                    Aplicar
+                  </button>
+                  <button type="button" onClick={() => dismissSuggestion(s)}>
+                    Descartar
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="job-detail-checklist">
+          {phases.map((phase) => {
+            const isCurrentPhase = phase.id === job.phaseId;
+            const phaseIsPast = phase.order < currentPhaseOrder;
+            const isExpanded = expandedPhaseId === phase.id;
+            const itemsDone = isCurrentPhase
+              ? phase.statuses.filter((s) => s.order <= currentStatusOrder).length
+              : phaseIsPast
+                ? phase.statuses.length
+                : 0;
+
+            return (
+              <section key={phase.id} className="job-detail-phase-block">
+                <button
+                  type="button"
+                  className="job-detail-phase-header"
+                  onClick={() => setExpandedPhaseId(isExpanded ? null : phase.id)}
+                >
+                  <span className="board-swatch" style={{ background: phaseColor(phase.order) }} />
+                  <span className="job-detail-phase-name">{phase.name}</span>
+                  <span className="job-detail-phase-count">
+                    {itemsDone}/{phase.statuses.length}
+                  </span>
+                </button>
+
+                {isExpanded && (
+                  <div className="job-detail-phase-body">
+                    {phase.roles.length > 0 && (
+                      <p className="label-caps job-detail-phase-roles">{phase.roles.join(' · ')}</p>
+                    )}
+
+                    <ul className="job-detail-checklist-items">
+                      {phase.statuses.map((status) => {
+                        const checked = isCurrentPhase
+                          ? status.order <= currentStatusOrder
+                          : phaseIsPast;
+                        return (
+                          <li key={status.id}>
+                            <button
+                              type="button"
+                              className={`job-detail-checklist-item${checked ? ' is-checked' : ''}`}
+                              onClick={() => void handleStatusClick(status.id)}
+                            >
+                              <span className="job-detail-checkbox">{checked ? '✓' : ''}</span>
+                              {status.name}
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+
+                    {isCurrentPhase &&
+                      phase.roles.map((area) => {
+                        const assignment = job.roleAssignments.find((a) => a.area === area);
+                        return (
+                          <div key={area} className="job-detail-role-row">
+                            <span>{area}</span>
+                            <select
+                              aria-label={area}
+                              value={assignment?.personId ?? ''}
+                              onChange={(e) =>
+                                void handleAssignRole(area, e.target.value ? Number(e.target.value) : null)
+                              }
+                            >
+                              <option value="">(não atribuído)</option>
+                              {peopleByArea(area).map((person) => (
+                                <option key={person.id} value={person.id}>
+                                  {person.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+              </section>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
