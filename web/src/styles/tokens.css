@@ -10,8 +10,8 @@
   --text-inverse: #ffffff;
 
   /* farol (semantic, not brand-derived) */
-  --farol-travado: #dc2626;
-  --farol-atencao: #f59e0b;
+  --farol-travado: #d31f1f;
+  --farol-atencao: #a06707;
   --farol-fluindo: #16a34a;
   --farol-travado-bg: #fef2f2;
   --farol-atencao-bg: #fffbeb;
@@ -20,11 +20,11 @@
   --fase-1: #d6236f; /* Comercial e Orçamento — magenta/rosa */
   --fase-2: #f0932b; /* Dotação e Burocracia — laranja */
   --fase-3: #8fbf4f; /* Pré-Produção — verde-amarelado */
-  --fase-4: #1b9e8c; /* Captação — teal */
+  --fase-4: #147a6c; /* Captação — teal (darkened from #1b9e8c for AA contrast under white text) */
   --fase-5: #4a3f9e; /* Pós-Produção — índigo/roxo-azulado */
   --fase-6: #7a2f8f; /* Encerramento — roxo profundo */
 
-  --font-heading: 'Arquivo', system-ui, -apple-system, sans-serif;
+  --font-heading: 'Archivo', system-ui, -apple-system, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, 'Courier New', monospace;
 
   --radius-sm: 4px;
@@ -32,6 +32,7 @@
   --radius-lg: 12px;
   --shadow-sm: 0 1px 2px rgba(20, 20, 30, 0.06);
   --shadow-md: 0 4px 16px rgba(20, 20, 30, 0.1);
+  --focus-ring: 0 0 0 3px rgba(27, 158, 140, 0.5);
 }
 
 *,
@@ -50,7 +51,7 @@ body {
   background: var(--bg-subtle);
   color: var(--text-primary);
   font-family: var(--font-heading);
-  font-size: 14px;
+  font-size: 16px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
@@ -74,4 +75,10 @@ a {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-secondary);
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius-sm);
 }

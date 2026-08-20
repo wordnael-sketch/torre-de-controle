@@ -129,7 +129,7 @@ export function Board() {
           aria-label="Buscar"
         />
 
-        <div className="board-filter-group">
+        <nav className="board-filter-group" aria-label="Filtro por farol">
           <h2 className="label-caps">Farol</h2>
           {FAROL_ORDER.map((level) => (
             <button
@@ -144,9 +144,9 @@ export function Board() {
               <span className="board-filter-count">{farolCounts[level]}</span>
             </button>
           ))}
-        </div>
+        </nav>
 
-        <div className="board-filter-group">
+        <nav className="board-filter-group" aria-label="Filtro por fase">
           <h2 className="label-caps">Fase</h2>
           {phases.map((phase) => (
             <button
@@ -161,7 +161,7 @@ export function Board() {
               <span className="board-filter-count">{faseCounts.get(phase.id) ?? 0}</span>
             </button>
           ))}
-        </div>
+        </nav>
       </aside>
 
       {showFilters && <div className="board-sidebar-backdrop" onClick={() => setShowFilters(false)} />}
