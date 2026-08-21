@@ -86,6 +86,7 @@ export interface Job {
   lastWhatsappActivityAt: string | null;
   actionRequired: string | null;
   triggerLabel: string | null;
+  trelloCardId: string | null;
   atendimentoPersonId: number | null;
   atendimentoPersonName: string | null;
   bolaComDayCounts?: BolaComDayCounts;
@@ -119,6 +120,18 @@ export interface ClassifySuggestion {
   confidence: number;
   evidencia: string;
   outcome: SuggestionOutcome;
+}
+
+export interface TrelloCandidate {
+  id: string;
+  name: string;
+  listName: string;
+  strongMatch: boolean;
+}
+
+export interface TrelloCardSummary {
+  name: string;
+  listName: string;
 }
 
 export interface Status {
@@ -191,6 +204,18 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ text }),
     }),
+  getTrelloCandidates: (id: number) =>
+    request<{ candidates: TrelloCandidate[] }>(`/api/jobs/${id}/trello-candidates`),
+  setTrelloLink: (id: number, trelloCardId: string | null) =>
+    request<{ job: Job }>(`/api/jobs/${id}/trello-link`, {
+      method: 'POST',
+      body: JSON.stringify({ trelloCardId }),
+    }),
+  syncTrello: (id: number) =>
+    request<{ suggestions: ClassifySuggestion[]; trelloCard: TrelloCardSummary }>(
+      `/api/jobs/${id}/trello-sync`,
+      { method: 'POST' },
+    ),
   getReference: () => request<{ phases: Phase[] }>('/api/reference'),
   listPeople: () => request<{ people: Person[] }>('/api/people'),
   createPerson: (input: { name: string; area: string }) =>

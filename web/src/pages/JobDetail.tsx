@@ -8,6 +8,8 @@ import {
   type JobDetail as JobDetailType,
   type Phase,
   type Person,
+  type TrelloCandidate,
+  type TrelloCardSummary,
 } from '../api/client';
 import { phaseColor } from '../theme/phase';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -60,6 +62,9 @@ export function JobDetailPage() {
   const [suggestions, setSuggestions] = useState<ClassifySuggestion[] | null>(null);
   const [classifying, setClassifying] = useState(false);
   const [pendingCompleteStatusId, setPendingCompleteStatusId] = useState<number | null>(null);
+  const [trelloCandidates, setTrelloCandidates] = useState<TrelloCandidate[] | null>(null);
+  const [trelloCard, setTrelloCard] = useState<TrelloCardSummary | null>(null);
+  const trelloSyncedRef = useRef(false);
 
   useEffect(() => {
     pendingCompleteStatusIdRef.current = pendingCompleteStatusId;
@@ -75,9 +80,45 @@ export function JobDetailPage() {
     setPhases(referenceRes.phases);
     setPeople(peopleRes.people);
     setExpandedPhaseId((current) => current ?? jobRes.job.phaseId);
+
+    if (!trelloSyncedRef.current) {
+      trelloSyncedRef.current = true;
+      void syncOrLinkTrello(jobRes.job);
+    }
+  }
+
+  async function syncOrLinkTrello(currentJob: JobDetailType) {
+    if (currentJob.trelloCardId) {
+      try {
+        const res = await api.syncTrello(currentJob.id);
+        setSuggestions(res.suggestions);
+        setTrelloCard(res.trelloCard);
+        await refresh();
+      } catch {
+        // Sincronização automática falhou (Trello não configurado, indisponível, ou IA não
+        // configurada) — falha silenciosa é aceitável aqui: é uma tentativa em segundo plano,
+        // não uma ação que o usuário pediu diretamente. O painel de colar mensagens do
+        // WhatsApp continua disponível como alternativa manual.
+      }
+      return;
+    }
+
+    try {
+      const res = await api.getTrelloCandidates(currentJob.id);
+      const strongMatches = res.candidates.filter((c) => c.strongMatch);
+      if (strongMatches.length === 1) {
+        await api.setTrelloLink(currentJob.id, strongMatches[0].id);
+        await refresh();
+      } else if (res.candidates.length > 0) {
+        setTrelloCandidates(res.candidates);
+      }
+    } catch {
+      // Trello não configurado ou indisponível — não mostra nada relacionado a Trello.
+    }
   }
 
   useEffect(() => {
+    trelloSyncedRef.current = false;
     refresh().catch(() => setError('Não foi possível carregar o job.'));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
@@ -166,6 +207,29 @@ export function JobDetailPage() {
       await refresh();
     } catch {
       setError('Não foi possível atribuir a pessoa a esse papel.');
+    }
+  }
+
+  async function handleLinkTrello(trelloCardId: string) {
+    setError(null);
+    try {
+      await api.setTrelloLink(jobId, trelloCardId);
+      setTrelloCandidates(null);
+      await refresh();
+    } catch {
+      setError('Não foi possível vincular o card do Trello.');
+    }
+  }
+
+  async function handleUnlinkTrello() {
+    setError(null);
+    try {
+      await api.setTrelloLink(jobId, null);
+      setTrelloCard(null);
+      trelloSyncedRef.current = false;
+      await refresh();
+    } catch {
+      setError('Não foi possível desvincular o card do Trello.');
     }
   }
 
@@ -323,6 +387,33 @@ export function JobDetailPage() {
           <p role="alert" className="job-detail-error">
             {error}
           </p>
+        )}
+
+        {trelloCard && (
+          <p className="job-detail-trello-indicator label-caps">
+            Vinculado ao card: {trelloCard.name} ({trelloCard.listName}){' '}
+            <button type="button" className="job-detail-link-btn" onClick={() => void handleUnlinkTrello()}>
+              desvincular
+            </button>
+          </p>
+        )}
+
+        {trelloCandidates && trelloCandidates.length > 0 && (
+          <div className="job-detail-trello-picker">
+            <p className="label-caps">Vincular ao card do Trello</p>
+            <ul>
+              {trelloCandidates.map((c) => (
+                <li key={c.id}>
+                  <button type="button" onClick={() => void handleLinkTrello(c.id)}>
+                    {c.name} <span className="job-detail-trello-list">({c.listName})</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <button type="button" onClick={() => setTrelloCandidates([])}>
+              Nenhum desses
+            </button>
+          </div>
         )}
 
         {counts && (

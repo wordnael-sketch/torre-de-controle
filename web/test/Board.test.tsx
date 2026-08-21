@@ -21,6 +21,9 @@ vi.mock('../src/api/client', async () => {
       setBolaCom: vi.fn(),
       setLastActivity: vi.fn(),
       classifyJob: vi.fn(),
+      getTrelloCandidates: vi.fn(),
+      setTrelloLink: vi.fn(),
+      syncTrello: vi.fn(),
     },
   };
 });
@@ -53,6 +56,7 @@ function makeJob(overrides: Record<string, unknown> = {}) {
     lastWhatsappActivityAt: null,
     actionRequired: null,
     triggerLabel: 'Avançar para: Briefing Recebido',
+    trelloCardId: null,
     bolaComDayCounts: { ilhaDays: 1, clienteDays: 0, currentSide: 'ilha' as const, currentStreakDays: 1 },
     ...overrides,
   };
@@ -81,6 +85,10 @@ describe('Board', () => {
     mockedApi.setBolaCom.mockReset();
     mockedApi.setLastActivity.mockReset();
     mockedApi.classifyJob.mockReset();
+    mockedApi.getTrelloCandidates.mockReset();
+    mockedApi.setTrelloLink.mockReset();
+    mockedApi.syncTrello.mockReset();
+    mockedApi.getTrelloCandidates.mockResolvedValue({ candidates: [] });
   });
 
   it('shows a fase filter row per phase and no jobs when empty', async () => {
@@ -199,6 +207,7 @@ describe('Board', () => {
         lastWhatsappActivityAt: null,
         actionRequired: null,
         triggerLabel: null,
+        trelloCardId: null,
         bolaComDayCounts: { ilhaDays: 0, clienteDays: 0, currentSide: 'ilha', currentStreakDays: 0 },
         roleAssignments: [],
         statusHistory: [],
@@ -243,6 +252,7 @@ describe('Board', () => {
         lastWhatsappActivityAt: null,
         actionRequired: null,
         triggerLabel: null,
+        trelloCardId: null,
         bolaComDayCounts: { ilhaDays: 0, clienteDays: 0, currentSide: 'ilha', currentStreakDays: 0 },
         roleAssignments: [],
         statusHistory: [],

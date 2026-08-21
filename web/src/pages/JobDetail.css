@@ -260,3 +260,35 @@
     min-width: 48px;
   }
 }
+
+.job-detail-trello-indicator {
+  margin: 0.5rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.job-detail-trello-picker {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  margin: 0.75rem 0;
+}
+
+.job-detail-trello-picker ul {
+  list-style: none;
+  margin: 0.5rem 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.job-detail-trello-picker button {
+  text-align: left;
+}
+
+.job-detail-trello-list {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}

@@ -21,6 +21,9 @@ vi.mock('../src/api/client', async () => {
       classifyJob: vi.fn(),
       listJobs: vi.fn(),
       createJob: vi.fn(),
+      getTrelloCandidates: vi.fn(),
+      setTrelloLink: vi.fn(),
+      syncTrello: vi.fn(),
     },
   };
 });
@@ -47,6 +50,7 @@ const jobDetail = {
   lastWhatsappActivityAt: null,
   actionRequired: 'Preenchimento do Briefing Padronizado.',
   triggerLabel: 'Avançar para: Briefing Recebido',
+  trelloCardId: null,
   bolaComDayCounts: { ilhaDays: 3, clienteDays: 0, currentSide: 'ilha' as const, currentStreakDays: 3 },
   roleAssignments: [
     { area: 'Comercial', personId: 5, personName: 'Anne' },
@@ -94,6 +98,9 @@ describe('JobDetailPage', () => {
     mockedApi.classifyJob.mockReset();
     mockedApi.listJobs.mockReset();
     mockedApi.createJob.mockReset();
+    mockedApi.getTrelloCandidates.mockReset();
+    mockedApi.setTrelloLink.mockReset();
+    mockedApi.syncTrello.mockReset();
     mockedApi.listJobs.mockResolvedValue({ jobs: [] });
 
     mockedApi.getJob.mockResolvedValue({ job: jobDetail });
@@ -105,6 +112,7 @@ describe('JobDetailPage', () => {
         { id: 7, name: 'Wilka', area: 'Atendimento', active: true, title: 'Head' },
       ],
     });
+    mockedApi.getTrelloCandidates.mockResolvedValue({ candidates: [] });
   });
 
   it('shows the job name, phase, and checklist for the current phase', async () => {
@@ -332,5 +340,90 @@ describe('JobDetailPage', () => {
 
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('auto-links when exactly one strong Trello match is found', async () => {
+    mockedApi.getTrelloCandidates.mockResolvedValue({
+      candidates: [
+        { id: 'card1', name: 'WPP:: COLGATE:: CAMPANHA', listName: 'Em Captação 2026', strongMatch: true },
+      ],
+    });
+    mockedApi.setTrelloLink.mockResolvedValue({ job: { ...jobDetail, trelloCardId: 'card1' } });
+    mockedApi.syncTrello.mockResolvedValue({
+      suggestions: [],
+      trelloCard: { name: 'WPP:: COLGATE:: CAMPANHA', listName: 'Em Captação 2026' },
+    });
+
+    renderJobDetail();
+
+    await waitFor(() => expect(mockedApi.setTrelloLink).toHaveBeenCalledWith(1, 'card1'));
+  });
+
+  it('shows a picker when multiple Trello candidates are found', async () => {
+    mockedApi.getTrelloCandidates.mockResolvedValue({
+      candidates: [
+        { id: 'card1', name: 'WPP:: COLGATE:: CAMPANHA A', listName: 'Em Captação 2026', strongMatch: false },
+        { id: 'card2', name: 'WPP:: COLGATE:: CAMPANHA B', listName: 'Concluído', strongMatch: false },
+      ],
+    });
+
+    renderJobDetail();
+
+    expect(await screen.findByText('Vincular ao card do Trello')).toBeInTheDocument();
+    expect(screen.getByText(/CAMPANHA A/)).toBeInTheDocument();
+    expect(screen.getByText(/CAMPANHA B/)).toBeInTheDocument();
+  });
+
+  it('links to the chosen card when a picker option is clicked', async () => {
+    mockedApi.getTrelloCandidates.mockResolvedValue({
+      candidates: [
+        { id: 'card1', name: 'WPP:: COLGATE:: CAMPANHA A', listName: 'Em Captação 2026', strongMatch: false },
+      ],
+    });
+    mockedApi.setTrelloLink.mockResolvedValue({ job: { ...jobDetail, trelloCardId: 'card1' } });
+    const user = userEvent.setup();
+
+    renderJobDetail();
+
+    await user.click(await screen.findByText(/CAMPANHA A/));
+
+    await waitFor(() => expect(mockedApi.setTrelloLink).toHaveBeenCalledWith(1, 'card1'));
+  });
+
+  it('syncs automatically and shows the linked card indicator when already linked', async () => {
+    mockedApi.getJob.mockResolvedValue({ job: { ...jobDetail, trelloCardId: 'card1' } });
+    mockedApi.syncTrello.mockResolvedValue({
+      suggestions: [
+        {
+          tipo: 'checklist_item',
+          valor: 'Briefing Recebido',
+          confidence: 0.9,
+          evidencia: 'Trello',
+          outcome: 'auto_aplicado',
+        },
+      ],
+      trelloCard: { name: 'WPP:: COLGATE:: CAMPANHA', listName: 'Em Captação 2026' },
+    });
+
+    renderJobDetail();
+
+    await waitFor(() => expect(mockedApi.syncTrello).toHaveBeenCalledWith(1));
+    expect(await screen.findByText(/Vinculado ao card: WPP:: COLGATE:: CAMPANHA/)).toBeInTheDocument();
+  });
+
+  it('unlinks the Trello card when the unlink action is clicked', async () => {
+    mockedApi.getJob.mockResolvedValue({ job: { ...jobDetail, trelloCardId: 'card1' } });
+    mockedApi.syncTrello.mockResolvedValue({
+      suggestions: [],
+      trelloCard: { name: 'WPP:: COLGATE:: CAMPANHA', listName: 'Em Captação 2026' },
+    });
+    mockedApi.setTrelloLink.mockResolvedValue({ job: { ...jobDetail, trelloCardId: null } });
+    const user = userEvent.setup();
+
+    renderJobDetail();
+
+    await user.click(await screen.findByText('desvincular'));
+
+    await waitFor(() => expect(mockedApi.setTrelloLink).toHaveBeenCalledWith(1, null));
   });
 });
