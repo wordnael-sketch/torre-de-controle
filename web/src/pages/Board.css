@@ -106,9 +106,13 @@
   padding: 0.5rem 1rem;
   border: none;
   border-radius: var(--radius);
-  background: var(--fase-4);
+  background: var(--gradient-ilha);
   color: var(--text-inverse);
   cursor: pointer;
+}
+
+.board-new-job-btn:hover {
+  filter: brightness(1.08);
 }
 
 .board-new-job-form {
@@ -375,7 +379,7 @@
     position: fixed;
     inset: 0;
     z-index: 55;
-    background: rgba(20, 20, 30, 0.4);
+    background: var(--backdrop);
   }
 
   .board-stats {
