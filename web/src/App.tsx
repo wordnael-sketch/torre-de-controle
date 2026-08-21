@@ -5,6 +5,7 @@ import { Login } from './pages/Login';
 import { Board } from './pages/Board';
 import { UsersPage } from './pages/Users';
 import { ToastHost } from './components/Toast';
+import logoIlha from './assets/logo-ilha.jpg';
 import './App.css';
 
 function RequireAuth({ children }: { children: ReactElement }) {
@@ -21,7 +22,10 @@ function RequireAuth({ children }: { children: ReactElement }) {
   return (
     <div className="app-shell">
       <header className="app-header">
-        <span className="app-header-email">{user.email}</span>
+        <div className="app-header-brand">
+          <img src={logoIlha} alt="Ilha Crossmídia" className="app-header-logo" />
+          <span className="app-header-email">{user.email}</span>
+        </div>
         <nav className="app-nav">
           {user.role === 'admin' && (
             <Link to="/usuarios" className="app-nav-link">

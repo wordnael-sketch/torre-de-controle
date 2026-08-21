@@ -28,6 +28,20 @@
   background: var(--gradient-ilha);
 }
 
+.app-header-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.app-header-logo {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  flex: 0 0 auto;
+}
+
 .app-header-email {
   font-size: 0.85rem;
   color: var(--text-secondary);

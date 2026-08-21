@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { GoogleLogin } from '@react-oauth/google';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../api/client';
+import logoIlha from '../assets/logo-ilha.jpg';
 import './Login.css';
 
 export function Login() {
@@ -26,6 +27,7 @@ export function Login() {
   return (
     <div className="login-page">
       <div className="login-card">
+        <img src={logoIlha} alt="Ilha Crossmídia" className="login-logo" />
         <p className="label-caps">Ilha Crossmídia</p>
         <h1>Torre de Controle</h1>
         <p className="login-subtitle">Acompanhamento de Jobs — entre com sua conta @ilhacrossmidia.com.br</p>
