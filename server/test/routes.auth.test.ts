@@ -165,6 +165,65 @@ describe('GET /api/auth/me', () => {
   });
 });
 
+describe('PATCH /api/auth/me/preferences', () => {
+  it('updates the board density preference for the logged-in user', async () => {
+    await withTestTransaction(async (db) => {
+      await inviteUser(db, { email: 'preferencia.teste@ilhacrossmidia.com.br', role: 'member' });
+
+      const app = buildApp(db, async () => ({
+        sub: 'google-sub-preferencia-teste',
+        email: 'preferencia.teste@ilhacrossmidia.com.br',
+        name: 'Pessoa Preferência',
+      }));
+
+      const agent = request.agent(app);
+      await agent.post('/api/auth/google').send({ idToken: 'fake-token' });
+
+      const meBefore = await agent.get('/api/auth/me');
+      expect(meBefore.body.user.boardDensity).toBe('agrupado');
+
+      const res = await agent.patch('/api/auth/me/preferences').send({ boardDensity: 'plano' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.user.boardDensity).toBe('plano');
+
+      const meAfter = await agent.get('/api/auth/me');
+      expect(meAfter.body.user.boardDensity).toBe('plano');
+    });
+  });
+
+  it('rejects a boardDensity value outside the known set', async () => {
+    await withTestTransaction(async (db) => {
+      await inviteUser(db, { email: 'preferencia.invalida.teste@ilhacrossmidia.com.br', role: 'member' });
+
+      const app = buildApp(db, async () => ({
+        sub: 'google-sub-preferencia-invalida-teste',
+        email: 'preferencia.invalida.teste@ilhacrossmidia.com.br',
+        name: 'Pessoa',
+      }));
+
+      const agent = request.agent(app);
+      await agent.post('/api/auth/google').send({ idToken: 'fake-token' });
+
+      const res = await agent.patch('/api/auth/me/preferences').send({ boardDensity: 'compacto' });
+
+      expect(res.status).toBe(400);
+    });
+  });
+
+  it('returns 401 when not logged in', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db, async () => {
+        throw new Error('should not be called');
+      });
+
+      const res = await request(app).patch('/api/auth/me/preferences').send({ boardDensity: 'plano' });
+
+      expect(res.status).toBe(401);
+    });
+  });
+});
+
 describe('POST /api/auth/logout', () => {
   it('clears the session cookie', async () => {
     await withTestTransaction(async (db) => {

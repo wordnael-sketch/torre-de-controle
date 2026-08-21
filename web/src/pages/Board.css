@@ -14,10 +14,9 @@
 
 .board-search {
   width: 100%;
-  padding: 0.5rem 0.75rem;
+  padding: 0.5rem 0.75rem 0.5rem 2rem;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  margin-bottom: 1.5rem;
 }
 
 .board-filter-group {
@@ -76,6 +75,171 @@
   font-size: 0.8rem;
 }
 
+/* barra fixa: busca + pílulas de Farol/Fase + indicadores, acima da
+   tabela, grudada no topo da viewport durante o scroll (position: sticky
+   — não há nada mais fixo acima dela, então ela é o primeiro elemento a
+   "colar" assim que o cabeçalho global sai de vista) */
+.board-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.board-toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.board-toolbar-search {
+  position: relative;
+  flex: 0 1 260px;
+  min-width: 180px;
+}
+
+.board-toolbar-search-icon {
+  position: absolute;
+  left: 0.6rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.board-pill-groups {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.board-pill-group {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.board-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.board-pill:hover {
+  background: var(--bg-hover);
+}
+
+/* estado ativo não depende só de cor: também soma borda colorida, fundo
+   preenchido e peso de fonte — piso de acessibilidade contra
+   daltonismo/monitores mal calibrados */
+.board-pill.is-active {
+  background: var(--bg-hover);
+  border-color: var(--color-primary);
+  font-weight: 600;
+}
+
+.board-pill-count {
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+.board-toolbar-indicators {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-left: auto;
+}
+
+.board-stuck-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--farol-travado);
+  border-radius: 999px;
+  background: var(--farol-travado-bg);
+  color: var(--farol-travado);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.board-contrast-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.board-contrast-toggle.is-active {
+  border-color: var(--color-primary);
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  font-weight: 600;
+}
+
+.board-active-tags {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--border);
+  padding-top: 0.6rem;
+}
+
+.board-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--color-primary);
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+/* alto contraste — pra quem passa o dia com o painel aberto: texto
+   secundário mais claro e bordas de linha mais grossas/visíveis */
+.board--alto-contraste {
+  --text-secondary: #c4c5d1;
+}
+
+.board--alto-contraste .board-table td,
+.board--alto-contraste .board-table th,
+.board--alto-contraste .board-group-header td {
+  border-bottom-width: 2px;
+  border-bottom-color: #4a4c58;
+}
+
 .board-main {
   flex: 1;
   padding: 1.5rem 2rem;
@@ -106,7 +270,7 @@
   padding: 0.5rem 1rem;
   border: none;
   border-radius: var(--radius);
-  background: var(--gradient-ilha);
+  background: var(--color-primary);
   color: var(--text-inverse);
   cursor: pointer;
 }
@@ -221,6 +385,87 @@
   color: var(--farol-atencao);
 }
 
+/* controle único de densidade — um eixo só (agrupado x plano), não um
+   painel de configuração */
+.board-density-toggle {
+  display: inline-flex;
+  gap: 0.25rem;
+  padding: 0.2rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 0.75rem;
+}
+
+.board-density-toggle button {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.board-density-toggle button.is-active {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.board-group-header td {
+  padding: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.board-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border: none;
+  background: var(--bg-hover);
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-primary);
+}
+
+.board-group-title {
+  font-weight: 600;
+}
+
+.board-group-count {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.board-group-common-status {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+/* destaque de exceção dentro de um grupo — tipográfico e de borda, nunca
+   mais uma cor nova: reaproveita o --farol-travado que o pontinho da
+   linha já usa pro mesmo sinal (relógio vermelho / bola com cliente há
+   tempo demais) */
+.board-row--atencao {
+  /* box-shadow, não border: bordas em <tr> não são confiáveis com
+     border-collapse: collapse na tabela */
+  box-shadow: inset 3px 0 0 var(--farol-travado);
+}
+
+.board-row--atencao .board-job-name {
+  font-weight: 700;
+}
+
+/* "avançar para" diferente da maioria do grupo — só tipografia, sem cor nova */
+.board-job-next--diferente {
+  font-style: italic;
+}
+
 .board-table {
   width: 100%;
   border-collapse: collapse;
@@ -233,8 +478,9 @@
 .board-table th {
   text-align: left;
   font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.05em;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-secondary);
   padding: 0.6rem 0.75rem;
@@ -259,15 +505,58 @@
   border-radius: 1px;
 }
 
+.board-job-cell {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
 .board-job-link {
   display: flex;
   flex-direction: column;
   text-decoration: none;
   color: var(--text-primary);
+  min-width: 0;
 }
 
 .board-job-name {
   font-weight: 600;
+}
+
+/* ícone de edição só some/aparece no hover da linha — nunca dispara edição
+   por clique único no nome, que continua abrindo o job (piso: ainda
+   assim precisa de foco visível pra quem navega por teclado) */
+.board-job-edit-btn {
+  flex: 0 0 auto;
+  opacity: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 0.2rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  margin-top: 0.1rem;
+}
+
+tr:hover .board-job-edit-btn,
+.board-job-edit-btn:focus-visible {
+  opacity: 1;
+}
+
+.board-job-edit-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.board-job-name-input {
+  width: 100%;
+  font: inherit;
+  font-weight: 600;
+  padding: 0.2rem 0.4rem;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  color: var(--text-primary);
 }
 
 .board-job-phase {
@@ -288,7 +577,7 @@
   padding: 0.2rem 0.6rem;
   border-radius: var(--radius-sm);
   font-size: 0.8rem;
-  border-left: 3px solid var(--fase-4);
+  border-left: 3px solid var(--color-primary);
 }
 
 .board-bola-tag--cliente {
@@ -308,7 +597,7 @@
 }
 
 .board-timeline-ilha {
-  background: var(--fase-4);
+  background: var(--color-primary);
 }
 
 .board-timeline-cliente {

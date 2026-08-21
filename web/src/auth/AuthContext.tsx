@@ -1,11 +1,12 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { api, onSessionExpired, type User } from '../api/client';
+import { api, onSessionExpired, type BoardDensity, type User } from '../api/client';
 
 interface AuthContextValue {
   user: User | null;
   loading: boolean;
   loginWithGoogle: (idToken: string) => Promise<void>;
   logout: () => Promise<void>;
+  updateBoardDensity: (boardDensity: BoardDensity) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -34,8 +35,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }
 
+  async function updateBoardDensity(boardDensity: BoardDensity) {
+    const res = await api.setBoardDensity(boardDensity);
+    setUser(res.user);
+  }
+
   return (
-    <AuthContext.Provider value={{ user, loading, loginWithGoogle, logout }}>
+    <AuthContext.Provider value={{ user, loading, loginWithGoogle, logout, updateBoardDensity }}>
       {children}
     </AuthContext.Provider>
   );

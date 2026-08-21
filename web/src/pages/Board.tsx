@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Plus, X, SlidersHorizontal } from 'lucide-react';
+import { Plus, X, SlidersHorizontal, Search, AlertTriangle, Contrast, ChevronDown, ChevronRight } from 'lucide-react';
 import { api, type AlertLevel, type Job, type Person, type Phase } from '../api/client';
-import { FAROL_COLOR_VARS, FAROL_LABELS, phaseColor } from '../theme/phase';
+import { FAROL_COLOR_VARS, FAROL_LABELS, phaseMarkerColor } from '../theme/phase';
+import { useAuth } from '../auth/AuthContext';
+import { showToast } from '../components/Toast';
 import { JobDetailPage } from './JobDetail';
+import { BoardJobRow } from './BoardJobRow';
 import './Board.css';
 
 const FAROL_ORDER: AlertLevel[] = ['red', 'yellow', 'green'];
 const CAPTACAO_PHASE_ORDER = 4;
+const HIGH_CONTRAST_STORAGE_KEY = 'torre-de-controle:alto-contraste';
 
 function phaseOrderOf(phases: Phase[], phaseId: number | null): number | null {
   return phases.find((p) => p.id === phaseId)?.order ?? null;
@@ -21,6 +25,8 @@ function matchesSearch(job: Job, term: string): boolean {
 
 export function Board() {
   const { id: openJobId } = useParams<{ id?: string }>();
+  const { user, updateBoardDensity } = useAuth();
+  const density = user?.boardDensity ?? 'agrupado';
   const [phases, setPhases] = useState<Phase[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
@@ -33,6 +39,21 @@ export function Board() {
   const [showNewJobForm, setShowNewJobForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [highContrast, setHighContrast] = useState(
+    () => typeof window !== 'undefined' && window.localStorage.getItem(HIGH_CONTRAST_STORAGE_KEY) === '1',
+  );
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const stuckBannerRef = useRef<HTMLElement>(null);
+  const [collapsedPhaseIds, setCollapsedPhaseIds] = useState<Set<number>>(new Set());
+
+  function toggleGroupCollapsed(phaseId: number) {
+    setCollapsedPhaseIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(phaseId)) next.delete(phaseId);
+      else next.add(phaseId);
+      return next;
+    });
+  }
 
   async function refresh() {
     const [referenceRes, jobsRes, peopleRes] = await Promise.all([
@@ -47,6 +68,27 @@ export function Board() {
 
   useEffect(() => {
     refresh().catch(() => setError('Não foi possível carregar o board.'));
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(HIGH_CONTRAST_STORAGE_KEY, highContrast ? '1' : '0');
+  }, [highContrast]);
+
+  // Atalho "/" pra focar a busca sem sair do teclado — comum em painéis de
+  // trabalho (Slack, GitHub). Ignorado quando o foco já está num campo de
+  // texto, pra não atrapalhar quem está digitando em outro lugar da tela.
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== '/') return;
+      const active = document.activeElement;
+      const isTyping =
+        active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || active instanceof HTMLSelectElement;
+      if (isTyping) return;
+      event.preventDefault();
+      searchInputRef.current?.focus();
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   // Board and JobDetailPage render from the same Board component instance at both
@@ -114,6 +156,42 @@ export function Board() {
     [activeJobs],
   );
 
+  // Visão agrupada: um grupo por fase, na ordem do ciclo de vida do job. O
+  // nome da fase já vira o título do grupo, então nunca repete linha a
+  // linha (é redundante por definição dentro de um grupo). O que de fato
+  // repete no cenário que motivou esta fase — "Avançar para: X" igual em
+  // 9 linhas seguidas — é o triggerLabel, não o nome da fase: quando todos
+  // os jobs do grupo têm o mesmo triggerLabel, ele vai pro cabeçalho uma
+  // vez só. majorityTrigger só serve pro destaque de quem foge do padrão.
+  const groupedByPhase = useMemo(() => {
+    const groups = new Map<number, Job[]>();
+    for (const job of visibleJobs) {
+      if (!job.phaseId) continue;
+      if (!groups.has(job.phaseId)) groups.set(job.phaseId, []);
+      groups.get(job.phaseId)!.push(job);
+    }
+    return phases
+      .filter((phase) => groups.has(phase.id))
+      .map((phase) => {
+        const groupJobs = groups.get(phase.id)!;
+        const triggerCounts = new Map<string, number>();
+        for (const job of groupJobs) {
+          const key = job.triggerLabel ?? '';
+          triggerCounts.set(key, (triggerCounts.get(key) ?? 0) + 1);
+        }
+        let majorityTrigger = '';
+        let majorityCount = 0;
+        for (const [label, count] of triggerCounts) {
+          if (count > majorityCount) {
+            majorityCount = count;
+            majorityTrigger = label;
+          }
+        }
+        const commonTrigger = triggerCounts.size === 1 ? (groupJobs[0].triggerLabel ?? null) : null;
+        return { phase, jobs: groupJobs, commonTrigger, majorityTrigger };
+      });
+  }, [visibleJobs, phases]);
+
   const stats = useMemo(() => {
     const bolaIlha = activeJobs.filter((j) => j.bolaCom === 'ilha').length;
     const bolaCliente = activeJobs.filter((j) => j.bolaCom === 'cliente').length;
@@ -173,58 +251,47 @@ export function Board() {
     }
   }
 
+  // Edição inline do nome do job (Fase 4): aplica na hora (otimista) e
+  // confirma com um toast que carrega "Desfazer" — se a chamada à API
+  // falhar, volta pro nome anterior sozinho, sem esperar o usuário notar.
+  async function handleRenameJob(jobId: number, newName: string) {
+    const previousName = jobs.find((j) => j.id === jobId)?.name;
+    if (previousName === undefined || previousName === newName) return;
+
+    setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, name: newName } : j)));
+
+    try {
+      await api.setJobName(jobId, newName);
+      showToast('Nome do job atualizado.', 'success', {
+        label: 'Desfazer',
+        onClick: () => void undoRenameJob(jobId, previousName),
+      });
+    } catch {
+      setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, name: previousName } : j)));
+      setError('Não foi possível renomear o job.');
+    }
+  }
+
+  async function undoRenameJob(jobId: number, previousName: string) {
+    setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, name: previousName } : j)));
+    try {
+      await api.setJobName(jobId, previousName);
+    } catch {
+      setError('Não foi possível desfazer a alteração do nome.');
+    }
+  }
+
   return (
-    <div className="board">
+    <div className={`board${highContrast ? ' board--alto-contraste' : ''}`}>
       <aside className={`board-sidebar${showFilters ? ' is-open' : ''}`}>
         <button
           type="button"
           className="board-filters-close"
-          aria-label="Fechar filtros"
+          aria-label="Fechar atendimentos"
           onClick={() => setShowFilters(false)}
         >
           <X size={18} aria-hidden="true" />
         </button>
-        <input
-          className="board-search"
-          placeholder="Cliente, job ou responsável"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          aria-label="Buscar"
-        />
-
-        <nav className="board-filter-group" aria-label="Filtro por farol">
-          <h2 className="label-caps">Farol</h2>
-          {FAROL_ORDER.map((level) => (
-            <button
-              key={level}
-              type="button"
-              className={`board-filter-row${farolFilter.has(level) ? ' is-active' : ''}`}
-              aria-pressed={farolFilter.has(level)}
-              onClick={() => toggleFarol(level)}
-            >
-              <span className="board-dot" style={{ background: FAROL_COLOR_VARS[level] }} />
-              <span className="board-filter-label">{FAROL_LABELS[level]}</span>
-              <span className="board-filter-count">{farolCounts[level]}</span>
-            </button>
-          ))}
-        </nav>
-
-        <nav className="board-filter-group" aria-label="Filtro por fase">
-          <h2 className="label-caps">Fase</h2>
-          {phases.map((phase) => (
-            <button
-              key={phase.id}
-              type="button"
-              className={`board-filter-row${faseFilter.has(phase.id) ? ' is-active' : ''}`}
-              aria-pressed={faseFilter.has(phase.id)}
-              onClick={() => toggleFase(phase.id)}
-            >
-              <span className="board-swatch" style={{ background: phaseColor(phase.order) }} />
-              <span className="board-filter-label">{phase.name}</span>
-              <span className="board-filter-count">{faseCounts.get(phase.id) ?? 0}</span>
-            </button>
-          ))}
-        </nav>
 
         <nav className="board-filter-group" aria-label="Filtro por atendimento">
           <h2 className="label-caps">Atendimentos</h2>
@@ -259,12 +326,104 @@ export function Board() {
             aria-expanded={showFilters}
             onClick={() => setShowFilters((v) => !v)}
           >
-            <SlidersHorizontal size={16} aria-hidden="true" /> Filtros
+            <SlidersHorizontal size={16} aria-hidden="true" /> Atendimentos
           </button>
           <button type="button" className="board-new-job-btn" onClick={() => setShowNewJobForm((v) => !v)}>
             <Plus size={16} aria-hidden="true" /> Criar novo job
           </button>
         </header>
+
+        <div className="board-toolbar">
+          <div className="board-toolbar-row">
+            <div className="board-toolbar-search">
+              <Search size={16} aria-hidden="true" className="board-toolbar-search-icon" />
+              <input
+                ref={searchInputRef}
+                className="board-search"
+                placeholder="Cliente, job ou responsável (atalho: /)"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                aria-label="Buscar"
+              />
+            </div>
+
+            <div className="board-pill-groups">
+              <div className="board-pill-group" role="group" aria-label="Filtro por farol">
+                {FAROL_ORDER.map((level) => (
+                  <button
+                    key={level}
+                    type="button"
+                    className={`board-pill${farolFilter.has(level) ? ' is-active' : ''}`}
+                    aria-pressed={farolFilter.has(level)}
+                    onClick={() => toggleFarol(level)}
+                  >
+                    <span className="board-dot" style={{ background: FAROL_COLOR_VARS[level] }} />
+                    {FAROL_LABELS[level]}
+                    <span className="board-pill-count">{farolCounts[level]}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="board-pill-group" role="group" aria-label="Filtro por fase">
+                {phases.map((phase) => (
+                  <button
+                    key={phase.id}
+                    type="button"
+                    className={`board-pill${faseFilter.has(phase.id) ? ' is-active' : ''}`}
+                    aria-pressed={faseFilter.has(phase.id)}
+                    onClick={() => toggleFase(phase.id)}
+                  >
+                    <span className="board-swatch" style={{ background: phaseMarkerColor(phase.order) }} />
+                    {phase.name}
+                    <span className="board-pill-count">{faseCounts.get(phase.id) ?? 0}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="board-toolbar-indicators">
+              {stuckJobs.length > 0 && (
+                <button
+                  type="button"
+                  className="board-stuck-indicator"
+                  onClick={() => stuckBannerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                >
+                  <AlertTriangle size={14} aria-hidden="true" />
+                  {stuckJobs.length} {stuckJobs.length === 1 ? 'travado' : 'travados'}
+                </button>
+              )}
+              <button
+                type="button"
+                className={`board-contrast-toggle${highContrast ? ' is-active' : ''}`}
+                aria-pressed={highContrast}
+                onClick={() => setHighContrast((v) => !v)}
+                title="Alternar alto contraste"
+              >
+                <Contrast size={16} aria-hidden="true" />
+                <span className="board-contrast-toggle-label">Alto contraste</span>
+              </button>
+            </div>
+          </div>
+
+          {(farolFilter.size > 0 || faseFilter.size > 0) && (
+            <div className="board-active-tags" aria-label="Filtros ativos">
+              {FAROL_ORDER.filter((level) => farolFilter.has(level)).map((level) => (
+                <button key={`farol-${level}`} type="button" className="board-tag" onClick={() => toggleFarol(level)}>
+                  {FAROL_LABELS[level]}
+                  <X size={12} aria-hidden="true" />
+                </button>
+              ))}
+              {phases
+                .filter((phase) => faseFilter.has(phase.id))
+                .map((phase) => (
+                  <button key={`fase-${phase.id}`} type="button" className="board-tag" onClick={() => toggleFase(phase.id)}>
+                    {phase.name}
+                    <X size={12} aria-hidden="true" />
+                  </button>
+                ))}
+            </div>
+          )}
+        </div>
 
         {showNewJobForm && (
           <form onSubmit={handleCreateJob} className="board-new-job-form">
@@ -296,7 +455,7 @@ export function Board() {
         )}
 
         {stuckJobs.length > 0 && (
-          <section className="board-stuck-banner">
+          <section className="board-stuck-banner" ref={stuckBannerRef}>
             <p className="board-stuck-title">
               {stuckJobs.length} {stuckJobs.length === 1 ? 'JOB TRAVADO' : 'JOBS TRAVADOS'} · EXIGEM SUA AÇÃO HOJE
             </p>
@@ -352,6 +511,25 @@ export function Board() {
           </div>
         </section>
 
+        <div className="board-density-toggle" role="group" aria-label="Densidade da tabela">
+          <button
+            type="button"
+            className={density === 'agrupado' ? 'is-active' : undefined}
+            aria-pressed={density === 'agrupado'}
+            onClick={() => void updateBoardDensity('agrupado')}
+          >
+            Agrupado por fase
+          </button>
+          <button
+            type="button"
+            className={density === 'plano' ? 'is-active' : undefined}
+            aria-pressed={density === 'plano'}
+            onClick={() => void updateBoardDensity('plano')}
+          >
+            Tabela plana
+          </button>
+        </div>
+
         <table className="board-table">
           <thead>
             <tr>
@@ -362,65 +540,68 @@ export function Board() {
               <th>Relógio de responsabilidade</th>
             </tr>
           </thead>
-          <tbody>
-            {visibleJobs.map((job) => {
-              const currentOrder = phaseOrderOf(phases, job.phaseId) ?? 0;
-              const counts = job.bolaComDayCounts;
-              const totalDays = (counts?.ilhaDays ?? 0) + (counts?.clienteDays ?? 0);
-              const ilhaPct =
-                totalDays === 0
-                  ? job.bolaCom === 'cliente'
-                    ? 0
-                    : 100
-                  : ((counts?.ilhaDays ?? 0) / totalDays) * 100;
-
+          {density === 'agrupado' ? (
+            groupedByPhase.map(({ phase, jobs: groupJobs, commonTrigger, majorityTrigger }) => {
+              const isCollapsed = collapsedPhaseIds.has(phase.id);
               return (
-                <tr key={job.id}>
-                  <td data-label="Fases">
-                    <div className="board-mini-bar">
-                      {phases.map((phase) => (
-                        <span
-                          key={phase.id}
-                          className="board-mini-segment"
-                          style={{ background: phase.order <= currentOrder ? phaseColor(phase.order) : 'var(--border)' }}
-                        />
-                      ))}
-                    </div>
-                  </td>
-                  <td data-label="Job">
-                    <Link to={`/jobs/${job.id}`} className="board-job-link">
-                      <span className="label-caps">{job.client ?? '—'}</span>
-                      <span className="board-job-name">{job.name}</span>
-                    </Link>
-                  </td>
-                  <td data-label="Etapa atual">
-                    <p className="board-job-phase" style={{ color: phaseColor(currentOrder) }}>
-                      F{currentOrder} · {job.phaseName ?? ''}
-                    </p>
-                    {job.triggerLabel && <p className="board-job-next">{job.triggerLabel}</p>}
-                  </td>
-                  <td data-label="Bola com">
-                    <span className={`board-bola-tag board-bola-tag--${job.bolaCom}`}>
-                      {job.highlightedPersonName ?? (job.bolaCom === 'cliente' ? 'Cliente' : 'Ilha')}
-                    </span>
-                  </td>
-                  <td data-label="Relógio de responsabilidade">
-                    <div className="board-timeline">
-                      <div className="board-timeline-bar">
-                        <span className="board-timeline-ilha" style={{ width: `${ilhaPct}%` }} />
-                        <span className="board-timeline-cliente" style={{ width: `${100 - ilhaPct}%` }} />
-                      </div>
-                      <div className="board-timeline-labels">
-                        <span>Ilha {counts?.ilhaDays ?? 0}d</span>
-                        <span>Cliente {counts?.clienteDays ?? 0}d</span>
-                      </div>
-                    </div>
-                    <span className="board-dot board-dot--inline" style={{ background: FAROL_COLOR_VARS[job.alertLevel] }} />
-                  </td>
-                </tr>
+                <tbody key={phase.id} className="board-group">
+                  <tr className="board-group-header">
+                    <td colSpan={5}>
+                      <button
+                        type="button"
+                        className="board-group-toggle"
+                        aria-expanded={!isCollapsed}
+                        onClick={() => toggleGroupCollapsed(phase.id)}
+                      >
+                        {isCollapsed ? (
+                          <ChevronRight size={16} aria-hidden="true" />
+                        ) : (
+                          <ChevronDown size={16} aria-hidden="true" />
+                        )}
+                        <span className="board-swatch" style={{ background: phaseMarkerColor(phase.order) }} />
+                        <span className="board-group-title">{phase.name}</span>
+                        <span className="board-group-count">
+                          {groupJobs.length} {groupJobs.length === 1 ? 'job' : 'jobs'}
+                        </span>
+                        {commonTrigger && <span className="board-group-common-status">{commonTrigger}</span>}
+                      </button>
+                    </td>
+                  </tr>
+                  {!isCollapsed &&
+                    groupJobs.map((job) => (
+                      <BoardJobRow
+                        key={job.id}
+                        job={job}
+                        phases={phases}
+                        currentOrder={phaseOrderOf(phases, job.phaseId) ?? 0}
+                        showPhaseText={false}
+                        showTriggerText={!commonTrigger}
+                        highlight={{
+                          statusOutlier: !commonTrigger && job.triggerLabel !== majorityTrigger,
+                          clockOverLimit: job.alertLevel === 'red',
+                          clientHeldLong: job.bolaCom === 'cliente' && job.alertLevel !== 'green',
+                        }}
+                        onRenameJob={handleRenameJob}
+                      />
+                    ))}
+                </tbody>
               );
-            })}
-          </tbody>
+            })
+          ) : (
+            <tbody>
+              {visibleJobs.map((job) => (
+                <BoardJobRow
+                  key={job.id}
+                  job={job}
+                  phases={phases}
+                  currentOrder={phaseOrderOf(phases, job.phaseId) ?? 0}
+                  showPhaseText
+                  showTriggerText
+                  onRenameJob={handleRenameJob}
+                />
+              ))}
+            </tbody>
+          )}
         </table>
       </main>
 

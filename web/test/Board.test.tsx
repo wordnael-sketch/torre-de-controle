@@ -3,6 +3,8 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { Board } from '../src/pages/Board';
+import { AuthProvider } from '../src/auth/AuthContext';
+import { ToastHost } from '../src/components/Toast';
 import { api } from '../src/api/client';
 
 vi.mock('../src/api/client', async () => {
@@ -10,8 +12,11 @@ vi.mock('../src/api/client', async () => {
   return {
     ...actual,
     api: {
+      me: vi.fn(),
+      setBoardDensity: vi.fn(),
       listJobs: vi.fn(),
       createJob: vi.fn(),
+      setJobName: vi.fn(),
       getReference: vi.fn(),
       getJob: vi.fn(),
       listPeople: vi.fn(),
@@ -29,6 +34,15 @@ vi.mock('../src/api/client', async () => {
 });
 
 const mockedApi = vi.mocked(api);
+
+const loggedInUser = {
+  id: 1,
+  email: 'wilka@ilhacrossmidia.com.br',
+  name: 'Wilka',
+  role: 'admin' as const,
+  status: 'active' as const,
+  boardDensity: 'agrupado' as const,
+};
 
 const twoPhases = [
   { id: 1, order: 1, name: 'Comercial e Orçamento', roles: ['Comercial'], statuses: [] },
@@ -64,14 +78,21 @@ function makeJob(overrides: Record<string, unknown> = {}) {
 
 function renderBoard() {
   return render(
-    <MemoryRouter>
-      <Board />
-    </MemoryRouter>,
+    <AuthProvider>
+      <MemoryRouter>
+        <Board />
+      </MemoryRouter>
+      <ToastHost />
+    </AuthProvider>,
   );
 }
 
 describe('Board', () => {
   beforeEach(() => {
+    mockedApi.me.mockReset();
+    mockedApi.me.mockResolvedValue({ user: loggedInUser });
+    mockedApi.setBoardDensity.mockReset();
+    mockedApi.setBoardDensity.mockResolvedValue({ user: loggedInUser });
     mockedApi.listJobs.mockReset();
     mockedApi.createJob.mockReset();
     mockedApi.getReference.mockReset();
@@ -80,6 +101,7 @@ describe('Board', () => {
     mockedApi.listPeople.mockReset();
     mockedApi.listPeople.mockResolvedValue({ people: [] });
     mockedApi.setJobStatus.mockReset();
+    mockedApi.setJobName.mockReset();
     mockedApi.assignRole.mockReset();
     mockedApi.setAtendimento.mockReset();
     mockedApi.setBolaCom.mockReset();
@@ -106,8 +128,19 @@ describe('Board', () => {
     renderBoard();
 
     expect(await screen.findByText(/Colgate - Color Correct Wave 2/)).toBeInTheDocument();
-    expect(await screen.findByText(/F1 · Comercial e Orçamento/)).toBeInTheDocument();
+    // Visão agrupada (padrão): o nome da fase é o título do grupo, não repete na linha.
+    const table = await screen.findByRole('table');
+    expect(within(table).getByText('Comercial e Orçamento')).toBeInTheDocument();
     expect(await screen.findByText('Anne')).toBeInTheDocument();
+  });
+
+  it('shows "F{n} · fase" per row in the flat table view', async () => {
+    mockedApi.me.mockResolvedValue({ user: { ...loggedInUser, boardDensity: 'plano' } });
+    mockedApi.listJobs.mockResolvedValue({ jobs: [makeJob()] });
+
+    renderBoard();
+
+    expect(await screen.findByText(/F1 · Comercial e Orçamento/)).toBeInTheDocument();
   });
 
   it('creates a job via the new-job form and refreshes the board', async () => {
@@ -178,7 +211,8 @@ describe('Board', () => {
     await screen.findByText('Job Fase 1');
     await screen.findByText('Job Fase 2');
 
-    await user.click(screen.getByText('Dotação e Burocracia'));
+    const fasePills = screen.getByRole('group', { name: 'Filtro por fase' });
+    await user.click(within(fasePills).getByText('Dotação e Burocracia'));
 
     expect(screen.queryByText('Job Fase 1')).not.toBeInTheDocument();
     expect(screen.getByText('Job Fase 2')).toBeInTheDocument();
@@ -215,12 +249,14 @@ describe('Board', () => {
     });
 
     render(
-      <MemoryRouter initialEntries={['/jobs/42']}>
-        <Routes>
-          <Route path="/" element={<Board />} />
-          <Route path="/jobs/:id" element={<Board />} />
-        </Routes>
-      </MemoryRouter>,
+      <AuthProvider>
+        <MemoryRouter initialEntries={['/jobs/42']}>
+          <Routes>
+            <Route path="/" element={<Board />} />
+            <Route path="/jobs/:id" element={<Board />} />
+          </Routes>
+        </MemoryRouter>
+      </AuthProvider>,
     );
 
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
@@ -261,12 +297,14 @@ describe('Board', () => {
     const user = userEvent.setup();
 
     render(
-      <MemoryRouter initialEntries={['/jobs/42']}>
-        <Routes>
-          <Route path="/" element={<Board />} />
-          <Route path="/jobs/:id" element={<Board />} />
-        </Routes>
-      </MemoryRouter>,
+      <AuthProvider>
+        <MemoryRouter initialEntries={['/jobs/42']}>
+          <Routes>
+            <Route path="/" element={<Board />} />
+            <Route path="/jobs/:id" element={<Board />} />
+          </Routes>
+        </MemoryRouter>
+      </AuthProvider>,
     );
 
     await screen.findByRole('dialog');
@@ -346,5 +384,158 @@ describe('Board', () => {
 
     expect(screen.getByText('Job A')).toBeInTheDocument();
     expect(screen.queryByText('Job B')).not.toBeInTheDocument();
+  });
+
+  it('shows a common triggerLabel once in the group header when every job in the phase shares it, hiding it from each row', async () => {
+    mockedApi.listJobs.mockResolvedValue({
+      jobs: [
+        makeJob({ id: 1, name: 'Job Igual A', triggerLabel: 'Avançar para: Briefing Recebido' }),
+        makeJob({ id: 2, name: 'Job Igual B', triggerLabel: 'Avançar para: Briefing Recebido' }),
+      ],
+    });
+
+    renderBoard();
+
+    await screen.findByText('Job Igual A');
+    await screen.findByText('Job Igual B');
+
+    // Aparece uma vez no cabeçalho do grupo...
+    expect(screen.getAllByText('Avançar para: Briefing Recebido')).toHaveLength(1);
+  });
+
+  it('keeps each row showing its own triggerLabel when jobs in the same phase differ, instead of collapsing to the header', async () => {
+    mockedApi.listJobs.mockResolvedValue({
+      jobs: [
+        makeJob({ id: 1, name: 'Job Diferente A', triggerLabel: 'Avançar para: Briefing Recebido' }),
+        makeJob({ id: 2, name: 'Job Diferente B', triggerLabel: 'Avançar para: Aprovação Interna' }),
+      ],
+    });
+
+    renderBoard();
+
+    await screen.findByText('Job Diferente A');
+    await screen.findByText('Job Diferente B');
+
+    expect(screen.getByText('Avançar para: Briefing Recebido')).toBeInTheDocument();
+    expect(screen.getByText('Avançar para: Aprovação Interna')).toBeInTheDocument();
+  });
+
+  it('collapses a phase group, hiding its rows, and expands it again', async () => {
+    mockedApi.listJobs.mockResolvedValue({ jobs: [makeJob({ id: 1, name: 'Job Colapsável' })] });
+    const user = userEvent.setup();
+
+    renderBoard();
+
+    await screen.findByText('Job Colapsável');
+
+    const table = screen.getByRole('table');
+    const groupToggle = within(table).getByRole('button', { name: /Comercial e Orçamento/ });
+    await user.click(groupToggle);
+
+    expect(screen.queryByText('Job Colapsável')).not.toBeInTheDocument();
+
+    await user.click(groupToggle);
+
+    expect(await screen.findByText('Job Colapsável')).toBeInTheDocument();
+  });
+
+  it('switches to the flat table view and persists the choice via the API', async () => {
+    mockedApi.listJobs.mockResolvedValue({ jobs: [makeJob()] });
+    mockedApi.setBoardDensity.mockResolvedValue({ user: { ...loggedInUser, boardDensity: 'plano' } });
+    const user = userEvent.setup();
+
+    renderBoard();
+
+    await screen.findByText('Colgate - Color Correct Wave 2');
+    await user.click(screen.getByRole('button', { name: 'Tabela plana' }));
+
+    await waitFor(() => expect(mockedApi.setBoardDensity).toHaveBeenCalledWith('plano'));
+    expect(await screen.findByText(/F1 · Comercial e Orçamento/)).toBeInTheDocument();
+  });
+
+  it('toggles high-contrast mode on the board container', async () => {
+    mockedApi.listJobs.mockResolvedValue({ jobs: [] });
+    const user = userEvent.setup();
+
+    renderBoard();
+
+    await screen.findByText('Comercial e Orçamento');
+    const toggle = screen.getByRole('button', { name: /Alto contraste/ });
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+
+    await user.click(toggle);
+
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('renames a job inline via the edit button, Enter to confirm, with a toast offering undo', async () => {
+    mockedApi.listJobs.mockResolvedValue({ jobs: [makeJob({ id: 1, name: 'Nome Original' })] });
+    mockedApi.setJobName.mockResolvedValue({ job: makeJob({ id: 1, name: 'Nome Editado' }) });
+    const user = userEvent.setup();
+
+    renderBoard();
+
+    await screen.findByText('Nome Original');
+    await user.click(screen.getByRole('button', { name: 'Editar nome do job' }));
+
+    const input = screen.getByLabelText('Editar nome do job');
+    await user.clear(input);
+    await user.type(input, 'Nome Editado{Enter}');
+
+    await waitFor(() => expect(mockedApi.setJobName).toHaveBeenCalledWith(1, 'Nome Editado'));
+    expect(await screen.findByText('Nome Editado')).toBeInTheDocument();
+    expect(await screen.findByText('Nome do job atualizado.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Desfazer' })).toBeInTheDocument();
+  });
+
+  it('cancels an inline rename with Escape, without calling the API', async () => {
+    mockedApi.listJobs.mockResolvedValue({ jobs: [makeJob({ id: 1, name: 'Nome Original' })] });
+    const user = userEvent.setup();
+
+    renderBoard();
+
+    await screen.findByText('Nome Original');
+    await user.click(screen.getByRole('button', { name: 'Editar nome do job' }));
+
+    const input = screen.getByLabelText('Editar nome do job');
+    await user.type(input, ' alterado{Escape}');
+
+    expect(mockedApi.setJobName).not.toHaveBeenCalled();
+    expect(await screen.findByText('Nome Original')).toBeInTheDocument();
+  });
+
+  it('undoes an inline rename when the toast\'s "Desfazer" button is clicked', async () => {
+    mockedApi.listJobs.mockResolvedValue({ jobs: [makeJob({ id: 1, name: 'Nome Original' })] });
+    mockedApi.setJobName.mockResolvedValue({ job: makeJob({ id: 1, name: 'Nome Editado' }) });
+    const user = userEvent.setup();
+
+    renderBoard();
+
+    await screen.findByText('Nome Original');
+    await user.click(screen.getByRole('button', { name: 'Editar nome do job' }));
+    const input = screen.getByLabelText('Editar nome do job');
+    await user.clear(input);
+    await user.type(input, 'Nome Editado{Enter}');
+    await screen.findByText('Nome Editado');
+
+    await user.click(await screen.findByRole('button', { name: 'Desfazer' }));
+
+    await waitFor(() => expect(mockedApi.setJobName).toHaveBeenCalledWith(1, 'Nome Original'));
+    expect(await screen.findByText('Nome Original')).toBeInTheDocument();
+  });
+
+  it('does not enter edit mode on a single click of the job name (only the edit button does)', async () => {
+    mockedApi.listJobs.mockResolvedValue({ jobs: [makeJob({ id: 42, name: 'Job Clique Único' })] });
+    const user = userEvent.setup();
+
+    renderBoard();
+
+    await screen.findByText('Job Clique Único');
+    // A single click just follows the link (no assertion on navigation here —
+    // that's covered by the drawer-opening tests elsewhere); what this test
+    // guards is that it never triggers the inline editor.
+    await user.click(screen.getByText('Job Clique Único'));
+
+    expect(screen.queryByRole('textbox', { name: 'Editar nome do job' })).not.toBeInTheDocument();
   });
 });

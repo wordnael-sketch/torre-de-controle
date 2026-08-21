@@ -7,6 +7,7 @@ import {
   advanceJobStatus,
   setJobStatus,
   setAtendimento,
+  setJobName,
 } from '../src/models/job';
 import { withTestTransaction } from './helpers/testDb';
 
@@ -239,6 +240,19 @@ describe('atendimento responsável', () => {
 
       expect(updated.atendimentoPersonId).toBe(wilka.rows[0].id);
       expect(updated.atendimentoPersonName).toBe('Wilka');
+    });
+  });
+
+  it('setJobName updates the job name and returns the updated job', async () => {
+    await withTestTransaction(async (db) => {
+      const created = await createJob(db, { name: 'Nome Original Teste' });
+
+      const updated = await setJobName(db, created.id, 'Nome Renomeado Teste');
+
+      expect(updated.name).toBe('Nome Renomeado Teste');
+
+      const found = await getJobById(db, created.id);
+      expect(found?.name).toBe('Nome Renomeado Teste');
     });
   });
 

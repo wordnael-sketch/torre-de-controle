@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { AppDatabase } from '../db';
-import { findUserByEmail, activateUser } from '../models/user';
+import { findUserByEmail, activateUser, setUserBoardDensity, type BoardDensity } from '../models/user';
 import { isAllowedDomain } from '../auth/domain';
 import { signSession } from '../auth/session';
 import { requireAuth, requireActiveUser, SESSION_COOKIE } from '../auth/middleware';
@@ -84,6 +84,23 @@ export function createAuthRouter(deps: AuthRouterDeps): Router {
     requireActiveUser(deps.db),
     asyncHandler(async (req, res) => {
       res.json({ user: req.currentUser });
+    }),
+  );
+
+  router.patch(
+    '/me/preferences',
+    requireAuth(deps.jwtSecret),
+    requireActiveUser(deps.db),
+    asyncHandler(async (req, res) => {
+      const { boardDensity } = req.body as { boardDensity?: string };
+
+      if (boardDensity !== 'agrupado' && boardDensity !== 'plano') {
+        res.status(400).json({ error: 'boardDensity must be "agrupado" or "plano"' });
+        return;
+      }
+
+      const user = await setUserBoardDensity(deps.db, req.currentUser!.id, boardDensity as BoardDensity);
+      res.json({ user });
     }),
   );
 

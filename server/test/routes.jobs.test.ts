@@ -690,6 +690,62 @@ describe('PATCH /api/jobs/:id/atendimento', () => {
   });
 });
 
+describe('PATCH /api/jobs/:id/name', () => {
+  it('renames the job and returns the updated job', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+      const created = await agent
+        .post('/api/jobs')
+        .send({ name: 'Nome Original Rota Teste', atendimentoPersonId });
+
+      const res = await agent
+        .patch(`/api/jobs/${created.body.job.id}/name`)
+        .send({ name: 'Nome Renomeado Rota Teste' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.job.name).toBe('Nome Renomeado Rota Teste');
+    });
+  });
+
+  it('rejects an empty name', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+      const created = await agent
+        .post('/api/jobs')
+        .send({ name: 'Job Nome Vazio Teste', atendimentoPersonId });
+
+      const res = await agent.patch(`/api/jobs/${created.body.job.id}/name`).send({ name: '   ' });
+
+      expect(res.status).toBe(400);
+    });
+  });
+
+  it('returns 404 for a nonexistent job', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+
+      const res = await agent.patch('/api/jobs/999999999/name').send({ name: 'Novo Nome' });
+
+      expect(res.status).toBe(404);
+    });
+  });
+
+  it('returns 401 when not logged in', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+
+      const res = await request(app).patch('/api/jobs/1/name').send({ name: 'Novo Nome' });
+
+      expect(res.status).toBe(401);
+    });
+  });
+});
+
 function fakeTrelloClient(overrides: Partial<TrelloClient> = {}): TrelloClient {
   return {
     listBoardCards: async () => [],

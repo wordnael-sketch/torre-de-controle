@@ -30,7 +30,7 @@ describe('UsersPage', () => {
   it('lists existing users with their role and status', async () => {
     mockedApi.listUsers.mockResolvedValue({
       users: [
-        { id: 1, email: 'wilka@ilhacrossmidia.com.br', name: 'Wilka', role: 'admin', status: 'active' },
+        { id: 1, email: 'wilka@ilhacrossmidia.com.br', name: 'Wilka', role: 'admin', status: 'active', boardDensity: 'agrupado' },
       ],
     });
 
@@ -43,10 +43,10 @@ describe('UsersPage', () => {
     mockedApi.listUsers
       .mockResolvedValueOnce({ users: [] })
       .mockResolvedValueOnce({
-        users: [{ id: 2, email: 'nova@ilhacrossmidia.com.br', name: null, role: 'member', status: 'invited' }],
+        users: [{ id: 2, email: 'nova@ilhacrossmidia.com.br', name: null, role: 'member', status: 'invited', boardDensity: 'agrupado' }],
       });
     mockedApi.inviteUser.mockResolvedValue({
-      user: { id: 2, email: 'nova@ilhacrossmidia.com.br', name: null, role: 'member', status: 'invited' },
+      user: { id: 2, email: 'nova@ilhacrossmidia.com.br', name: null, role: 'member', status: 'invited', boardDensity: 'agrupado' },
     });
 
     const user = userEvent.setup();
@@ -65,10 +65,10 @@ describe('UsersPage', () => {
 
   it('revokes a user', async () => {
     mockedApi.listUsers.mockResolvedValue({
-      users: [{ id: 3, email: 'revogavel@ilhacrossmidia.com.br', name: 'Pessoa', role: 'member', status: 'active' }],
+      users: [{ id: 3, email: 'revogavel@ilhacrossmidia.com.br', name: 'Pessoa', role: 'member', status: 'active', boardDensity: 'agrupado' }],
     });
     mockedApi.setUserStatus.mockResolvedValue({
-      user: { id: 3, email: 'revogavel@ilhacrossmidia.com.br', name: 'Pessoa', role: 'member', status: 'revoked' },
+      user: { id: 3, email: 'revogavel@ilhacrossmidia.com.br', name: 'Pessoa', role: 'member', status: 'revoked', boardDensity: 'agrupado' },
     });
 
     const user = userEvent.setup();
@@ -83,7 +83,7 @@ describe('UsersPage', () => {
 
   it('shows a confirmation dialog before revoking access', async () => {
     mockedApi.listUsers.mockResolvedValue({
-      users: [{ id: 3, email: 'revogavel@ilhacrossmidia.com.br', name: 'Pessoa', role: 'member', status: 'active' }],
+      users: [{ id: 3, email: 'revogavel@ilhacrossmidia.com.br', name: 'Pessoa', role: 'member', status: 'active', boardDensity: 'agrupado' }],
     });
     const user = userEvent.setup();
 
@@ -95,7 +95,7 @@ describe('UsersPage', () => {
     expect(mockedApi.setUserStatus).not.toHaveBeenCalled();
 
     mockedApi.setUserStatus.mockResolvedValue({
-      user: { id: 3, email: 'revogavel@ilhacrossmidia.com.br', name: 'Pessoa', role: 'member', status: 'revoked' },
+      user: { id: 3, email: 'revogavel@ilhacrossmidia.com.br', name: 'Pessoa', role: 'member', status: 'revoked', boardDensity: 'agrupado' },
     });
     const dialog = screen.getByRole('alertdialog');
     await user.click(within(dialog).getByRole('button', { name: 'Revogar' }));

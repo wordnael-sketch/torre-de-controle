@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { Board } from '../src/pages/Board';
+import { AuthProvider } from '../src/auth/AuthContext';
 import { api, ApiError } from '../src/api/client';
 
 vi.mock('../src/api/client', async () => {
@@ -10,6 +11,8 @@ vi.mock('../src/api/client', async () => {
   return {
     ...actual,
     api: {
+      me: vi.fn(),
+      setBoardDensity: vi.fn(),
       getJob: vi.fn(),
       getReference: vi.fn(),
       listPeople: vi.fn(),
@@ -29,6 +32,15 @@ vi.mock('../src/api/client', async () => {
 });
 
 const mockedApi = vi.mocked(api);
+
+const loggedInUser = {
+  id: 1,
+  email: 'wilka@ilhacrossmidia.com.br',
+  name: 'Wilka',
+  role: 'admin' as const,
+  status: 'active' as const,
+  boardDensity: 'agrupado' as const,
+};
 
 const jobDetail = {
   id: 1,
@@ -76,17 +88,23 @@ const referencePhases = [
 
 function renderJobDetail() {
   return render(
-    <MemoryRouter initialEntries={['/jobs/1']}>
-      <Routes>
-        <Route path="/" element={<Board />} />
-        <Route path="/jobs/:id" element={<Board />} />
-      </Routes>
-    </MemoryRouter>,
+    <AuthProvider>
+      <MemoryRouter initialEntries={['/jobs/1']}>
+        <Routes>
+          <Route path="/" element={<Board />} />
+          <Route path="/jobs/:id" element={<Board />} />
+        </Routes>
+      </MemoryRouter>
+    </AuthProvider>,
   );
 }
 
 describe('JobDetailPage', () => {
   beforeEach(() => {
+    mockedApi.me.mockReset();
+    mockedApi.me.mockResolvedValue({ user: loggedInUser });
+    mockedApi.setBoardDensity.mockReset();
+    mockedApi.setBoardDensity.mockResolvedValue({ user: loggedInUser });
     mockedApi.getJob.mockReset();
     mockedApi.getReference.mockReset();
     mockedApi.listPeople.mockReset();

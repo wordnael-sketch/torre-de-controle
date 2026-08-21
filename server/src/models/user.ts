@@ -2,6 +2,7 @@ import type { AppDatabase } from '../db';
 
 export type UserRole = 'admin' | 'member';
 export type UserStatus = 'invited' | 'active' | 'revoked';
+export type BoardDensity = 'agrupado' | 'plano';
 
 export interface User {
   id: number;
@@ -10,6 +11,7 @@ export interface User {
   name: string | null;
   role: UserRole;
   status: UserStatus;
+  boardDensity: BoardDensity;
   createdAt: string;
 }
 
@@ -20,6 +22,7 @@ interface UserRow {
   name: string | null;
   role: string;
   status: string;
+  board_density: string;
   created_at: string | Date;
 }
 
@@ -31,6 +34,7 @@ function toUser(row: UserRow): User {
     name: row.name,
     role: row.role as UserRole,
     status: row.status as UserStatus,
+    boardDensity: row.board_density as BoardDensity,
     createdAt: new Date(row.created_at).toISOString(),
   };
 }
@@ -84,5 +88,17 @@ export async function setUserStatus(
   status: 'active' | 'revoked',
 ): Promise<User | null> {
   const result = await db.query<UserRow>('UPDATE users SET status = $1 WHERE id = $2 RETURNING *', [status, id]);
+  return result.rows[0] ? toUser(result.rows[0]) : null;
+}
+
+export async function setUserBoardDensity(
+  db: AppDatabase,
+  id: number,
+  boardDensity: BoardDensity,
+): Promise<User | null> {
+  const result = await db.query<UserRow>('UPDATE users SET board_density = $1 WHERE id = $2 RETURNING *', [
+    boardDensity,
+    id,
+  ]);
   return result.rows[0] ? toUser(result.rows[0]) : null;
 }

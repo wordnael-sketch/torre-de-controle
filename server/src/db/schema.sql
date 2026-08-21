@@ -10,6 +10,13 @@ ALTER TABLE users ALTER COLUMN google_sub DROP NOT NULL;
 ALTER TABLE users ALTER COLUMN name DROP NOT NULL;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'member';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'invited';
+-- Preferência de densidade da Torre de Controle (agrupado por fase vs.
+-- tabela plana). Fica no perfil do usuário, não em localStorage, pra não
+-- se perder ao trocar de máquina e pra dar pra fixar um padrão em quem
+-- entra novo no time. Validado na rota (mesmo padrão já usado por
+-- bola_com), sem CHECK constraint — Postgres não aceita
+-- "ADD CONSTRAINT IF NOT EXISTS", e este arquivo roda em todo boot.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS board_density TEXT NOT NULL DEFAULT 'agrupado';
 
 INSERT INTO users (email, role, status) VALUES
   ('wilka@ilhacrossmidia.com.br', 'admin', 'invited')

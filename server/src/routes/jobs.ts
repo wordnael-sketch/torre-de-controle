@@ -8,6 +8,7 @@ import {
   setJobStatus,
   setLastWhatsappActivity,
   setAtendimento,
+  setJobName,
 } from '../models/job';
 import { setBolaCom, getBolaComDayCounts, getBolaComDayCountsForJobs } from '../models/bolaCom';
 import { getJobStatusHistory } from '../models/jobStatusHistory';
@@ -270,6 +271,32 @@ export function createJobsRouter(deps: JobsRouterDeps): Router {
       }
 
       const job = await setAtendimento(deps.db, jobId, personId!);
+      res.json({ job });
+    }),
+  );
+
+  router.patch(
+    '/:id/name',
+    asyncHandler(async (req, res) => {
+      const jobId = parseId(req.params.id);
+      if (jobId === null) {
+        res.status(400).json({ error: 'invalid job id' });
+        return;
+      }
+
+      const { name } = req.body as { name?: string };
+      if (!name || !name.trim()) {
+        res.status(400).json({ error: 'name is required' });
+        return;
+      }
+
+      const existing = await getJobById(deps.db, jobId);
+      if (!existing) {
+        res.status(404).json({ error: 'Job not found' });
+        return;
+      }
+
+      const job = await setJobName(deps.db, jobId, name.trim());
       res.json({ job });
     }),
   );

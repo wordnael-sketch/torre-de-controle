@@ -48,6 +48,6 @@
 
 .confirm-dialog-confirm {
   border: none;
-  background: var(--farol-travado);
+  background: var(--farol-travado-fill);
   color: var(--text-inverse);
 }

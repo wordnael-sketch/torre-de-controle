@@ -104,14 +104,14 @@
 }
 
 .job-detail-bola-btn.is-active {
-  background: var(--fase-4);
+  background: var(--color-primary);
   color: var(--text-inverse);
-  border-color: var(--fase-4);
+  border-color: var(--color-primary);
 }
 
 .job-detail-bola-btn--cliente.is-active {
-  background: var(--farol-atencao);
-  border-color: var(--farol-atencao);
+  background: var(--farol-atencao-fill);
+  border-color: var(--farol-atencao-fill);
 }
 
 .job-detail-paste {
@@ -149,7 +149,7 @@
 .job-detail-suggestion-badge {
   font-family: var(--font-mono);
   font-size: 0.65rem;
-  background: var(--fase-4);
+  background: var(--color-primary);
   color: var(--text-inverse);
   padding: 0.1rem 0.4rem;
   border-radius: var(--radius-sm);

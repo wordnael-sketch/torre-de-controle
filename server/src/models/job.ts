@@ -255,6 +255,12 @@ export async function setLastWhatsappActivity(
   ]);
 }
 
+export async function setJobName(db: AppDatabase, jobId: number, name: string): Promise<Job> {
+  await db.query('UPDATE jobs SET name = $1, updated_at = now() WHERE id = $2', [name, jobId]);
+  const job = await getJobById(db, jobId);
+  return job!;
+}
+
 export async function setAtendimento(db: AppDatabase, jobId: number, personId: number): Promise<Job> {
   await db.query('UPDATE jobs SET atendimento_person_id = $1, updated_at = now() WHERE id = $2', [
     personId,

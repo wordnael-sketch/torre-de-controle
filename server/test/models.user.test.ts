@@ -7,6 +7,7 @@ import {
   listUsers,
   setUserRole,
   setUserStatus,
+  setUserBoardDensity,
 } from '../src/models/user';
 import { withTestTransaction } from './helpers/testDb';
 
@@ -20,6 +21,7 @@ describe('inviteUser / findUserByEmail', () => {
       expect(invited.role).toBe('member');
       expect(invited.googleSub).toBeNull();
       expect(invited.name).toBeNull();
+      expect(invited.boardDensity).toBe('agrupado');
 
       const found = await findUserByEmail(db, 'convidado.teste@ilhacrossmidia.com.br');
       expect(found?.id).toBe(invited.id);
@@ -123,6 +125,27 @@ describe('setUserRole / setUserStatus', () => {
   it('returns null when changing the status of a nonexistent user', async () => {
     await withTestTransaction(async (db) => {
       expect(await setUserStatus(db, -1, 'revoked')).toBeNull();
+    });
+  });
+});
+
+describe('setUserBoardDensity', () => {
+  it('defaults a new user to agrupado and updates it to plano', async () => {
+    await withTestTransaction(async (db) => {
+      const invited = await inviteUser(db, { email: 'densidade.teste@ilhacrossmidia.com.br', role: 'member' });
+      expect(invited.boardDensity).toBe('agrupado');
+
+      const updated = await setUserBoardDensity(db, invited.id, 'plano');
+      expect(updated?.boardDensity).toBe('plano');
+
+      const found = await findUserByEmail(db, 'densidade.teste@ilhacrossmidia.com.br');
+      expect(found?.boardDensity).toBe('plano');
+    });
+  });
+
+  it('returns null when changing the board density of a nonexistent user', async () => {
+    await withTestTransaction(async (db) => {
+      expect(await setUserBoardDensity(db, -1, 'plano')).toBeNull();
     });
   });
 });

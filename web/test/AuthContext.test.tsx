@@ -41,7 +41,9 @@ describe('AuthProvider', () => {
   });
 
   it('sets the user when /me succeeds', async () => {
-    mockedApi.me.mockResolvedValue({ user: { id: 1, email: 'wilka@ilhacrossmidia.com.br', role: 'admin', status: 'active' } });
+    mockedApi.me.mockResolvedValue({
+      user: { id: 1, email: 'wilka@ilhacrossmidia.com.br', role: 'admin', status: 'active', boardDensity: 'agrupado' },
+    });
 
     render(
       <AuthProvider>
@@ -53,7 +55,9 @@ describe('AuthProvider', () => {
   });
 
   it('clears the user when a session-expired notification arrives', async () => {
-    mockedApi.me.mockResolvedValue({ user: { id: 1, email: 'wilka@ilhacrossmidia.com.br', role: 'admin', status: 'active' } });
+    mockedApi.me.mockResolvedValue({
+      user: { id: 1, email: 'wilka@ilhacrossmidia.com.br', role: 'admin', status: 'active', boardDensity: 'agrupado' },
+    });
 
     render(
       <AuthProvider>

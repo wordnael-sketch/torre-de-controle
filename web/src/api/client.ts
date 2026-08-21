@@ -48,6 +48,7 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
 
 export type UserRole = 'admin' | 'member';
 export type UserStatus = 'invited' | 'active' | 'revoked';
+export type BoardDensity = 'agrupado' | 'plano';
 
 export interface User {
   id: number;
@@ -55,6 +56,7 @@ export interface User {
   name?: string | null;
   role: UserRole;
   status: UserStatus;
+  boardDensity: BoardDensity;
 }
 
 export type AlertLevel = 'green' | 'yellow' | 'red';
@@ -168,6 +170,11 @@ export const api = {
       body: JSON.stringify({ idToken }),
     }),
   logout: () => request<void>('/api/auth/logout', { method: 'POST' }),
+  setBoardDensity: (boardDensity: BoardDensity) =>
+    request<{ user: User }>('/api/auth/me/preferences', {
+      method: 'PATCH',
+      body: JSON.stringify({ boardDensity }),
+    }),
   listJobs: () => request<{ jobs: Job[] }>('/api/jobs'),
   createJob: (job: { name: string; code?: string; client?: string; atendimentoPersonId: number }) =>
     request<{ job: Job }>('/api/jobs', { method: 'POST', body: JSON.stringify(job) }),
@@ -194,6 +201,8 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ bolaCom }),
     }),
+  setJobName: (id: number, name: string) =>
+    request<{ job: Job }>(`/api/jobs/${id}/name`, { method: 'PATCH', body: JSON.stringify({ name }) }),
   setLastActivity: (id: number, lastWhatsappActivityAt: string | null) =>
     request<{ job: Job }>(`/api/jobs/${id}/last-activity`, {
       method: 'PATCH',

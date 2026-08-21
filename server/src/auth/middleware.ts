@@ -9,6 +9,7 @@ export interface CurrentUser {
   name: string | null;
   role: 'admin' | 'member';
   status: 'active';
+  boardDensity: 'agrupado' | 'plano';
 }
 
 declare global {
@@ -49,6 +50,7 @@ interface CurrentUserRow {
   name: string | null;
   role: string;
   status: string;
+  board_density: string;
 }
 
 export function requireActiveUser(db: AppDatabase) {
@@ -59,7 +61,7 @@ export function requireActiveUser(db: AppDatabase) {
     }
 
     const result = await db.query<CurrentUserRow>(
-      'SELECT id, email, name, role, status FROM users WHERE id = $1',
+      'SELECT id, email, name, role, status, board_density FROM users WHERE id = $1',
       [req.user.userId],
     );
     const row = result.rows[0];
@@ -75,6 +77,7 @@ export function requireActiveUser(db: AppDatabase) {
       name: row.name,
       role: row.role as 'admin' | 'member',
       status: 'active',
+      boardDensity: row.board_density as 'agrupado' | 'plano',
     };
     next();
   });

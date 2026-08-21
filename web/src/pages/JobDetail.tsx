@@ -11,7 +11,7 @@ import {
   type TrelloCandidate,
   type TrelloCardSummary,
 } from '../api/client';
-import { phaseColor } from '../theme/phase';
+import { phaseMarkerColor, phaseTextColor } from '../theme/phase';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { showToast } from '../components/Toast';
 import './JobDetail.css';
@@ -325,7 +325,7 @@ export function JobDetailPage() {
               {job.client ?? 'Sem cliente'} · {job.code ?? `J${job.id}`}
             </p>
             <h1 id="job-detail-title">{job.name}</h1>
-            <p className="job-detail-phase" style={{ color: phaseColor(currentPhaseOrder) }}>
+            <p className="job-detail-phase" style={{ color: phaseTextColor(currentPhaseOrder) }}>
               FASE {currentPhaseOrder} · {job.phaseName?.toUpperCase()}
             </p>
           </div>
@@ -496,7 +496,7 @@ export function JobDetailPage() {
                   className="job-detail-phase-header"
                   onClick={() => setExpandedPhaseId(isExpanded ? null : phase.id)}
                 >
-                  <span className="job-detail-swatch" style={{ background: phaseColor(phase.order) }} />
+                  <span className="job-detail-swatch" style={{ background: phaseMarkerColor(phase.order) }} />
                   <span className="job-detail-phase-name">{phase.name}</span>
                   <span className="job-detail-phase-count">
                     {itemsDone}/{phase.statuses.length}
