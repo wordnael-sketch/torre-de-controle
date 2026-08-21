@@ -1,7 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { createJob } from '../src/models/job';
-import { setTrelloLink, syncTrelloMembersToRoles, syncTrelloMembersToAtendimento } from '../src/models/trelloLink';
+import { createJob, getJobById } from '../src/models/job';
+import {
+  setTrelloLink,
+  syncTrelloMembersToRoles,
+  syncTrelloMembersToAtendimento,
+  syncJobFromTrello,
+} from '../src/models/trelloLink';
 import { getJobRoleAssignments, setJobRoleAssignment } from '../src/models/jobRoleAssignments';
+import type { Classifier, RawSuggestion } from '../src/services/classifier';
+import type { TrelloClient, TrelloCardDetail } from '../src/services/trello';
 import { withTestTransaction } from './helpers/testDb';
 
 describe('setTrelloLink', () => {
@@ -162,6 +169,117 @@ describe('syncTrelloMembersToAtendimento', () => {
         [job.id],
       );
       expect(result.rows[0].atendimento_person_id).toBeNull();
+    });
+  });
+});
+
+function fakeClassifier(suggestions: RawSuggestion[]): Classifier {
+  return {
+    classify: async () => suggestions,
+  };
+}
+
+function fakeTrelloClient(overrides: Partial<TrelloClient> = {}): TrelloClient {
+  return {
+    listBoardCards: async () => [],
+    getCard: async () => null,
+    ...overrides,
+  };
+}
+
+describe('syncJobFromTrello', () => {
+  it('throws when the job has no linked Trello card', async () => {
+    await withTestTransaction(async (db) => {
+      const job = await createJob(db, { name: 'Job Sync Sem Vínculo Teste' });
+      const trelloClient = fakeTrelloClient();
+      const classifier = fakeClassifier([]);
+
+      await expect(
+        syncJobFromTrello(db, trelloClient, classifier, job, { bypassConfidenceGate: false }),
+      ).rejects.toThrow('job is not linked to a Trello card');
+    });
+  });
+
+  it('unlinks the job and returns card_not_found when the Trello card no longer exists', async () => {
+    await withTestTransaction(async (db) => {
+      const created = await createJob(db, { name: 'Job Sync Card Sumiu Teste' });
+      await setTrelloLink(db, created.id, 'card-sumiu');
+      const job = (await getJobById(db, created.id))!;
+      const trelloClient = fakeTrelloClient({ getCard: async () => null });
+      const classifier = fakeClassifier([]);
+
+      const result = await syncJobFromTrello(db, trelloClient, classifier, job, { bypassConfidenceGate: false });
+
+      expect(result.status).toBe('card_not_found');
+      const updated = await getJobById(db, created.id);
+      expect(updated?.trelloCardId).toBeNull();
+    });
+  });
+
+  it('syncs members and runs the classifier with bypassConfidenceGate: false by default', async () => {
+    await withTestTransaction(async (db) => {
+      const created = await createJob(db, { name: 'Job Sync Padrão Teste' });
+      await setTrelloLink(db, created.id, 'card1');
+      const job = (await getJobById(db, created.id))!;
+
+      const cardDetail: TrelloCardDetail = {
+        name: 'Job Sync Padrão Teste',
+        listName: 'Em Captação 2026',
+        checklistItems: [],
+        due: null,
+        latestComment: null,
+        members: [],
+      };
+      const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
+      const classifier = fakeClassifier([
+        {
+          tipo: 'checklist_item',
+          valor: 'Briefing Recebido',
+          confidence: 0.7,
+          evidencia: 'confiança média, não deveria auto-aplicar',
+        },
+      ]);
+
+      const result = await syncJobFromTrello(db, trelloClient, classifier, job, { bypassConfidenceGate: false });
+
+      expect(result.status).toBe('synced');
+      if (result.status === 'synced') {
+        expect(result.suggestions[0].outcome).toBe('pendente');
+        expect(result.trelloCard).toEqual({ name: 'Job Sync Padrão Teste', listName: 'Em Captação 2026' });
+      }
+    });
+  });
+
+  it('applies a mid-confidence suggestion when bypassConfidenceGate is true', async () => {
+    await withTestTransaction(async (db) => {
+      const created = await createJob(db, { name: 'Job Sync Bypass Teste' });
+      await setTrelloLink(db, created.id, 'card1');
+      const job = (await getJobById(db, created.id))!;
+
+      const cardDetail: TrelloCardDetail = {
+        name: 'Job Sync Bypass Teste',
+        listName: 'Em Captação 2026',
+        checklistItems: [],
+        due: null,
+        latestComment: null,
+        members: [],
+      };
+      const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
+      const classifier = fakeClassifier([
+        {
+          tipo: 'checklist_item',
+          valor: 'Briefing Recebido',
+          confidence: 0.7,
+          evidencia: 'confiança média, deveria auto-aplicar com bypass',
+        },
+      ]);
+
+      const result = await syncJobFromTrello(db, trelloClient, classifier, job, { bypassConfidenceGate: true });
+
+      expect(result.status).toBe('synced');
+      if (result.status === 'synced') {
+        expect(result.suggestions[0].outcome).toBe('auto_aplicado');
+      }
     });
   });
 });

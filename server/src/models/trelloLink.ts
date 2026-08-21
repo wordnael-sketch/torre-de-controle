@@ -1,7 +1,11 @@
 import type { AppDatabase } from '../db';
 import { listPeople, type Person } from './people';
 import { getJobRoleAssignments, setJobRoleAssignment } from './jobRoleAssignments';
-import { setAtendimento } from './job';
+import { setAtendimento, type Job } from './job';
+import { classifyAndApply, type ResolvedSuggestion } from './classification';
+import { buildTrelloEvidenceText } from './trelloMatch';
+import type { Classifier } from '../services/classifier';
+import type { TrelloClient } from '../services/trello';
 
 export async function setTrelloLink(
   db: AppDatabase,
@@ -104,4 +108,45 @@ export async function syncTrelloMembersToAtendimento(
   if (match) {
     await setAtendimento(db, jobId, match.id);
   }
+}
+
+export type TrelloSyncResult =
+  | { status: 'synced'; suggestions: ResolvedSuggestion[]; trelloCard: { name: string; listName: string } }
+  | { status: 'card_not_found' };
+
+/**
+ * Shared by both the manual "open the job" sync (POST /:id/trello-sync,
+ * bypassConfidenceGate: false) and the Trello webhook (POST
+ * /api/trello-webhook, bypassConfidenceGate: true) — the only difference
+ * between the two triggers is whether classifyAndApply's confidence gate
+ * applies. See docs/superpowers/specs/2026-08-21-trello-webhook-design.md.
+ */
+export async function syncJobFromTrello(
+  db: AppDatabase,
+  trelloClient: TrelloClient,
+  classifier: Classifier,
+  job: Job,
+  options: { bypassConfidenceGate: boolean },
+): Promise<TrelloSyncResult> {
+  if (!job.trelloCardId) {
+    throw new Error('job is not linked to a Trello card');
+  }
+
+  const card = await trelloClient.getCard(job.trelloCardId);
+  if (!card) {
+    await setTrelloLink(db, job.id, null);
+    return { status: 'card_not_found' };
+  }
+
+  if (job.phaseId) {
+    await syncTrelloMembersToRoles(db, job.id, job.phaseId, card.members);
+  }
+  await syncTrelloMembersToAtendimento(db, job.id, job.atendimentoPersonId, card.members);
+
+  const evidenceText = buildTrelloEvidenceText(card);
+  const suggestions = await classifyAndApply(db, classifier, job.id, evidenceText, {
+    bypassConfidenceGate: options.bypassConfidenceGate,
+  });
+
+  return { status: 'synced', suggestions, trelloCard: { name: card.name, listName: card.listName } };
 }

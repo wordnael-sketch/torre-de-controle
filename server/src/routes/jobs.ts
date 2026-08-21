@@ -13,8 +13,8 @@ import { setBolaCom, getBolaComDayCounts, getBolaComDayCountsForJobs } from '../
 import { getJobStatusHistory } from '../models/jobStatusHistory';
 import { getJobRoleAssignments, setJobRoleAssignment } from '../models/jobRoleAssignments';
 import { classifyAndApply } from '../models/classification';
-import { findTrelloCandidates, buildTrelloEvidenceText } from '../models/trelloMatch';
-import { setTrelloLink, syncTrelloMembersToRoles, syncTrelloMembersToAtendimento } from '../models/trelloLink';
+import { findTrelloCandidates } from '../models/trelloMatch';
+import { setTrelloLink, syncJobFromTrello } from '../models/trelloLink';
 import { requireAuth, requireActiveUser } from '../auth/middleware';
 import { asyncHandler } from '../utils/asyncHandler';
 import type { Classifier } from '../services/classifier';
@@ -458,28 +458,22 @@ export function createJobsRouter(deps: JobsRouterDeps): Router {
         return;
       }
 
-      let card;
+      let result;
       try {
-        card = await deps.trelloClient.getCard(job.trelloCardId);
+        result = await syncJobFromTrello(deps.db, deps.trelloClient, deps.classifier, job, {
+          bypassConfidenceGate: false,
+        });
       } catch {
         res.status(502).json({ error: 'trello_api_error' });
         return;
       }
 
-      if (!card) {
-        await setTrelloLink(deps.db, jobId, null);
+      if (result.status === 'card_not_found') {
         res.status(404).json({ error: 'trello_card_not_found' });
         return;
       }
 
-      if (job.phaseId) {
-        await syncTrelloMembersToRoles(deps.db, jobId, job.phaseId, card.members);
-      }
-      await syncTrelloMembersToAtendimento(deps.db, jobId, job.atendimentoPersonId, card.members);
-
-      const evidenceText = buildTrelloEvidenceText(card);
-      const suggestions = await classifyAndApply(deps.db, deps.classifier, jobId, evidenceText);
-      res.json({ suggestions, trelloCard: { name: card.name, listName: card.listName } });
+      res.json({ suggestions: result.suggestions, trelloCard: result.trelloCard });
     }),
   );
 
