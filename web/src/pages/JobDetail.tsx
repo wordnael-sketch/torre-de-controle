@@ -108,6 +108,7 @@ export function JobDetailPage() {
       const strongMatches = res.candidates.filter((c) => c.strongMatch);
       if (strongMatches.length === 1) {
         await api.setTrelloLink(currentJob.id, strongMatches[0].id);
+        setTrelloCard({ name: strongMatches[0].name, listName: strongMatches[0].listName });
         await refresh();
       } else if (res.candidates.length > 0) {
         setTrelloCandidates(res.candidates);

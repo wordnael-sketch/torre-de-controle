@@ -357,6 +357,7 @@ describe('JobDetailPage', () => {
     renderJobDetail();
 
     await waitFor(() => expect(mockedApi.setTrelloLink).toHaveBeenCalledWith(1, 'card1'));
+    expect(await screen.findByText(/Vinculado ao card: WPP:: COLGATE:: CAMPANHA/)).toBeInTheDocument();
   });
 
   it('shows a picker when multiple Trello candidates are found', async () => {
