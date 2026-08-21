@@ -384,6 +384,25 @@ describe('JobDetailPage', () => {
     expect(await screen.findByText(/Vinculado ao card: WPP:: COLGATE:: CAMPANHA/)).toBeInTheDocument();
   });
 
+  it('auto-links to the candidate whose name exactly matches the job name, even with other ambiguous candidates', async () => {
+    mockedApi.getTrelloCandidates.mockResolvedValue({
+      candidates: [
+        { id: 'card-parecido', name: 'Colgate - Color Correct Wave 2 Extra', listName: 'Em Orçamento 2026', strongMatch: false },
+        { id: 'card-exato', name: '  colgate - color correct wave 2  ', listName: 'Em Captação 2026', strongMatch: false },
+      ],
+    });
+    mockedApi.setTrelloLink.mockResolvedValue({ job: { ...jobDetail, trelloCardId: 'card-exato' } });
+    mockedApi.syncTrello.mockResolvedValue({
+      suggestions: [],
+      trelloCard: { name: '  colgate - color correct wave 2  ', listName: 'Em Captação 2026' },
+    });
+
+    renderJobDetail();
+
+    await waitFor(() => expect(mockedApi.setTrelloLink).toHaveBeenCalledWith(1, 'card-exato'));
+    expect(screen.queryByText('Vincular ao card do Trello')).not.toBeInTheDocument();
+  });
+
   it('shows a picker when multiple Trello candidates are found', async () => {
     mockedApi.getTrelloCandidates.mockResolvedValue({
       candidates: [

@@ -59,3 +59,31 @@ export async function getLastStatusChangeAt(db: AppDatabase, jobId: number): Pro
   );
   return result.rows[0] ? new Date(result.rows[0].changed_at) : null;
 }
+
+/**
+ * Batched form of getLastStatusChangeAt — one query for every job on the
+ * board instead of one query per job. listJobs used to await
+ * getLastStatusChangeAt inside a per-row Promise.all, which meant every
+ * board load fired one status-history query per job (plus the pool's
+ * connection limit serializing them into batches) on top of the list query
+ * itself and the bola-com batch query — the main source of board load
+ * latency.
+ */
+export async function getLastStatusChangeAtForJobs(
+  db: AppDatabase,
+  jobIds: number[],
+): Promise<Map<number, Date>> {
+  if (jobIds.length === 0) {
+    return new Map();
+  }
+
+  const result = await db.query<{ job_id: number; changed_at: string | Date }>(
+    `SELECT DISTINCT ON (job_id) job_id, changed_at
+     FROM job_status_history
+     WHERE job_id = ANY($1::int[])
+     ORDER BY job_id, changed_at DESC, id DESC`,
+    [jobIds],
+  );
+
+  return new Map(result.rows.map((row) => [row.job_id, new Date(row.changed_at)]));
+}

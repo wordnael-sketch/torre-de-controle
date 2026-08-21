@@ -1,5 +1,5 @@
 import type { AppDatabase } from '../db';
-import { getLastStatusChangeAt } from './jobStatusHistory';
+import { getLastStatusChangeAt, getLastStatusChangeAtForJobs } from './jobStatusHistory';
 import { computeAlertLevel, type AlertLevel } from './alertLevel';
 import { recordInitialBolaCom } from './bolaCom';
 import type { TrelloStatusUpdate } from './trelloMatch';
@@ -84,9 +84,13 @@ const JOB_SELECT = `
   LEFT JOIN people atendimento ON atendimento.id = j.atendimento_person_id
 `;
 
-async function rowToJob(db: AppDatabase, row: JobRow): Promise<Job> {
+async function rowToJob(db: AppDatabase, row: JobRow, precomputedLastStatusChangeAt?: Date | null): Promise<Job> {
   const completedAt = row.completed_at ? new Date(row.completed_at).toISOString() : null;
-  const alertLevel = completedAt ? 'green' : computeAlertLevel(await getLastStatusChangeAt(db, row.id), new Date());
+  const lastStatusChangeAt =
+    precomputedLastStatusChangeAt !== undefined
+      ? precomputedLastStatusChangeAt
+      : await getLastStatusChangeAt(db, row.id);
+  const alertLevel = completedAt ? 'green' : computeAlertLevel(lastStatusChangeAt, new Date());
 
   return {
     id: row.id,
@@ -129,7 +133,11 @@ async function getFirstStatusId(db: AppDatabase): Promise<number> {
 
 export async function listJobs(db: AppDatabase): Promise<Job[]> {
   const result = await db.query<JobRow>(`${JOB_SELECT} ORDER BY j.created_at DESC, j.id DESC`);
-  return Promise.all(result.rows.map((row) => rowToJob(db, row)));
+  const lastChangeMap = await getLastStatusChangeAtForJobs(
+    db,
+    result.rows.map((row) => row.id),
+  );
+  return Promise.all(result.rows.map((row) => rowToJob(db, row, lastChangeMap.get(row.id) ?? null)));
 }
 
 export async function getJobById(db: AppDatabase, id: number): Promise<Job | null> {

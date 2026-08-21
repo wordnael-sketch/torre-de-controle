@@ -125,8 +125,17 @@ export function JobDetailPage() {
 
     try {
       const res = await api.getTrelloCandidates(currentJob.id);
+      const normalizedJobName = currentJob.name.trim().toLowerCase();
+      const exactMatch = res.candidates.find((c) => c.name.trim().toLowerCase() === normalizedJobName);
       const strongMatches = res.candidates.filter((c) => c.strongMatch);
-      if (strongMatches.length === 1) {
+
+      if (exactMatch) {
+        // Nome do job idêntico ao do card — vincula direto, sem passar pelo
+        // seletor de candidatos, mesmo que outros cards também deem match forte.
+        await api.setTrelloLink(currentJob.id, exactMatch.id);
+        setTrelloCard({ name: exactMatch.name, listName: exactMatch.listName });
+        await refresh();
+      } else if (strongMatches.length === 1) {
         await api.setTrelloLink(currentJob.id, strongMatches[0].id);
         setTrelloCard({ name: strongMatches[0].name, listName: strongMatches[0].listName });
         await refresh();
