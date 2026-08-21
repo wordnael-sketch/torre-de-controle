@@ -39,6 +39,10 @@ export function createApp(deps: AppDeps): Express {
   });
 
   app.use('/api/trello-webhook', createTrelloWebhookRouter(deps));
+  app.use('/api/trello-webhook', (err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    console.error('trello webhook error', err);
+    res.status(200).json({ ok: true });
+  });
   app.use('/api/auth', createAuthRouter(deps));
   app.use('/api/jobs', createJobsRouter(deps));
   app.use('/api', createReferenceRouter(deps));

@@ -97,13 +97,9 @@ export function createTrelloWebhookRouter(deps: TrelloWebhookRouterDeps): Router
         return;
       }
 
-      try {
-        await syncJobFromTrello(deps.db, deps.trelloClient, deps.classifier, job, {
-          bypassConfidenceGate: true,
-        });
-      } catch (err) {
-        console.error('trello webhook sync failed', err);
-      }
+      await syncJobFromTrello(deps.db, deps.trelloClient, deps.classifier, job, {
+        bypassConfidenceGate: true,
+      });
 
       res.status(200).json({ ok: true });
     }),

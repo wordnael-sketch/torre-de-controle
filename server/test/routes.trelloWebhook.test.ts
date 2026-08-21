@@ -184,4 +184,31 @@ describe('POST /api/trello-webhook', () => {
       expect(updated?.statusName).toBe('Briefing Recebido');
     });
   });
+
+  it('still responds 200 when the sync pipeline throws (e.g. a Trello/DB failure)', async () => {
+    await withTestTransaction(async (db) => {
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+      const job = await createJob(db, { name: 'Job Webhook Trello Falha', atendimentoPersonId });
+      await setTrelloLink(db, job.id, 'card1');
+
+      const app = buildApp(db, {
+        trelloClient: fakeTrelloClient({
+          getCard: async () => {
+            throw new Error('Trello API indisponível');
+          },
+        }),
+        classifier: fakeClassifier([]),
+        trelloWebhookSecret: WEBHOOK_SECRET,
+        trelloWebhookCallbackUrl: WEBHOOK_CALLBACK_URL,
+      });
+      const payload = { action: { data: { card: { id: 'card1' } } } };
+
+      const res = await request(app)
+        .post('/api/trello-webhook')
+        .set('x-trello-webhook', sign(payload, WEBHOOK_SECRET, WEBHOOK_CALLBACK_URL))
+        .send(payload);
+
+      expect(res.status).toBe(200);
+    });
+  });
 });
