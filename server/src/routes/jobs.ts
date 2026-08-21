@@ -429,6 +429,38 @@ export function createJobsRouter(deps: JobsRouterDeps): Router {
     }),
   );
 
+  router.get(
+    '/:id/trello-cards',
+    asyncHandler(async (req, res) => {
+      const jobId = parseId(req.params.id);
+      if (jobId === null) {
+        res.status(400).json({ error: 'invalid job id' });
+        return;
+      }
+
+      if (!deps.trelloClient) {
+        res.status(503).json({ error: 'trello_nao_configurado' });
+        return;
+      }
+
+      const job = await getJobById(deps.db, jobId);
+      if (!job) {
+        res.status(404).json({ error: 'Job not found' });
+        return;
+      }
+
+      let cards;
+      try {
+        cards = await deps.trelloClient.listBoardCards();
+      } catch {
+        res.status(502).json({ error: 'trello_api_error' });
+        return;
+      }
+
+      res.json({ cards });
+    }),
+  );
+
   router.post(
     '/:id/trello-link',
     asyncHandler(async (req, res) => {
@@ -468,10 +500,6 @@ export function createJobsRouter(deps: JobsRouterDeps): Router {
 
       if (!deps.trelloClient) {
         res.status(503).json({ error: 'trello_nao_configurado' });
-        return;
-      }
-      if (!deps.classifier) {
-        res.status(503).json({ error: 'ia_nao_configurada' });
         return;
       }
 

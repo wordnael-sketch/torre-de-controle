@@ -25,6 +25,7 @@ vi.mock('../src/api/client', async () => {
       listJobs: vi.fn(),
       createJob: vi.fn(),
       getTrelloCandidates: vi.fn(),
+      getAllTrelloCards: vi.fn(),
       setTrelloLink: vi.fn(),
       syncTrello: vi.fn(),
     },
@@ -117,6 +118,7 @@ describe('JobDetailPage', () => {
     mockedApi.listJobs.mockReset();
     mockedApi.createJob.mockReset();
     mockedApi.getTrelloCandidates.mockReset();
+    mockedApi.getAllTrelloCards.mockReset();
     mockedApi.setTrelloLink.mockReset();
     mockedApi.syncTrello.mockReset();
     mockedApi.listJobs.mockResolvedValue({ jobs: [] });
@@ -444,5 +446,67 @@ describe('JobDetailPage', () => {
     await user.click(await screen.findByText('desvincular'));
 
     await waitFor(() => expect(mockedApi.setTrelloLink).toHaveBeenCalledWith(1, null));
+  });
+
+  it('shows every board card when "Vincular ao Trello" is clicked, even with zero scored candidates', async () => {
+    mockedApi.getTrelloCandidates.mockResolvedValue({ candidates: [] });
+    mockedApi.getAllTrelloCards.mockResolvedValue({
+      cards: [
+        { id: 'card1', name: 'WPP:: COLGATE:: CAMPANHA', listName: 'Em Captação 2026' },
+        { id: 'card2', name: 'NOVA :: SESCOOP :: LICITAÇÃO', listName: 'Concluído' },
+      ],
+    });
+    const user = userEvent.setup();
+
+    renderJobDetail();
+
+    await user.click(await screen.findByText('Vincular ao Trello'));
+
+    await waitFor(() => expect(mockedApi.getAllTrelloCards).toHaveBeenCalledWith(1));
+    expect(await screen.findByText(/WPP:: COLGATE:: CAMPANHA/)).toBeInTheDocument();
+    expect(screen.getByText(/NOVA :: SESCOOP :: LICITAÇÃO/)).toBeInTheDocument();
+  });
+
+  it('filters the full card list as the search field is typed into', async () => {
+    mockedApi.getTrelloCandidates.mockResolvedValue({ candidates: [] });
+    mockedApi.getAllTrelloCards.mockResolvedValue({
+      cards: [
+        { id: 'card1', name: 'WPP:: COLGATE:: CAMPANHA', listName: 'Em Captação 2026' },
+        { id: 'card2', name: 'NOVA :: SESCOOP :: LICITAÇÃO', listName: 'Concluído' },
+      ],
+    });
+    const user = userEvent.setup();
+
+    renderJobDetail();
+
+    await user.click(await screen.findByText('Vincular ao Trello'));
+    await screen.findByText(/WPP:: COLGATE:: CAMPANHA/);
+
+    await user.type(screen.getByLabelText('Buscar card do Trello'), 'sescoop');
+
+    expect(screen.queryByText(/WPP:: COLGATE:: CAMPANHA/)).not.toBeInTheDocument();
+    expect(screen.getByText(/NOVA :: SESCOOP :: LICITAÇÃO/)).toBeInTheDocument();
+  });
+
+  it('links and immediately syncs when a card is picked from the full list', async () => {
+    mockedApi.getTrelloCandidates.mockResolvedValue({ candidates: [] });
+    mockedApi.getAllTrelloCards.mockResolvedValue({
+      cards: [{ id: 'card1', name: 'WPP:: COLGATE:: CAMPANHA', listName: 'Em Captação 2026' }],
+    });
+    mockedApi.setTrelloLink.mockResolvedValue({ job: { ...jobDetail, trelloCardId: 'card1' } });
+    mockedApi.syncTrello.mockResolvedValue({
+      suggestions: [],
+      trelloCard: { name: 'WPP:: COLGATE:: CAMPANHA', listName: 'Em Captação 2026' },
+    });
+    const user = userEvent.setup();
+
+    renderJobDetail();
+
+    await user.click(await screen.findByText('Vincular ao Trello'));
+    await user.click(await screen.findByText(/WPP:: COLGATE:: CAMPANHA/));
+
+    await waitFor(() => expect(mockedApi.setTrelloLink).toHaveBeenCalledWith(1, 'card1'));
+    await waitFor(() => expect(mockedApi.syncTrello).toHaveBeenCalledWith(1));
+    expect(await screen.findByText(/Vinculado ao card: WPP:: COLGATE:: CAMPANHA/)).toBeInTheDocument();
   });
 });

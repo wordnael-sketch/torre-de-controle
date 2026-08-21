@@ -136,6 +136,13 @@ export interface TrelloCardSummary {
   listName: string;
 }
 
+/** Um card cru do board, sem pontuação — usado pela lista completa (botão "Vincular ao Trello"). */
+export interface TrelloBoardCard {
+  id: string;
+  name: string;
+  listName: string;
+}
+
 export interface Status {
   id: number;
   phaseId: number;
@@ -215,6 +222,7 @@ export const api = {
     }),
   getTrelloCandidates: (id: number) =>
     request<{ candidates: TrelloCandidate[] }>(`/api/jobs/${id}/trello-candidates`),
+  getAllTrelloCards: (id: number) => request<{ cards: TrelloBoardCard[] }>(`/api/jobs/${id}/trello-cards`),
   setTrelloLink: (id: number, trelloCardId: string | null) =>
     request<{ job: Job }>(`/api/jobs/${id}/trello-link`, {
       method: 'POST',

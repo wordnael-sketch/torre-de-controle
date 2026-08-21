@@ -10,6 +10,7 @@ import {
   type Person,
   type TrelloCandidate,
   type TrelloCardSummary,
+  type TrelloBoardCard,
 } from '../api/client';
 import { phaseMarkerColor, phaseTextColor } from '../theme/phase';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -65,6 +66,16 @@ export function JobDetailPage() {
   const [trelloCandidates, setTrelloCandidates] = useState<TrelloCandidate[] | null>(null);
   const [trelloCard, setTrelloCard] = useState<TrelloCardSummary | null>(null);
   const trelloSyncedRef = useRef(false);
+  const [allTrelloCards, setAllTrelloCards] = useState<TrelloBoardCard[] | null>(null);
+  const [loadingAllTrelloCards, setLoadingAllTrelloCards] = useState(false);
+  const [trelloCardSearch, setTrelloCardSearch] = useState('');
+
+  const filteredTrelloCards = useMemo(() => {
+    if (!allTrelloCards) return [];
+    const term = trelloCardSearch.trim().toLowerCase();
+    if (!term) return allTrelloCards;
+    return allTrelloCards.filter((c) => c.name.toLowerCase().includes(term));
+  }, [allTrelloCards, trelloCardSearch]);
 
   useEffect(() => {
     pendingCompleteStatusIdRef.current = pendingCompleteStatusId;
@@ -211,14 +222,42 @@ export function JobDetailPage() {
     }
   }
 
-  async function handleLinkTrello(trelloCardId: string) {
+  // Recebe o card inteiro (não só o id): precisamos do nome/lista pra
+  // acender o indicador "Vinculado ao card" na hora, sem esperar o
+  // usuário recarregar a página — o mesmo cuidado já tomado no caminho de
+  // vinculação automática. Depois de vincular, sincroniza na hora também
+  // (é o "e sincronizar" do botão manual), com um resultado só um pouco
+  // menos completo (nome/lista já conhecidos) se a sincronização falhar.
+  async function handleLinkTrello(card: { id: string; name: string; listName: string }) {
     setError(null);
     try {
-      await api.setTrelloLink(jobId, trelloCardId);
+      await api.setTrelloLink(jobId, card.id);
       setTrelloCandidates(null);
+      setAllTrelloCards(null);
+      try {
+        const res = await api.syncTrello(jobId);
+        setSuggestions(res.suggestions);
+        setTrelloCard(res.trelloCard);
+      } catch {
+        setTrelloCard({ name: card.name, listName: card.listName });
+      }
       await refresh();
     } catch {
       setError('Não foi possível vincular o card do Trello.');
+    }
+  }
+
+  async function handleShowAllTrelloCards() {
+    setError(null);
+    setLoadingAllTrelloCards(true);
+    try {
+      const res = await api.getAllTrelloCards(jobId);
+      setAllTrelloCards(res.cards);
+      setTrelloCardSearch('');
+    } catch {
+      setError('Não foi possível carregar os cards do Trello.');
+    } finally {
+      setLoadingAllTrelloCards(false);
     }
   }
 
@@ -405,7 +444,7 @@ export function JobDetailPage() {
             <ul>
               {trelloCandidates.map((c) => (
                 <li key={c.id}>
-                  <button type="button" onClick={() => void handleLinkTrello(c.id)}>
+                  <button type="button" onClick={() => void handleLinkTrello(c)}>
                     {c.name} <span className="job-detail-trello-list">({c.listName})</span>
                   </button>
                 </li>
@@ -413,6 +452,45 @@ export function JobDetailPage() {
             </ul>
             <button type="button" onClick={() => setTrelloCandidates([])}>
               Nenhum desses
+            </button>
+          </div>
+        )}
+
+        <button
+          type="button"
+          className="job-detail-link-btn"
+          onClick={() => void handleShowAllTrelloCards()}
+          disabled={loadingAllTrelloCards}
+        >
+          {loadingAllTrelloCards ? 'Carregando cards do Trello…' : 'Vincular ao Trello'}
+        </button>
+
+        {allTrelloCards && (
+          <div className="job-detail-trello-picker job-detail-trello-picker--full">
+            <p className="label-caps">Vincular ao card do Trello ({allTrelloCards.length} cards)</p>
+            <input
+              type="text"
+              className="job-detail-trello-search"
+              placeholder="Buscar por nome do card…"
+              value={trelloCardSearch}
+              onChange={(e) => setTrelloCardSearch(e.target.value)}
+              autoFocus
+              aria-label="Buscar card do Trello"
+            />
+            <ul>
+              {filteredTrelloCards.map((c) => (
+                <li key={c.id}>
+                  <button type="button" onClick={() => void handleLinkTrello(c)}>
+                    {c.name} <span className="job-detail-trello-list">({c.listName})</span>
+                  </button>
+                </li>
+              ))}
+              {filteredTrelloCards.length === 0 && (
+                <li className="job-detail-trello-empty">Nenhum card encontrado.</li>
+              )}
+            </ul>
+            <button type="button" onClick={() => setAllTrelloCards(null)}>
+              Fechar
             </button>
           </div>
         )}

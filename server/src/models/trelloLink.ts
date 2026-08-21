@@ -1,7 +1,7 @@
 import type { AppDatabase } from '../db';
 import { listPeople, type Person } from './people';
 import { getJobRoleAssignments, setJobRoleAssignment } from './jobRoleAssignments';
-import { setAtendimento, type Job } from './job';
+import { setAtendimento, setJobName, type Job } from './job';
 import { classifyAndApply, type ResolvedSuggestion } from './classification';
 import { buildTrelloEvidenceText } from './trelloMatch';
 import type { Classifier } from '../services/classifier';
@@ -120,11 +120,19 @@ export type TrelloSyncResult =
  * /api/trello-webhook, bypassConfidenceGate: true) — the only difference
  * between the two triggers is whether classifyAndApply's confidence gate
  * applies. See docs/superpowers/specs/2026-08-21-trello-webhook-design.md.
+ *
+ * classifier is optional: matching Trello card members to Atendimento/role
+ * areas is deterministic name-matching, not AI, so it runs unconditionally.
+ * Only the checklist-driven status suggestions need the classifier — when
+ * ANTHROPIC_API_KEY isn't configured, suggestions comes back empty instead
+ * of blocking the whole sync (this used to be gated together at the route
+ * level, which meant the member/Atendimento matching silently never ran at
+ * all without an AI key, even though it never needed one).
  */
 export async function syncJobFromTrello(
   db: AppDatabase,
   trelloClient: TrelloClient,
-  classifier: Classifier,
+  classifier: Classifier | undefined,
   job: Job,
   options: { bypassConfidenceGate: boolean },
 ): Promise<TrelloSyncResult> {
@@ -138,15 +146,25 @@ export async function syncJobFromTrello(
     return { status: 'card_not_found' };
   }
 
+  // O card do Trello é a fonte da verdade pro nome, uma vez vinculado —
+  // se alguém renomeou o card lá (ou o job aqui, e ficou desatualizado),
+  // toda sincronização realinha o nome do job com o nome atual do card.
+  if (card.name !== job.name) {
+    await setJobName(db, job.id, card.name);
+  }
+
   if (job.phaseId) {
     await syncTrelloMembersToRoles(db, job.id, job.phaseId, card.members);
   }
   await syncTrelloMembersToAtendimento(db, job.id, job.atendimentoPersonId, card.members);
 
-  const evidenceText = buildTrelloEvidenceText(card);
-  const suggestions = await classifyAndApply(db, classifier, job.id, evidenceText, {
-    bypassConfidenceGate: options.bypassConfidenceGate,
-  });
+  let suggestions: ResolvedSuggestion[] = [];
+  if (classifier) {
+    const evidenceText = buildTrelloEvidenceText(card);
+    suggestions = await classifyAndApply(db, classifier, job.id, evidenceText, {
+      bypassConfidenceGate: options.bypassConfidenceGate,
+    });
+  }
 
   return { status: 'synced', suggestions, trelloCard: { name: card.name, listName: card.listName } };
 }

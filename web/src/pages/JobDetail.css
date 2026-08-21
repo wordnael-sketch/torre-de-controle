@@ -288,6 +288,24 @@
   text-align: left;
 }
 
+.job-detail-trello-picker--full ul {
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.job-detail-trello-search {
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-top: 0.4rem;
+}
+
+.job-detail-trello-empty {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
 .job-detail-trello-list {
   color: var(--text-secondary);
   font-size: 0.8rem;

@@ -66,18 +66,18 @@ export function createTrelloWebhookRouter(deps: TrelloWebhookRouterDeps): Router
   router.post(
     '/',
     asyncHandler(async (req, res) => {
-      if (
-        !deps.trelloClient ||
-        !deps.classifier ||
-        !deps.trelloWebhookSecret ||
-        !deps.trelloWebhookCallbackUrl
-      ) {
+      if (!deps.trelloClient || !deps.trelloWebhookSecret || !deps.trelloWebhookCallbackUrl) {
         console.warn(
-          'trello webhook received a request but is not fully configured (missing trelloClient/classifier/trelloWebhookSecret/trelloWebhookCallbackUrl)',
+          'trello webhook received a request but is not fully configured (missing trelloClient/trelloWebhookSecret/trelloWebhookCallbackUrl)',
         );
         res.status(200).json({ ok: true });
         return;
       }
+      // deps.classifier is intentionally NOT required here — member/Atendimento
+      // matching is deterministic name-matching, not AI, and must still run
+      // when ANTHROPIC_API_KEY isn't configured. Only the checklist-driven
+      // status suggestions inside syncJobFromTrello need it, and that function
+      // already treats classifier as optional.
 
       const rawBody = req.rawBody ?? Buffer.from(JSON.stringify(req.body ?? {}));
       const signature = req.header('x-trello-webhook');

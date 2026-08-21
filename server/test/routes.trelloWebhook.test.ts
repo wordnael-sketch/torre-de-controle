@@ -185,6 +185,41 @@ describe('POST /api/trello-webhook', () => {
     });
   });
 
+  it('still matches Trello card members to Atendimento even without a classifier configured', async () => {
+    await withTestTransaction(async (db) => {
+      const job = await createJob(db, { name: 'Job Webhook Sem IA Teste' });
+      await setTrelloLink(db, job.id, 'card1');
+
+      const cardDetail: TrelloCardDetail = {
+        name: 'Job Webhook Sem IA Teste',
+        listName: 'Em Captação 2026',
+        checklistItems: [],
+        due: null,
+        latestComment: null,
+        members: ['Wilka Nepomoceno'],
+      };
+      const app = buildApp(db, {
+        trelloClient: fakeTrelloClient({ getCard: async () => cardDetail }),
+        // classifier deliberately omitted — member/Atendimento matching is
+        // deterministic and must not depend on ANTHROPIC_API_KEY.
+        trelloWebhookSecret: WEBHOOK_SECRET,
+        trelloWebhookCallbackUrl: WEBHOOK_CALLBACK_URL,
+      });
+      const payload = { action: { data: { card: { id: 'card1' } } } };
+
+      const res = await request(app)
+        .post('/api/trello-webhook')
+        .set('x-trello-webhook', sign(payload, WEBHOOK_SECRET, WEBHOOK_CALLBACK_URL))
+        .send(payload);
+
+      expect(res.status).toBe(200);
+
+      const updated = await getJobById(db, job.id);
+      const wilka = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Wilka' AND area = 'Atendimento'`);
+      expect(updated?.atendimentoPersonId).toBe(wilka.rows[0].id);
+    });
+  });
+
   it('still responds 200 when the sync pipeline throws (e.g. a Trello/DB failure)', async () => {
     await withTestTransaction(async (db) => {
       const atendimentoPersonId = await getAtendimentoPersonId(db);
