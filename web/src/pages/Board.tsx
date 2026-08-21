@@ -15,7 +15,7 @@ function phaseOrderOf(phases: Phase[], phaseId: number | null): number | null {
 
 function matchesSearch(job: Job, term: string): boolean {
   if (!term) return true;
-  const haystack = `${job.name} ${job.client ?? ''} ${job.highlightedPersonName ?? ''}`.toLowerCase();
+  const haystack = `${job.name} ${job.client ?? ''} ${job.highlightedPersonName ?? ''} ${job.atendimentoPersonName ?? ''}`.toLowerCase();
   return haystack.includes(term.toLowerCase());
 }
 
@@ -27,6 +27,7 @@ export function Board() {
   const [search, setSearch] = useState('');
   const [farolFilter, setFarolFilter] = useState<Set<AlertLevel>>(new Set());
   const [faseFilter, setFaseFilter] = useState<Set<number>>(new Set());
+  const [atendimentoFilter, setAtendimentoFilter] = useState<Set<number>>(new Set());
   const [name, setName] = useState('');
   const [atendimentoPersonId, setAtendimentoPersonId] = useState('');
   const [showNewJobForm, setShowNewJobForm] = useState(false);
@@ -76,14 +77,34 @@ export function Board() {
     return counts;
   }, [activeJobs]);
 
+  const atendimentoPeople = useMemo(
+    () => people.filter((p) => p.area === 'Atendimento' && p.active),
+    [people],
+  );
+
+  // Historical total (active + completed) — deliberately not scoped to activeJobs,
+  // unlike farolCounts/faseCounts: this is "how many jobs has this person ever
+  // handled", a stat, not a preview of what the click-filter below will show.
+  const atendimentoCounts = useMemo(() => {
+    const counts = new Map<number, number>();
+    for (const job of jobs) {
+      if (job.atendimentoPersonId) {
+        counts.set(job.atendimentoPersonId, (counts.get(job.atendimentoPersonId) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [jobs]);
+
   const visibleJobs = useMemo(() => {
     return activeJobs.filter((job) => {
       if (farolFilter.size > 0 && !farolFilter.has(job.alertLevel)) return false;
       if (faseFilter.size > 0 && (!job.phaseId || !faseFilter.has(job.phaseId))) return false;
+      if (atendimentoFilter.size > 0 && (!job.atendimentoPersonId || !atendimentoFilter.has(job.atendimentoPersonId)))
+        return false;
       if (!matchesSearch(job, search)) return false;
       return true;
     });
-  }, [activeJobs, farolFilter, faseFilter, search]);
+  }, [activeJobs, farolFilter, faseFilter, atendimentoFilter, search]);
 
   const stuckJobs = useMemo(
     () =>
@@ -115,6 +136,15 @@ export function Board() {
       const next = new Set(prev);
       if (next.has(phaseId)) next.delete(phaseId);
       else next.add(phaseId);
+      return next;
+    });
+  }
+
+  function toggleAtendimento(personId: number) {
+    setAtendimentoFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(personId)) next.delete(personId);
+      else next.add(personId);
       return next;
     });
   }
@@ -192,6 +222,22 @@ export function Board() {
               <span className="board-swatch" style={{ background: phaseColor(phase.order) }} />
               <span className="board-filter-label">{phase.name}</span>
               <span className="board-filter-count">{faseCounts.get(phase.id) ?? 0}</span>
+            </button>
+          ))}
+        </nav>
+
+        <nav className="board-filter-group" aria-label="Filtro por atendimento">
+          <h2 className="label-caps">Atendimentos</h2>
+          {atendimentoPeople.map((person) => (
+            <button
+              key={person.id}
+              type="button"
+              className={`board-filter-row${atendimentoFilter.has(person.id) ? ' is-active' : ''}`}
+              aria-pressed={atendimentoFilter.has(person.id)}
+              onClick={() => toggleAtendimento(person.id)}
+            >
+              <span className="board-filter-label">{person.name}</span>
+              <span className="board-filter-count">{atendimentoCounts.get(person.id) ?? 0}</span>
             </button>
           ))}
         </nav>

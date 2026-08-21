@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { Board } from '../src/pages/Board';
@@ -266,5 +266,75 @@ describe('Board', () => {
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     await waitFor(() => expect(mockedApi.listJobs).toHaveBeenCalledTimes(2));
+  });
+
+  it('shows an Atendimentos row per active person, counting active and completed jobs together', async () => {
+    mockedApi.listPeople.mockResolvedValue({
+      people: [
+        { id: 7, name: 'Wilka', area: 'Atendimento', active: true, title: 'Head' },
+        { id: 8, name: 'Camila', area: 'Atendimento', active: true, title: 'Executiva de Contas' },
+        { id: 9, name: 'Ex-Atendimento', area: 'Atendimento', active: false, title: null },
+      ],
+    });
+    mockedApi.listJobs.mockResolvedValue({
+      jobs: [
+        makeJob({ id: 1, atendimentoPersonId: 7, atendimentoPersonName: 'Wilka' }),
+        makeJob({ id: 2, atendimentoPersonId: 7, atendimentoPersonName: 'Wilka', completedAt: '2026-08-18T00:00:00.000Z' }),
+        makeJob({ id: 3, atendimentoPersonId: 8, atendimentoPersonName: 'Camila' }),
+      ],
+    });
+
+    renderBoard();
+
+    const atendimentosNav = await screen.findByRole('navigation', { name: 'Filtro por atendimento' });
+    expect(within(atendimentosNav).getByText('Wilka')).toBeInTheDocument();
+    expect(within(atendimentosNav).getByRole('button', { name: /Wilka/ })).toHaveTextContent('2');
+    expect(within(atendimentosNav).getByRole('button', { name: /Camila/ })).toHaveTextContent('1');
+    expect(within(atendimentosNav).queryByText('Ex-Atendimento')).not.toBeInTheDocument();
+  });
+
+  it('filters the table to one Atendimento responsável when their row is clicked', async () => {
+    mockedApi.listPeople.mockResolvedValue({
+      people: [
+        { id: 7, name: 'Wilka', area: 'Atendimento', active: true, title: 'Head' },
+        { id: 8, name: 'Camila', area: 'Atendimento', active: true, title: 'Executiva de Contas' },
+      ],
+    });
+    mockedApi.listJobs.mockResolvedValue({
+      jobs: [
+        makeJob({ id: 1, name: 'Job da Wilka', atendimentoPersonId: 7, atendimentoPersonName: 'Wilka' }),
+        makeJob({ id: 2, name: 'Job da Camila', atendimentoPersonId: 8, atendimentoPersonName: 'Camila' }),
+      ],
+    });
+    const user = userEvent.setup();
+
+    renderBoard();
+
+    await screen.findByText('Job da Wilka');
+    await screen.findByText('Job da Camila');
+
+    const atendimentosNav = screen.getByRole('navigation', { name: 'Filtro por atendimento' });
+    await user.click(within(atendimentosNav).getByRole('button', { name: /Camila/ }));
+
+    expect(screen.queryByText('Job da Wilka')).not.toBeInTheDocument();
+    expect(screen.getByText('Job da Camila')).toBeInTheDocument();
+  });
+
+  it('matches jobs by Atendimento responsável name in the search box', async () => {
+    mockedApi.listJobs.mockResolvedValue({
+      jobs: [
+        makeJob({ id: 1, name: 'Job A', client: null, highlightedPersonName: null, atendimentoPersonName: 'Larissa (Brasília)' }),
+        makeJob({ id: 2, name: 'Job B', client: null, highlightedPersonName: null, atendimentoPersonName: 'Karina' }),
+      ],
+    });
+    const user = userEvent.setup();
+
+    renderBoard();
+
+    await screen.findByText('Job A');
+    await user.type(screen.getByLabelText('Buscar'), 'Larissa');
+
+    expect(screen.getByText('Job A')).toBeInTheDocument();
+    expect(screen.queryByText('Job B')).not.toBeInTheDocument();
   });
 });
