@@ -16,6 +16,8 @@ export async function createAppFromEnv(): Promise<Express> {
   const trelloApiKey = process.env.TRELLO_API_KEY;
   const trelloToken = process.env.TRELLO_TOKEN;
   const trelloBoardId = process.env.TRELLO_BOARD_ID;
+  const trelloWebhookSecret = process.env.TRELLO_API_SECRET;
+  const trelloWebhookCallbackUrl = process.env.TRELLO_WEBHOOK_CALLBACK_URL;
   const trelloConfigured = Boolean(trelloApiKey && trelloToken && trelloBoardId);
 
   if (!connectionString) {
@@ -40,5 +42,7 @@ export async function createAppFromEnv(): Promise<Express> {
     trelloClient: trelloConfigured
       ? createHttpTrelloClient(trelloApiKey!, trelloToken!, trelloBoardId!)
       : undefined,
+    trelloWebhookSecret,
+    trelloWebhookCallbackUrl,
   });
 }

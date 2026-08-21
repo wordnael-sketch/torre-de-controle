@@ -6,6 +6,7 @@ import { createAuthRouter, type VerifyIdToken } from './routes/auth';
 import { createJobsRouter } from './routes/jobs';
 import { createReferenceRouter } from './routes/reference';
 import { createUsersRouter } from './routes/users';
+import { createTrelloWebhookRouter } from './routes/trelloWebhook';
 import type { Classifier } from './services/classifier';
 import type { TrelloClient } from './services/trello';
 
@@ -17,18 +18,27 @@ export interface AppDeps {
   frontendUrl: string;
   classifier?: Classifier;
   trelloClient?: TrelloClient;
+  trelloWebhookSecret?: string;
+  trelloWebhookCallbackUrl?: string;
 }
 
 export function createApp(deps: AppDeps): Express {
   const app = express();
   app.use(cors({ origin: deps.frontendUrl, credentials: true }));
-  app.use(express.json());
+  app.use(
+    express.json({
+      verify: (req, _res, buf) => {
+        req.rawBody = buf;
+      },
+    }),
+  );
   app.use(cookieParser());
 
   app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok' });
   });
 
+  app.use('/api/trello-webhook', createTrelloWebhookRouter(deps));
   app.use('/api/auth', createAuthRouter(deps));
   app.use('/api/jobs', createJobsRouter(deps));
   app.use('/api', createReferenceRouter(deps));
