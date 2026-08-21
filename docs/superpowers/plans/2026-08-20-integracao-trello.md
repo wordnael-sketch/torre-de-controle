@@ -19,6 +19,7 @@
 - A interpretação do texto do Trello (lista → fase, itens do checklist → status) passa inteiramente por `classifyAndApply` (`server/src/models/classification.ts`) — nenhuma lógica nova de mapeamento determinístico lista↔fase ou item↔status, nenhuma mudança na própria `classifyAndApply`.
 - Toda rota nova fica atrás do `requireAuth`/`requireActiveUser` já aplicado em `createJobsRouter` (`server/src/routes/jobs.ts:26-27`) — não criar um router separado, não bypassar essa cadeia.
 - Toda escrita que atualiza `jobs` deve continuar seguindo os padrões já estabelecidos no arquivo (`updated_at = now()` em toda escrita).
+- **Correção pós-escrita deste plano**: quando este plano foi originalmente escrito, "Atendimento" ainda era um papel por fase (`job_role_assignments`/`phase_roles`). O plano "Atendimento Responsável" (já implementado e mesclado) aposentou esse mecanismo — Atendimento agora é um campo único do job (`jobs.atendimento_person_id`, obrigatório na criação via `POST /api/jobs`). A Task 2 abaixo já foi ajustada para refletir isso: `syncTrelloMembersToRoles` continua cuidando das outras áreas (Comercial, Produção Executiva, etc.) via `job_role_assignments`, e uma função nova, `syncTrelloMembersToAtendimento`, cuida especificamente do campo `atendimento_person_id` — só preenche quando estiver nulo (o que só deve acontecer nos jobs anteriores a essa obrigatoriedade), nunca sobrescreve. Além disso, `POST /api/jobs` agora exige `atendimentoPersonId` no corpo — todo teste desta Task 2 que cria um job via essa rota precisa incluir esse campo, ou recebe `400` em vez do resultado esperado.
 
 ---
 
@@ -347,14 +348,15 @@ git commit -m "feat(trello): add read-only Trello HTTP client"
 - Test: `server/test/models.trelloLink.test.ts`
 - Modify: `server/src/models/job.ts`
 - Modify: `server/src/app.ts`
-- Modify: `server/src/index.ts`
+- Modify: `server/src/createAppFromEnv.ts` (não `server/src/index.ts` diretamente — ver nota no Step 10 sobre a extração feita pelo plano de deploy, já mesclado)
+- Modify: `server/src/index.ts` (só uma linha de aviso — ver Step 10)
 - Modify: `server/src/routes/jobs.ts`
 - Modify: `server/.env.example`
 - Test: `server/test/routes.jobs.test.ts`
 
 **Interfaces:**
-- Consumes: `TrelloClient`, `TrelloCardSummary`, `TrelloCardDetail` (Task 1); `classifyAndApply` de `server/src/models/classification.ts` (já existente, sem alterações); `Job`/`getJobById` de `server/src/models/job.ts`; `listPeople` de `server/src/models/people.ts`; `getJobRoleAssignments`/`setJobRoleAssignment` de `server/src/models/jobRoleAssignments.ts` (todos já existentes, sem alterações).
-- Produces: `findTrelloCandidates(job, cards): TrelloCandidate[]` e `buildTrelloEvidenceText(card): string` de `trelloMatch.ts`; `setTrelloLink(db, jobId, trelloCardId): Promise<void>` e `syncTrelloMembersToRoles(db, jobId, phaseId, trelloMemberNames): Promise<void>` de `trelloLink.ts`; `Job.trelloCardId: string | null` e `Job.trelloLinkedAt: string | null`; rotas `GET /api/jobs/:id/trello-candidates`, `POST /api/jobs/:id/trello-link`, `POST /api/jobs/:id/trello-sync`.
+- Consumes: `TrelloClient`, `TrelloCardSummary`, `TrelloCardDetail` (Task 1); `classifyAndApply` de `server/src/models/classification.ts` (já existente, sem alterações); `Job`/`getJobById`/`setAtendimento` de `server/src/models/job.ts` (`setAtendimento` já existe, do plano "Atendimento Responsável" — sem alterações); `listPeople` de `server/src/models/people.ts`; `getJobRoleAssignments`/`setJobRoleAssignment` de `server/src/models/jobRoleAssignments.ts`; `getAtendimentoPersonId(db)` já existe em `server/test/routes.jobs.test.ts` (helper do plano "Atendimento Responsável") — reutilize-o, não redefina.
+- Produces: `findTrelloCandidates(job, cards): TrelloCandidate[]` e `buildTrelloEvidenceText(card): string` de `trelloMatch.ts`; `setTrelloLink(db, jobId, trelloCardId): Promise<void>`, `syncTrelloMembersToRoles(db, jobId, phaseId, trelloMemberNames): Promise<void>` e `syncTrelloMembersToAtendimento(db, jobId, currentAtendimentoPersonId, trelloMemberNames): Promise<void>` de `trelloLink.ts`; `Job.trelloCardId: string | null` e `Job.trelloLinkedAt: string | null`; rotas `GET /api/jobs/:id/trello-candidates`, `POST /api/jobs/:id/trello-link`, `POST /api/jobs/:id/trello-sync`.
 
 - [ ] **Step 1: Escrever os testes que falham para o casamento de candidatos**
 
@@ -518,7 +520,7 @@ uma inferência de texto. Crie `server/test/models.trelloLink.test.ts`:
 ```typescript
 import { describe, it, expect } from 'vitest';
 import { createJob } from '../src/models/job';
-import { setTrelloLink, syncTrelloMembersToRoles } from '../src/models/trelloLink';
+import { setTrelloLink, syncTrelloMembersToRoles, syncTrelloMembersToAtendimento } from '../src/models/trelloLink';
 import { getJobRoleAssignments, setJobRoleAssignment } from '../src/models/jobRoleAssignments';
 import { withTestTransaction } from './helpers/testDb';
 
@@ -613,6 +615,76 @@ describe('syncTrelloMembersToRoles', () => {
     });
   });
 });
+
+describe('syncTrelloMembersToAtendimento', () => {
+  it('assigns Atendimento when the current value is null and a Trello member matches', async () => {
+    await withTestTransaction(async (db) => {
+      // createJob (nível de modelo, não a rota) aceita atendimentoPersonId ausente —
+      // simula exatamente os jobs anteriores ao plano "Atendimento Responsável",
+      // que ficam com o campo nulo até alguém preencher.
+      const job = await createJob(db, { name: 'Job Trello Atendimento Vazio Teste' });
+
+      await syncTrelloMembersToAtendimento(db, job.id, null, ['Wilka Nepomoceno']);
+
+      const result = await db.query<{ atendimento_person_id: number | null }>(
+        'SELECT atendimento_person_id FROM jobs WHERE id = $1',
+        [job.id],
+      );
+      const wilka = await db.query<{ id: number }>(
+        `SELECT id FROM people WHERE name = 'Wilka' AND area = 'Atendimento'`,
+      );
+      expect(result.rows[0].atendimento_person_id).toBe(wilka.rows[0].id);
+    });
+  });
+
+  it('does not overwrite an Atendimento that is already set', async () => {
+    await withTestTransaction(async (db) => {
+      const camila = await db.query<{ id: number }>(
+        `SELECT id FROM people WHERE name = 'Camila' AND area = 'Atendimento'`,
+      );
+      const job = await createJob(db, {
+        name: 'Job Trello Atendimento Já Definido Teste',
+        atendimentoPersonId: camila.rows[0].id,
+      });
+
+      await syncTrelloMembersToAtendimento(db, job.id, camila.rows[0].id, ['Wilka Nepomoceno']);
+
+      const result = await db.query<{ atendimento_person_id: number }>(
+        'SELECT atendimento_person_id FROM jobs WHERE id = $1',
+        [job.id],
+      );
+      expect(result.rows[0].atendimento_person_id).toBe(camila.rows[0].id);
+    });
+  });
+
+  it('does nothing when no Trello member matches anyone in Atendimento', async () => {
+    await withTestTransaction(async (db) => {
+      const job = await createJob(db, { name: 'Job Trello Atendimento Sem Match Teste' });
+
+      await syncTrelloMembersToAtendimento(db, job.id, null, ['Alguém Que Não Existe']);
+
+      const result = await db.query<{ atendimento_person_id: number | null }>(
+        'SELECT atendimento_person_id FROM jobs WHERE id = $1',
+        [job.id],
+      );
+      expect(result.rows[0].atendimento_person_id).toBeNull();
+    });
+  });
+
+  it('does nothing when the member list is empty', async () => {
+    await withTestTransaction(async (db) => {
+      const job = await createJob(db, { name: 'Job Trello Atendimento Membros Vazio Teste' });
+
+      await syncTrelloMembersToAtendimento(db, job.id, null, []);
+
+      const result = await db.query<{ atendimento_person_id: number | null }>(
+        'SELECT atendimento_person_id FROM jobs WHERE id = $1',
+        [job.id],
+      );
+      expect(result.rows[0].atendimento_person_id).toBeNull();
+    });
+  });
+});
 ```
 
 - [ ] **Step 6: Rodar e ver falhar**
@@ -624,8 +696,9 @@ Expected: FAIL — `Cannot find module '../src/models/trelloLink'`.
 
 ```typescript
 import type { AppDatabase } from '../db';
-import { listPeople } from './people';
+import { listPeople, type Person } from './people';
 import { getJobRoleAssignments, setJobRoleAssignment } from './jobRoleAssignments';
+import { setAtendimento } from './job';
 
 export async function setTrelloLink(
   db: AppDatabase,
@@ -648,6 +721,15 @@ function normalizePersonName(text: string): string {
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
     .trim();
+}
+
+function findMatchingPerson(candidates: Person[], normalizedMembers: string[]): Person | undefined {
+  return candidates.find((person) => {
+    const normalizedPersonName = normalizePersonName(person.name);
+    return normalizedMembers.some(
+      (member) => member.includes(normalizedPersonName) || normalizedPersonName.includes(member),
+    );
+  });
 }
 
 /**
@@ -679,19 +761,45 @@ export async function syncTrelloMembersToRoles(
       continue;
     }
 
-    const match = people.find((person) => {
-      if (person.area !== assignment.area) {
-        return false;
-      }
-      const normalizedPersonName = normalizePersonName(person.name);
-      return normalizedMembers.some(
-        (member) => member.includes(normalizedPersonName) || normalizedPersonName.includes(member),
-      );
-    });
+    const match = findMatchingPerson(
+      people.filter((person) => person.area === assignment.area),
+      normalizedMembers,
+    );
 
     if (match) {
       await setJobRoleAssignment(db, jobId, phaseId, assignment.area, match.id);
     }
+  }
+}
+
+/**
+ * Atendimento is a single job-level field (jobs.atendimento_person_id), not
+ * a phase_roles area — since the "Atendimento Responsável" plan, it's
+ * resolved separately from syncTrelloMembersToRoles above, which no longer
+ * ever sees "Atendimento" as one of the areas it iterates (phase_roles
+ * doesn't list it anymore). Atendimento is required at job creation now, so
+ * in practice this only ever has something to do for jobs created before
+ * that requirement existed (currentAtendimentoPersonId is null for those) —
+ * same "never overwrite" rule as every other Trello-driven assignment.
+ */
+export async function syncTrelloMembersToAtendimento(
+  db: AppDatabase,
+  jobId: number,
+  currentAtendimentoPersonId: number | null,
+  trelloMemberNames: string[],
+): Promise<void> {
+  if (currentAtendimentoPersonId !== null || trelloMemberNames.length === 0) {
+    return;
+  }
+
+  const atendimentoPeople = (await listPeople(db, { activeOnly: true })).filter(
+    (person) => person.area === 'Atendimento',
+  );
+  const normalizedMembers = trelloMemberNames.map(normalizePersonName);
+  const match = findMatchingPerson(atendimentoPeople, normalizedMembers);
+
+  if (match) {
+    await setAtendimento(db, jobId, match.id);
   }
 }
 ```
@@ -699,7 +807,7 @@ export async function syncTrelloMembersToRoles(
 - [ ] **Step 8: Rodar de novo e ver passar**
 
 Run: `cd server && npx vitest run test/models.trelloLink.test.ts`
-Expected: PASS (6 testes).
+Expected: PASS (10 testes — 2 de `setTrelloLink`, 4 de `syncTrelloMembersToRoles`, 4 de `syncTrelloMembersToAtendimento`).
 
 - [ ] **Step 9: Ligar `trelloCardId`/`trelloLinkedAt` ao tipo `Job`**
 
@@ -729,7 +837,9 @@ Em `rowToJob`, adicione ao objeto retornado (depois de `triggerLabel: row.status
 
 Não precisa mudar `JOB_SELECT` — ele já faz `j.*`, então as colunas novas aparecem automaticamente.
 
-- [ ] **Step 10: Ligar o `TrelloClient` opcional em `app.ts` e `index.ts`**
+- [ ] **Step 10: Ligar o `TrelloClient` opcional em `app.ts` e `createAppFromEnv.ts`**
+
+**Nota sobre uma mudança que aconteceu depois deste plano ter sido escrito:** o plano de deploy (já mesclado) extraiu a montagem do app de `server/src/index.ts` para uma função nova e reutilizável, `server/src/createAppFromEnv.ts` — usada tanto pelo servidor de desenvolvimento (`index.ts`, via `app.listen()`) quanto pelo ponto de entrada da Vercel (`api/index.ts`, na raiz do repositório). A leitura das variáveis de ambiente e a montagem de `AppDeps` acontecem hoje em `createAppFromEnv.ts`, não mais em `index.ts` — é lá que a leitura de `TRELLO_API_KEY`/`TRELLO_TOKEN`/`TRELLO_BOARD_ID` e a construção do `trelloClient` devem entrar, não em `index.ts` (fazer isso só em `index.ts` deixaria a Vercel sem o Trello configurado). `index.ts` só precisa de uma linha nova de aviso no console.
 
 Em `server/src/app.ts`, atualize o import e a interface `AppDeps`:
 
@@ -761,7 +871,7 @@ export interface JobsRouterDeps {
 
 (adicione `import type { TrelloClient } from '../services/trello';` junto aos outros imports do topo do arquivo.)
 
-Em `server/src/index.ts`, atualize:
+Em `server/src/createAppFromEnv.ts`, substitua o arquivo inteiro por:
 
 ```typescript
 import 'dotenv/config';
@@ -770,36 +880,36 @@ import { createDb } from './db';
 import { createGoogleVerifier } from './auth/googleVerifier';
 import { createAnthropicClassifier } from './services/classifier';
 import { createHttpTrelloClient } from './services/trello';
+import type { Express } from 'express';
 
-const port = Number(process.env.PORT ?? 4000);
-const connectionString = process.env.DATABASE_URL;
-const jwtSecret = process.env.JWT_SECRET;
-const googleClientId = process.env.GOOGLE_CLIENT_ID;
-const allowedDomain = process.env.ALLOWED_EMAIL_DOMAIN ?? 'ilhacrossmidia.com.br';
-const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
-const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
-const trelloApiKey = process.env.TRELLO_API_KEY;
-const trelloToken = process.env.TRELLO_TOKEN;
-const trelloBoardId = process.env.TRELLO_BOARD_ID;
-const trelloConfigured = Boolean(trelloApiKey && trelloToken && trelloBoardId);
+export async function createAppFromEnv(): Promise<Express> {
+  const connectionString = process.env.DATABASE_URL;
+  const jwtSecret = process.env.JWT_SECRET;
+  const googleClientId = process.env.GOOGLE_CLIENT_ID;
+  const allowedDomain = process.env.ALLOWED_EMAIL_DOMAIN ?? 'ilhacrossmidia.com.br';
+  const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+  const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
+  const trelloApiKey = process.env.TRELLO_API_KEY;
+  const trelloToken = process.env.TRELLO_TOKEN;
+  const trelloBoardId = process.env.TRELLO_BOARD_ID;
+  const trelloConfigured = Boolean(trelloApiKey && trelloToken && trelloBoardId);
 
-if (!connectionString) {
-  throw new Error('DATABASE_URL environment variable is required');
-}
-if (!jwtSecret) {
-  throw new Error('JWT_SECRET environment variable is required');
-}
-if (!googleClientId) {
-  throw new Error('GOOGLE_CLIENT_ID environment variable is required');
-}
+  if (!connectionString) {
+    throw new Error('DATABASE_URL environment variable is required');
+  }
+  if (!jwtSecret) {
+    throw new Error('JWT_SECRET environment variable is required');
+  }
+  if (!googleClientId) {
+    throw new Error('GOOGLE_CLIENT_ID environment variable is required');
+  }
 
-async function main() {
-  const db = await createDb(connectionString!);
+  const db = await createDb(connectionString);
 
-  const app = createApp({
+  return createApp({
     db,
-    verifyIdToken: createGoogleVerifier(googleClientId!),
-    jwtSecret: jwtSecret!,
+    verifyIdToken: createGoogleVerifier(googleClientId),
+    jwtSecret,
     allowedDomain,
     frontendUrl,
     classifier: anthropicApiKey ? createAnthropicClassifier(anthropicApiKey) : undefined,
@@ -807,25 +917,37 @@ async function main() {
       ? createHttpTrelloClient(trelloApiKey!, trelloToken!, trelloBoardId!)
       : undefined,
   });
-
-  app.listen(port, () => {
-    console.log(`Server listening on port ${port}`);
-    if (!anthropicApiKey) {
-      console.warn('ANTHROPIC_API_KEY not set — POST /api/jobs/:id/classify will return 503');
-    }
-    if (!trelloConfigured) {
-      console.warn(
-        'TRELLO_API_KEY/TRELLO_TOKEN/TRELLO_BOARD_ID not fully set — Trello integration endpoints will return 503',
-      );
-    }
-  });
 }
-
-main().catch((err) => {
-  console.error('Failed to start server:', err);
-  process.exit(1);
-});
 ```
+
+Em `server/src/index.ts`, adicione o aviso de Trello não configurado junto ao de `ANTHROPIC_API_KEY` que já existe (não mude mais nada nesse arquivo):
+
+```typescript
+import { createAppFromEnv } from './createAppFromEnv';
+
+const port = Number(process.env.PORT ?? 4000);
+
+createAppFromEnv()
+  .then((app) => {
+    app.listen(port, () => {
+      console.log(`Server listening on port ${port}`);
+      if (!process.env.ANTHROPIC_API_KEY) {
+        console.warn('ANTHROPIC_API_KEY not set — POST /api/jobs/:id/classify will return 503');
+      }
+      if (!process.env.TRELLO_API_KEY || !process.env.TRELLO_TOKEN || !process.env.TRELLO_BOARD_ID) {
+        console.warn(
+          'TRELLO_API_KEY/TRELLO_TOKEN/TRELLO_BOARD_ID not fully set — Trello integration endpoints will return 503',
+        );
+      }
+    });
+  })
+  .catch((err) => {
+    console.error('Failed to start server:', err);
+    process.exit(1);
+  });
+```
+
+Se `server/test/createAppFromEnv.test.ts` existir (também do plano de deploy), confirme que os testes nele continuam passando sem alteração — este step não muda a assinatura de `createAppFromEnv()` (continua `(): Promise<Express>`, sem parâmetros), só o que acontece dentro dela.
 
 - [ ] **Step 11: Adicionar as 3 rotas em `server/src/routes/jobs.ts`**
 
@@ -838,7 +960,7 @@ import { getJobStatusHistory } from '../models/jobStatusHistory';
 import { getJobRoleAssignments, setJobRoleAssignment } from '../models/jobRoleAssignments';
 import { classifyAndApply } from '../models/classification';
 import { findTrelloCandidates, buildTrelloEvidenceText } from '../models/trelloMatch';
-import { setTrelloLink, syncTrelloMembersToRoles } from '../models/trelloLink';
+import { setTrelloLink, syncTrelloMembersToRoles, syncTrelloMembersToAtendimento } from '../models/trelloLink';
 import { requireAuth, requireActiveUser } from '../auth/middleware';
 import { asyncHandler } from '../utils/asyncHandler';
 import type { Classifier } from '../services/classifier';
@@ -954,6 +1076,7 @@ Adicione as três rotas depois da rota `POST /:id/classify` (antes do `return ro
       if (job.phaseId) {
         await syncTrelloMembersToRoles(deps.db, jobId, job.phaseId, card.members);
       }
+      await syncTrelloMembersToAtendimento(deps.db, jobId, job.atendimentoPersonId, card.members);
 
       const evidenceText = buildTrelloEvidenceText(card);
       const suggestions = await classifyAndApply(deps.db, deps.classifier, jobId, evidenceText);
@@ -980,6 +1103,8 @@ Em `server/test/routes.jobs.test.ts`, atualize o import do topo (junto aos outro
 import type { Classifier, RawSuggestion } from '../src/services/classifier';
 import type { TrelloClient, TrelloCardSummary, TrelloCardDetail } from '../src/services/trello';
 ```
+
+**Importante:** este arquivo já tem uma função `async function getAtendimentoPersonId(db: AppDatabase): Promise<number>` (do plano "Atendimento Responsável", já mesclado) que busca o id da Wilka. `POST /api/jobs` exige `atendimentoPersonId` no corpo — todo `.send({ name: ... })` abaixo que cria um job via essa rota precisa incluir esse campo, ou recebe `400` em vez do resultado esperado do teste. **Não redefina** `getAtendimentoPersonId` — reutilize a que já existe.
 
 Adicione ao final do arquivo:
 
@@ -1012,8 +1137,9 @@ describe('GET /api/jobs/:id/trello-candidates', () => {
     await withTestTransaction(async (db) => {
       const app = buildApp(db);
       const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
 
-      const created = await agent.post('/api/jobs').send({ name: 'Job Trello Candidatos Teste' });
+      const created = await agent.post('/api/jobs').send({ name: 'Job Trello Candidatos Teste', atendimentoPersonId });
       const res = await agent.get(`/api/jobs/${created.body.job.id}/trello-candidates`);
 
       expect(res.status).toBe(503);
@@ -1029,10 +1155,11 @@ describe('GET /api/jobs/:id/trello-candidates', () => {
       });
       const app = buildAppWithDeps(db, { trelloClient });
       const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
 
       const created = await agent
         .post('/api/jobs')
-        .send({ name: 'Colgate Campanha Teste', client: 'Colgate' });
+        .send({ name: 'Colgate Campanha Teste', client: 'Colgate', atendimentoPersonId });
       const res = await agent.get(`/api/jobs/${created.body.job.id}/trello-candidates`);
 
       expect(res.status).toBe(200);
@@ -1051,8 +1178,9 @@ describe('GET /api/jobs/:id/trello-candidates', () => {
       });
       const app = buildAppWithDeps(db, { trelloClient });
       const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
 
-      const created = await agent.post('/api/jobs').send({ name: 'Job Trello Erro Teste' });
+      const created = await agent.post('/api/jobs').send({ name: 'Job Trello Erro Teste', atendimentoPersonId });
       const res = await agent.get(`/api/jobs/${created.body.job.id}/trello-candidates`);
 
       expect(res.status).toBe(502);
@@ -1065,8 +1193,9 @@ describe('POST /api/jobs/:id/trello-link', () => {
     await withTestTransaction(async (db) => {
       const app = buildApp(db);
       const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
 
-      const created = await agent.post('/api/jobs').send({ name: 'Job Trello Link Teste' });
+      const created = await agent.post('/api/jobs').send({ name: 'Job Trello Link Teste', atendimentoPersonId });
       const res = await agent
         .post(`/api/jobs/${created.body.job.id}/trello-link`)
         .send({ trelloCardId: 'card1' });
@@ -1080,8 +1209,9 @@ describe('POST /api/jobs/:id/trello-link', () => {
     await withTestTransaction(async (db) => {
       const app = buildApp(db);
       const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
 
-      const created = await agent.post('/api/jobs').send({ name: 'Job Trello Unlink Teste' });
+      const created = await agent.post('/api/jobs').send({ name: 'Job Trello Unlink Teste', atendimentoPersonId });
       await agent.post(`/api/jobs/${created.body.job.id}/trello-link`).send({ trelloCardId: 'card1' });
       const res = await agent
         .post(`/api/jobs/${created.body.job.id}/trello-link`)
@@ -1096,8 +1226,9 @@ describe('POST /api/jobs/:id/trello-link', () => {
     await withTestTransaction(async (db) => {
       const app = buildApp(db);
       const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
 
-      const created = await agent.post('/api/jobs').send({ name: 'Job Trello Link Inválido Teste' });
+      const created = await agent.post('/api/jobs').send({ name: 'Job Trello Link Inválido Teste', atendimentoPersonId });
       const res = await agent.post(`/api/jobs/${created.body.job.id}/trello-link`).send({});
 
       expect(res.status).toBe(400);
@@ -1110,8 +1241,9 @@ describe('POST /api/jobs/:id/trello-sync', () => {
     await withTestTransaction(async (db) => {
       const app = buildApp(db);
       const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
 
-      const created = await agent.post('/api/jobs').send({ name: 'Job Trello Sync Sem Config Teste' });
+      const created = await agent.post('/api/jobs').send({ name: 'Job Trello Sync Sem Config Teste', atendimentoPersonId });
       const res = await agent.post(`/api/jobs/${created.body.job.id}/trello-sync`).send({});
 
       expect(res.status).toBe(503);
@@ -1124,8 +1256,9 @@ describe('POST /api/jobs/:id/trello-sync', () => {
       const classifier: Classifier = { classify: async () => [] };
       const app = buildAppWithDeps(db, { trelloClient, classifier });
       const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
 
-      const created = await agent.post('/api/jobs').send({ name: 'Job Trello Não Vinculado Teste' });
+      const created = await agent.post('/api/jobs').send({ name: 'Job Trello Não Vinculado Teste', atendimentoPersonId });
       const res = await agent.post(`/api/jobs/${created.body.job.id}/trello-sync`).send({});
 
       expect(res.status).toBe(400);
@@ -1138,8 +1271,9 @@ describe('POST /api/jobs/:id/trello-sync', () => {
       const classifier: Classifier = { classify: async () => [] };
       const app = buildAppWithDeps(db, { trelloClient, classifier });
       const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
 
-      const created = await agent.post('/api/jobs').send({ name: 'Job Trello Card Sumiu Teste' });
+      const created = await agent.post('/api/jobs').send({ name: 'Job Trello Card Sumiu Teste', atendimentoPersonId });
       await agent.post(`/api/jobs/${created.body.job.id}/trello-link`).send({ trelloCardId: 'card1' });
 
       const res = await agent.post(`/api/jobs/${created.body.job.id}/trello-sync`).send({});
@@ -1177,8 +1311,9 @@ describe('POST /api/jobs/:id/trello-sync', () => {
       const classifier: Classifier = { classify: classifyMock };
       const app = buildAppWithDeps(db, { trelloClient, classifier });
       const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
 
-      const created = await agent.post('/api/jobs').send({ name: 'Job Trello Sync Sucesso Teste' });
+      const created = await agent.post('/api/jobs').send({ name: 'Job Trello Sync Sucesso Teste', atendimentoPersonId });
       await agent.post(`/api/jobs/${created.body.job.id}/trello-link`).send({ trelloCardId: 'card1' });
 
       const res = await agent.post(`/api/jobs/${created.body.job.id}/trello-sync`).send({});
@@ -1200,8 +1335,9 @@ describe('POST /api/jobs/:id/trello-sync', () => {
       const classifier: Classifier = { classify: async () => [] };
       const app = buildAppWithDeps(db, { trelloClient, classifier });
       const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
 
-      const created = await agent.post('/api/jobs').send({ name: 'Job Trello Sync Erro API Teste' });
+      const created = await agent.post('/api/jobs').send({ name: 'Job Trello Sync Erro API Teste', atendimentoPersonId });
       await agent.post(`/api/jobs/${created.body.job.id}/trello-link`).send({ trelloCardId: 'card1' });
 
       const res = await agent.post(`/api/jobs/${created.body.job.id}/trello-sync`).send({});
@@ -1226,8 +1362,9 @@ describe('POST /api/jobs/:id/trello-sync', () => {
       const classifier: Classifier = { classify: async () => [] };
       const app = buildAppWithDeps(db, { trelloClient, classifier });
       const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
 
-      const created = await agent.post('/api/jobs').send({ name: 'Job Trello Membro Rota Teste' });
+      const created = await agent.post('/api/jobs').send({ name: 'Job Trello Membro Rota Teste', atendimentoPersonId });
       await agent.post(`/api/jobs/${created.body.job.id}/trello-link`).send({ trelloCardId: 'card1' });
 
       await agent.post(`/api/jobs/${created.body.job.id}/trello-sync`).send({});
@@ -1237,13 +1374,78 @@ describe('POST /api/jobs/:id/trello-sync', () => {
       expect(comercial.personName).toBe('Anne');
     });
   });
+
+  it('does NOT overwrite the Atendimento chosen at job creation, even if a different member matches', async () => {
+    await withTestTransaction(async (db) => {
+      const cardDetail: TrelloCardDetail = {
+        name: 'WPP:: Colgate Campanha Teste',
+        listName: 'Em Orçamento 2026',
+        checklistItems: [],
+        due: null,
+        latestComment: null,
+        // O card do Trello traz Camila como membro, mas o job já foi criado com
+        // Wilka como Atendimento responsável — a sincronização nunca deve trocar
+        // isso, mesmo achando um match diferente.
+        members: ['Camila'],
+      };
+      const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
+      const classifier: Classifier = { classify: async () => [] };
+      const app = buildAppWithDeps(db, { trelloClient, classifier });
+      const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+
+      const created = await agent
+        .post('/api/jobs')
+        .send({ name: 'Job Trello Atendimento Não Sobrescreve Teste', atendimentoPersonId });
+      await agent.post(`/api/jobs/${created.body.job.id}/trello-link`).send({ trelloCardId: 'card1' });
+
+      await agent.post(`/api/jobs/${created.body.job.id}/trello-sync`).send({});
+
+      const jobRes = await agent.get(`/api/jobs/${created.body.job.id}`);
+      expect(jobRes.body.job.atendimentoPersonId).toBe(atendimentoPersonId);
+      expect(jobRes.body.job.atendimentoPersonName).toBe('Wilka');
+    });
+  });
+
+  it('fills a null Atendimento (legacy job, predating the requirement) from a matching Trello member', async () => {
+    await withTestTransaction(async (db) => {
+      const cardDetail: TrelloCardDetail = {
+        name: 'WPP:: Colgate Campanha Teste',
+        listName: 'Em Orçamento 2026',
+        checklistItems: [],
+        due: null,
+        latestComment: null,
+        members: ['Wilka Nepomoceno'],
+      };
+      const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
+      const classifier: Classifier = { classify: async () => [] };
+      const app = buildAppWithDeps(db, { trelloClient, classifier });
+      const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+
+      const created = await agent
+        .post('/api/jobs')
+        .send({ name: 'Job Trello Atendimento Legado Teste', atendimentoPersonId });
+      // Simula um job anterior à obrigatoriedade de Atendimento (os 27 jobs reais
+      // importados antes do plano "Atendimento Responsável") — a rota de criação
+      // não permite isso diretamente, então zeramos o campo direto no banco, o
+      // mesmo estado em que aqueles jobs ficaram.
+      await db.query('UPDATE jobs SET atendimento_person_id = NULL WHERE id = $1', [created.body.job.id]);
+      await agent.post(`/api/jobs/${created.body.job.id}/trello-link`).send({ trelloCardId: 'card1' });
+
+      await agent.post(`/api/jobs/${created.body.job.id}/trello-sync`).send({});
+
+      const jobRes = await agent.get(`/api/jobs/${created.body.job.id}`);
+      expect(jobRes.body.job.atendimentoPersonName).toBe('Wilka');
+    });
+  });
 });
 ```
 
 - [ ] **Step 14: Rodar a suíte inteira e o build**
 
 Run: `cd server && npm test`
-Expected: todos os testes passam (140 anteriores + 5 de `trelloMatch` + os novos de rota = confira a contagem final no output, todos verdes).
+Expected: todos os testes passam. A contagem exata de "antes desta task" depende de quantos testes já existem no momento em que a Task 2 for executada (Task 1 já soma alguns) — não trave nesse número, apenas confirme que o total sobe exatamente pelo que esta task adicionou (4 novos em `models.trelloLink.test.ts` de `syncTrelloMembersToAtendimento`, mais os testes novos de rota em `routes.jobs.test.ts`: 3 de `trello-candidates`, 3 de `trello-link`, 8 de `trello-sync`) e que nada quebrou.
 
 Run: `cd server && npm run build`
 Expected: compila sem erro de tipos.
@@ -1503,7 +1705,7 @@ Adicione ao final do arquivo:
 
 - [ ] **Step 5: Atualizar `web/test/JobDetail.test.tsx`**
 
-Atualize o bloco `vi.mock('../src/api/client', ...)` pra incluir os 3 métodos novos:
+Atualize o bloco `vi.mock('../src/api/client', ...)` pra incluir os 3 métodos novos. **Atenção:** o bloco atual (do plano "Atendimento Responsável", já mesclado) já tem `setAtendimento`, `listJobs` e `createJob` além dos métodos que este plano conhecia quando foi escrito — não os remova, só adicione `getTrelloCandidates`, `setTrelloLink` e `syncTrello`. O resultado final deve ficar:
 
 ```typescript
 vi.mock('../src/api/client', async () => {
@@ -1516,9 +1718,12 @@ vi.mock('../src/api/client', async () => {
       listPeople: vi.fn(),
       setJobStatus: vi.fn(),
       assignRole: vi.fn(),
+      setAtendimento: vi.fn(),
       setBolaCom: vi.fn(),
       setLastActivity: vi.fn(),
       classifyJob: vi.fn(),
+      listJobs: vi.fn(),
+      createJob: vi.fn(),
       getTrelloCandidates: vi.fn(),
       setTrelloLink: vi.fn(),
       syncTrello: vi.fn(),
@@ -1529,25 +1734,28 @@ vi.mock('../src/api/client', async () => {
 
 Adicione `trelloCardId: null,` ao objeto `jobDetail` (depois de `triggerLabel: 'Avançar para: Briefing Recebido',`).
 
-No `beforeEach`, adicione os resets e o mock padrão (depois de `mockedApi.classifyJob.mockReset();` e depois do bloco de `mockResolvedValue` já existente):
+**Atenção:** o `beforeEach` atual (do plano "Atendimento Responsável", já mesclado) tem um formato diferente do que este plano assumia quando foi escrito — o mock de `listPeople` já inclui `title` em cada pessoa e uma terceira pessoa (Wilka, área Atendimento). Não substitua esse bloco por uma versão sem `title`/sem Wilka — só ADICIONE os resets e o mock novo de `getTrelloCandidates`, preservando o resto exatamente como está. O resultado final do `beforeEach` deve ficar assim (as três primeiras linhas do trecho abaixo — `getTrelloCandidates`/`setTrelloLink`/`syncTrello` `.mockReset()` — são as únicas linhas realmente novas; o resto já existe no arquivo, mostrado aqui só para dar o contexto exato de onde inserir):
 
 ```typescript
+    mockedApi.classifyJob.mockReset();
+    mockedApi.listJobs.mockReset();
+    mockedApi.createJob.mockReset();
     mockedApi.getTrelloCandidates.mockReset();
     mockedApi.setTrelloLink.mockReset();
     mockedApi.syncTrello.mockReset();
+    mockedApi.listJobs.mockResolvedValue({ jobs: [] });
 
     mockedApi.getJob.mockResolvedValue({ job: jobDetail });
     mockedApi.getReference.mockResolvedValue({ phases: referencePhases });
     mockedApi.listPeople.mockResolvedValue({
       people: [
-        { id: 5, name: 'Anne', area: 'Comercial', active: true },
-        { id: 6, name: 'Adriano', area: 'Produção Executiva', active: true },
+        { id: 5, name: 'Anne', area: 'Comercial', active: true, title: null },
+        { id: 6, name: 'Adriano', area: 'Produção Executiva', active: true, title: null },
+        { id: 7, name: 'Wilka', area: 'Atendimento', active: true, title: 'Head' },
       ],
     });
     mockedApi.getTrelloCandidates.mockResolvedValue({ candidates: [] });
 ```
-
-(Isso substitui o bloco de `mockResolvedValue` que já existia no `beforeEach` — mantenha só uma cópia de cada linha, a última adicionada é a que fica.)
 
 Adicione os testes novos ao final do arquivo, antes do fechamento do `describe`:
 
