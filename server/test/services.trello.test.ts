@@ -74,6 +74,8 @@ describe('createHttpTrelloClient', () => {
         return jsonResponse({
           name: 'WPP:: COLGATE:: CAMPANHA',
           due: '2026-08-28T00:00:00.000Z',
+          desc: 'Briefing: https://drive.google.com/drive/folders/abc123',
+          shortUrl: 'https://trello.com/c/card1',
           list: { name: 'Em Captação 2026' },
           checklists: [
             {
@@ -84,6 +86,7 @@ describe('createHttpTrelloClient', () => {
             },
           ],
           members: [{ fullName: 'Wilka Nepomoceno' }],
+          labels: [{ name: 'Vicky Salles', color: 'purple' }, { name: '', color: 'green' }],
         });
       });
 
@@ -107,6 +110,9 @@ describe('createHttpTrelloClient', () => {
             postedAt: '2026-08-20T13:51:00.000Z',
           },
         ],
+        description: 'Briefing: https://drive.google.com/drive/folders/abc123',
+        url: 'https://trello.com/c/card1',
+        labels: [{ name: 'Vicky Salles', color: 'purple' }, { name: '', color: 'green' }],
       });
     });
 
@@ -151,6 +157,30 @@ describe('createHttpTrelloClient', () => {
 
       expect(card?.latestComment).toBeNull();
       expect(card?.comments).toEqual([]);
+    });
+
+    it('defaults description to null and labels to an empty list when the card has neither', async () => {
+      const fetchMock = vi.fn(async (url: string) => {
+        if (url.includes('/actions')) {
+          return jsonResponse([]);
+        }
+        return jsonResponse({
+          name: 'Card sem descrição',
+          due: null,
+          desc: '',
+          shortUrl: 'https://trello.com/c/card-sem-desc',
+          list: { name: 'Em Orçamento 2026' },
+          checklists: [],
+          members: [],
+        });
+      });
+
+      const client = createHttpTrelloClient('key', 'token', 'board123', fetchMock as unknown as typeof fetch);
+      const card = await client.getCard('card-sem-desc');
+
+      expect(card?.description).toBeNull();
+      expect(card?.url).toBe('https://trello.com/c/card-sem-desc');
+      expect(card?.labels).toEqual([]);
     });
 
     it('throws on a non-404 error response, for the caller to handle', async () => {

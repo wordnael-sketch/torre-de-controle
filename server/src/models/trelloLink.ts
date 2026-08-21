@@ -12,7 +12,7 @@ import {
 import { classifyAndApply, type ResolvedSuggestion } from './classification';
 import { buildTrelloEvidenceText, extractStatusUpdates } from './trelloMatch';
 import type { Classifier } from '../services/classifier';
-import type { TrelloClient } from '../services/trello';
+import type { TrelloCardDetail, TrelloClient, TrelloLabel } from '../services/trello';
 
 export async function setTrelloLink(
   db: AppDatabase,
@@ -122,8 +122,39 @@ export async function syncTrelloMembersToAtendimento(
   }
 }
 
+export interface TrelloCardView {
+  name: string;
+  listName: string;
+  description: string | null;
+  url: string;
+  labels: TrelloLabel[];
+  members: string[];
+  /**
+   * Pessoas envolvidas, de verdade: nesse board a equipe usa Etiquetas do
+   * Trello pra marcar responsáveis (ex.: "Vicky Salles"), não só o campo
+   * Membros — então a lista fiel de "quem está no job" é a união das duas,
+   * sem duplicar quem aparece nas duas.
+   */
+  people: string[];
+}
+
+function buildTrelloCardView(card: TrelloCardDetail): TrelloCardView {
+  const labelNames = card.labels.map((l) => l.name).filter((name) => name.trim().length > 0);
+  const people = [...new Set([...card.members, ...labelNames])];
+
+  return {
+    name: card.name,
+    listName: card.listName,
+    description: card.description,
+    url: card.url,
+    labels: card.labels,
+    members: card.members,
+    people,
+  };
+}
+
 export type TrelloSyncResult =
-  | { status: 'synced'; suggestions: ResolvedSuggestion[]; trelloCard: { name: string; listName: string } }
+  | { status: 'synced'; suggestions: ResolvedSuggestion[]; trelloCard: TrelloCardView }
   | { status: 'card_not_found' };
 
 /**
@@ -172,9 +203,14 @@ export async function syncJobFromTrello(
   }
 
   // Quem está de fato tocando o job nem sempre está marcado como "member" do
-  // card no Trello — às vezes só aparece comentando os status. Os dois
-  // conjuntos de nomes alimentam o mesmo match determinístico.
-  const memberNames = [...card.members, ...card.comments.map((comment) => comment.author)];
+  // card no Trello — às vezes só aparece comentando os status, ou (nesse
+  // board) marcado como Etiqueta em vez de Membro. Os três conjuntos de
+  // nomes alimentam o mesmo match determinístico.
+  const memberNames = [
+    ...card.members,
+    ...card.comments.map((comment) => comment.author),
+    ...card.labels.map((label) => label.name),
+  ];
 
   if (job.phaseId) {
     await syncTrelloMembersToRoles(db, job.id, job.phaseId, memberNames);
@@ -200,5 +236,5 @@ export async function syncJobFromTrello(
     });
   }
 
-  return { status: 'synced', suggestions, trelloCard: { name: card.name, listName: card.listName } };
+  return { status: 'synced', suggestions, trelloCard: buildTrelloCardView(card) };
 }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Plus, X, SlidersHorizontal, Search, AlertTriangle, Contrast, ChevronDown, ChevronRight } from 'lucide-react';
+import { Plus, X, SlidersHorizontal, Search, AlertTriangle, Contrast, ChevronDown, ChevronRight, Link2 } from 'lucide-react';
 import { api, type AlertLevel, type Job, type Person, type Phase } from '../api/client';
 import { FAROL_COLOR_VARS, FAROL_LABELS, phaseMarkerColor } from '../theme/phase';
 import { useAuth } from '../auth/AuthContext';
@@ -45,6 +45,7 @@ export function Board() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const stuckBannerRef = useRef<HTMLElement>(null);
   const [collapsedPhaseIds, setCollapsedPhaseIds] = useState<Set<number>>(new Set());
+  const [linkingAllTrello, setLinkingAllTrello] = useState(false);
 
   function toggleGroupCollapsed(phaseId: number) {
     setCollapsedPhaseIds((prev) => {
@@ -64,6 +65,18 @@ export function Board() {
     setPhases(referenceRes.phases);
     setJobs(jobsRes.jobs);
     setPeople(peopleRes.people);
+  }
+
+  async function handleLinkAllTrello() {
+    setLinkingAllTrello(true);
+    try {
+      await api.linkAllTrelloJobs();
+      await refresh();
+    } catch {
+      showToast('Não foi possível vincular os jobs ao Trello.', 'error');
+    } finally {
+      setLinkingAllTrello(false);
+    }
   }
 
   useEffect(() => {
@@ -392,6 +405,18 @@ export function Board() {
                   {stuckJobs.length} {stuckJobs.length === 1 ? 'travado' : 'travados'}
                 </button>
               )}
+              <button
+                type="button"
+                className="board-contrast-toggle"
+                onClick={() => void handleLinkAllTrello()}
+                disabled={linkingAllTrello}
+                title="Vincula automaticamente todo job sem card do Trello ainda, quando o nome bate exatamente"
+              >
+                <Link2 size={16} aria-hidden="true" />
+                <span className="board-contrast-toggle-label">
+                  {linkingAllTrello ? 'Vinculando…' : 'Vincular todos ao Trello'}
+                </span>
+              </button>
               <button
                 type="button"
                 className={`board-contrast-toggle${highContrast ? ' is-active' : ''}`}

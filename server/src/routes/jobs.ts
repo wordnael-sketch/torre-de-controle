@@ -108,6 +108,50 @@ export function createJobsRouter(deps: JobsRouterDeps): Router {
     }),
   );
 
+  router.post(
+    '/trello-link-all',
+    asyncHandler(async (_req, res) => {
+      if (!deps.trelloClient) {
+        res.status(503).json({ error: 'trello_nao_configurado' });
+        return;
+      }
+
+      const [cards, jobs] = await Promise.all([deps.trelloClient.listBoardCards(), listJobs(deps.db)]);
+      const cardByName = new Map(cards.map((c) => [c.name.trim().toLowerCase(), c]));
+
+      let linkedCount = 0;
+      for (const job of jobs) {
+        if (job.trelloCardId) {
+          continue;
+        }
+        const match = cardByName.get(job.name.trim().toLowerCase());
+        if (!match) {
+          continue;
+        }
+        const alreadyLinkedElsewhere = await getJobByTrelloCardId(deps.db, match.id);
+        if (alreadyLinkedElsewhere) {
+          continue;
+        }
+
+        await setTrelloLink(deps.db, job.id, match.id);
+        linkedCount++;
+
+        try {
+          const linkedJob = await getJobById(deps.db, job.id);
+          await syncJobFromTrello(deps.db, deps.trelloClient, deps.classifier, linkedJob!, {
+            bypassConfidenceGate: false,
+          });
+        } catch {
+          // O vínculo em si já foi feito e vale a pena manter — uma falha na
+          // sincronização de um job (Trello instável, IA indisponível) não
+          // deve impedir os próximos jobs do lote de serem vinculados.
+        }
+      }
+
+      res.json({ linkedCount });
+    }),
+  );
+
   router.get(
     '/:id',
     asyncHandler(async (req, res) => {

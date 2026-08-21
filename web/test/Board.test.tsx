@@ -29,6 +29,7 @@ vi.mock('../src/api/client', async () => {
       getTrelloCandidates: vi.fn(),
       setTrelloLink: vi.fn(),
       syncTrello: vi.fn(),
+      linkAllTrelloJobs: vi.fn(),
     },
   };
 });
@@ -112,6 +113,7 @@ describe('Board', () => {
     mockedApi.getTrelloCandidates.mockReset();
     mockedApi.setTrelloLink.mockReset();
     mockedApi.syncTrello.mockReset();
+    mockedApi.linkAllTrelloJobs.mockReset();
     mockedApi.getTrelloCandidates.mockResolvedValue({ candidates: [] });
   });
 
@@ -134,6 +136,20 @@ describe('Board', () => {
     const table = await screen.findByRole('table');
     expect(within(table).getByText('Comercial e Orçamento')).toBeInTheDocument();
     expect(await screen.findByText('Anne')).toBeInTheDocument();
+  });
+
+  it('links all jobs to Trello and refreshes the board when "Vincular todos ao Trello" is clicked', async () => {
+    mockedApi.listJobs.mockResolvedValue({ jobs: [makeJob()] });
+    mockedApi.linkAllTrelloJobs.mockResolvedValue({ linkedCount: 2 });
+    const user = userEvent.setup();
+
+    renderBoard();
+    await screen.findByText(/Colgate - Color Correct Wave 2/);
+
+    await user.click(screen.getByRole('button', { name: 'Vincular todos ao Trello' }));
+
+    await waitFor(() => expect(mockedApi.linkAllTrelloJobs).toHaveBeenCalled());
+    await waitFor(() => expect(mockedApi.listJobs).toHaveBeenCalledTimes(2));
   });
 
   it('shows "F{n} · fase" per row in the flat table view', async () => {

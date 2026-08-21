@@ -1012,6 +1012,9 @@ describe('POST /api/jobs/:id/trello-sync', () => {
         listName: 'Em Captação 2026',
         checklistItems: [{ name: 'Contrato assinado', checked: true }],
         due: null,
+        description: null,
+        url: 'https://trello.com/c/test',
+        labels: [],
         latestComment: null,
         comments: [],
         members: [],
@@ -1042,7 +1045,15 @@ describe('POST /api/jobs/:id/trello-sync', () => {
       expect(res.status).toBe(200);
       expect(res.body.suggestions).toHaveLength(1);
       expect(res.body.suggestions[0].outcome).toBe('auto_aplicado');
-      expect(res.body.trelloCard).toEqual({ name: 'WPP:: Colgate Campanha Teste', listName: 'Em Captação 2026' });
+      expect(res.body.trelloCard).toEqual({
+        name: 'WPP:: Colgate Campanha Teste',
+        listName: 'Em Captação 2026',
+        description: null,
+        url: 'https://trello.com/c/test',
+        labels: [],
+        members: [],
+        people: [],
+      });
     });
   });
 
@@ -1053,6 +1064,9 @@ describe('POST /api/jobs/:id/trello-sync', () => {
         listName: 'Em Captação 2026',
         checklistItems: [],
         due: null,
+        description: null,
+        url: 'https://trello.com/c/test',
+        labels: [],
         latestComment: null,
         comments: [],
         members: ['Wilka Nepomoceno'],
@@ -1102,6 +1116,9 @@ describe('POST /api/jobs/:id/trello-sync', () => {
         listName: 'Em Orçamento 2026',
         checklistItems: [],
         due: null,
+        description: null,
+        url: 'https://trello.com/c/test',
+        labels: [],
         latestComment: null,
         comments: [],
         // Job novo começa na fase "Comercial e Orçamento", que tem a área "Comercial" —
@@ -1132,6 +1149,9 @@ describe('POST /api/jobs/:id/trello-sync', () => {
         listName: 'Em Orçamento 2026',
         checklistItems: [],
         due: null,
+        description: null,
+        url: 'https://trello.com/c/test',
+        labels: [],
         latestComment: null,
         comments: [],
         // O card do Trello traz Camila como membro, mas o job já foi criado com
@@ -1165,6 +1185,9 @@ describe('POST /api/jobs/:id/trello-sync', () => {
         listName: 'Em Orçamento 2026',
         checklistItems: [],
         due: null,
+        description: null,
+        url: 'https://trello.com/c/test',
+        labels: [],
         latestComment: null,
         comments: [],
         members: ['Wilka Nepomoceno'],
@@ -1290,6 +1313,114 @@ describe('DELETE /api/jobs/:id', () => {
       const agent = await loggedInAgent(app);
       const res = await agent.delete('/api/jobs/999999999');
       expect(res.status).toBe(404);
+    });
+  });
+});
+
+describe('POST /api/jobs/trello-link-all', () => {
+  it('returns 503 when Trello is not configured', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+      const res = await agent.post('/api/jobs/trello-link-all');
+      expect(res.status).toBe(503);
+    });
+  });
+
+  it('links every job whose name exactly matches a board card, skipping ones with no match', async () => {
+    await withTestTransaction(async (db) => {
+      const trelloClient = fakeTrelloClient({
+        listBoardCards: async () => [
+          { id: 'card1', name: 'WPP:: Colgate Campanha Teste', listName: 'Em Captação 2026' },
+          { id: 'card2', name: 'Card Sem Job Nenhum', listName: 'Em Orçamento 2026' },
+        ],
+        getCard: async (id) =>
+          id === 'card1'
+            ? {
+                name: 'WPP:: Colgate Campanha Teste',
+                listName: 'Em Captação 2026',
+                checklistItems: [],
+                due: null,
+                latestComment: null,
+                comments: [],
+                members: [],
+                description: null,
+                url: 'https://trello.com/c/card1',
+                labels: [],
+              }
+            : null,
+      });
+      const app = buildAppWithDeps(db, { trelloClient });
+      const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+
+      const jobA = await agent.post('/api/jobs').send({ name: 'WPP:: Colgate Campanha Teste', atendimentoPersonId });
+      const jobB = await agent
+        .post('/api/jobs')
+        .send({ name: 'Job Sem Card Correspondente', atendimentoPersonId });
+
+      const res = await agent.post('/api/jobs/trello-link-all');
+
+      expect(res.status).toBe(200);
+      expect(res.body.linkedCount).toBe(1);
+
+      const linkedA = await agent.get(`/api/jobs/${jobA.body.job.id}`);
+      expect(linkedA.body.job.trelloCardId).toBe('card1');
+      const linkedB = await agent.get(`/api/jobs/${jobB.body.job.id}`);
+      expect(linkedB.body.job.trelloCardId).toBeNull();
+    });
+  });
+
+  it('does not link a job whose exact-match card is already linked to a different job', async () => {
+    await withTestTransaction(async (db) => {
+      const trelloClient = fakeTrelloClient({
+        listBoardCards: async () => [
+          { id: 'card-compartilhado', name: 'Job Card Compartilhado Teste', listName: 'Em Captação 2026' },
+        ],
+      });
+      const app = buildAppWithDeps(db, { trelloClient });
+      const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+
+      const jobA = await agent
+        .post('/api/jobs')
+        .send({ name: 'Job Card Compartilhado Teste', atendimentoPersonId });
+      const jobB = await agent
+        .post('/api/jobs')
+        .send({ name: 'Job Card Compartilhado Teste 2', atendimentoPersonId });
+      await agent
+        .post(`/api/jobs/${jobA.body.job.id}/trello-link`)
+        .send({ trelloCardId: 'card-compartilhado' });
+
+      const res = await agent.post('/api/jobs/trello-link-all');
+
+      expect(res.status).toBe(200);
+      expect(res.body.linkedCount).toBe(0);
+      const stillUnlinked = await agent.get(`/api/jobs/${jobB.body.job.id}`);
+      expect(stillUnlinked.body.job.trelloCardId).toBeNull();
+    });
+  });
+
+  it('skips a job that is already linked to a card', async () => {
+    await withTestTransaction(async (db) => {
+      const trelloClient = fakeTrelloClient({
+        listBoardCards: async () => [
+          { id: 'outro-card', name: 'Job Já Vinculado Teste', listName: 'Em Captação 2026' },
+        ],
+      });
+      const app = buildAppWithDeps(db, { trelloClient });
+      const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+
+      const job = await agent.post('/api/jobs').send({ name: 'Job Já Vinculado Teste', atendimentoPersonId });
+      await agent.post(`/api/jobs/${job.body.job.id}/trello-link`).send({ trelloCardId: 'card-ja-vinculado' });
+
+      const res = await agent.post('/api/jobs/trello-link-all');
+
+      expect(res.status).toBe(200);
+      expect(res.body.linkedCount).toBe(0);
+      const stillLinked = await agent.get(`/api/jobs/${job.body.job.id}`);
+      expect(stillLinked.body.job.trelloCardId).toBe('card-ja-vinculado');
     });
   });
 });

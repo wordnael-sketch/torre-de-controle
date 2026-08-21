@@ -144,9 +144,19 @@ export interface TrelloCandidate {
   strongMatch: boolean;
 }
 
+export interface TrelloLabel {
+  name: string;
+  color: string | null;
+}
+
 export interface TrelloCardSummary {
   name: string;
   listName: string;
+  description?: string | null;
+  url?: string;
+  labels?: TrelloLabel[];
+  members?: string[];
+  people?: string[];
 }
 
 /** Um card cru do board, sem pontuação — usado pela lista completa (botão "Vincular ao Trello"). */
@@ -247,6 +257,8 @@ export const api = {
       `/api/jobs/${id}/trello-sync`,
       { method: 'POST' },
     ),
+  linkAllTrelloJobs: () =>
+    request<{ linkedCount: number }>('/api/jobs/trello-link-all', { method: 'POST' }),
   getReference: () => request<{ phases: Phase[] }>('/api/reference'),
   listPeople: () => request<{ people: Person[] }>('/api/people'),
   createPerson: (input: { name: string; area: string }) =>

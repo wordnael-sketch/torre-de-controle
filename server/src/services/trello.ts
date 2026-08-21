@@ -15,6 +15,11 @@ export interface TrelloComment {
   postedAt: string;
 }
 
+export interface TrelloLabel {
+  name: string;
+  color: string | null;
+}
+
 export interface TrelloCardDetail {
   name: string;
   listName: string;
@@ -23,6 +28,9 @@ export interface TrelloCardDetail {
   latestComment: string | null;
   members: string[];
   comments: TrelloComment[];
+  description: string | null;
+  url: string;
+  labels: TrelloLabel[];
 }
 
 export interface TrelloClient {
@@ -56,12 +64,20 @@ interface TrelloMemberResponse {
   fullName: string;
 }
 
+interface TrelloLabelResponse {
+  name: string;
+  color: string | null;
+}
+
 interface TrelloCardDetailResponse {
   name: string;
   due: string | null;
+  desc: string | null;
+  shortUrl: string;
   list?: { name: string };
   checklists?: TrelloChecklistResponse[];
   members?: TrelloMemberResponse[];
+  labels?: TrelloLabelResponse[];
 }
 
 interface TrelloCommentActionResponse {
@@ -103,7 +119,8 @@ export function createHttpTrelloClient(
     async getCard(cardId: string): Promise<TrelloCardDetail | null> {
       const res = await fetchImpl(
         `https://api.trello.com/1/cards/${cardId}?${authQuery}` +
-          '&fields=name,due&checklists=all&checklist_fields=name&list=true&members=true&member_fields=fullName',
+          '&fields=name,due,desc,shortUrl&checklists=all&checklist_fields=name&list=true' +
+          '&members=true&member_fields=fullName&labels=true',
       );
 
       if (res.status === 404) {
@@ -141,6 +158,9 @@ export function createHttpTrelloClient(
         latestComment: comments[0]?.text ?? null,
         members: (card.members ?? []).map((m) => m.fullName),
         comments,
+        description: card.desc || null,
+        url: card.shortUrl,
+        labels: (card.labels ?? []).map((l) => ({ name: l.name, color: l.color })),
       };
     },
   };

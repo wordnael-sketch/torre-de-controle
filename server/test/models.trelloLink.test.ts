@@ -247,6 +247,9 @@ describe('syncJobFromTrello', () => {
         listName: 'Em Captação 2026',
         checklistItems: [],
         due: null,
+        description: null,
+        url: 'https://trello.com/c/test',
+        labels: [],
         latestComment: null,
         comments: [],
         members: [],
@@ -266,7 +269,15 @@ describe('syncJobFromTrello', () => {
       expect(result.status).toBe('synced');
       if (result.status === 'synced') {
         expect(result.suggestions[0].outcome).toBe('pendente');
-        expect(result.trelloCard).toEqual({ name: 'Job Sync Padrão Teste', listName: 'Em Captação 2026' });
+        expect(result.trelloCard).toEqual({
+          name: 'Job Sync Padrão Teste',
+          listName: 'Em Captação 2026',
+          description: null,
+          url: 'https://trello.com/c/test',
+          labels: [],
+          members: [],
+          people: [],
+        });
       }
     });
   });
@@ -282,6 +293,9 @@ describe('syncJobFromTrello', () => {
         listName: 'Em Captação 2026',
         checklistItems: [],
         due: null,
+        description: null,
+        url: 'https://trello.com/c/test',
+        labels: [],
         latestComment: null,
         comments: [],
         members: [],
@@ -316,6 +330,9 @@ describe('syncJobFromTrello', () => {
         listName: 'Em Captação 2026',
         checklistItems: [],
         due: null,
+        description: null,
+        url: 'https://trello.com/c/test',
+        labels: [],
         latestComment: null,
         comments: [],
         members: ['Wilka Nepomoceno'],
@@ -348,6 +365,9 @@ describe('syncJobFromTrello', () => {
         listName: 'Em Captação 2026',
         checklistItems: [],
         due: null,
+        description: null,
+        url: 'https://trello.com/c/test',
+        labels: [],
         latestComment: null,
         comments: [],
         members: [],
@@ -373,6 +393,9 @@ describe('syncJobFromTrello', () => {
         listName: 'Em Captação 2026',
         checklistItems: [],
         due: null,
+        description: null,
+        url: 'https://trello.com/c/test',
+        labels: [],
         latestComment: null,
         comments: [],
         members: [],
@@ -403,6 +426,9 @@ describe('syncJobFromTrello', () => {
         listName: 'Em Captação 2026',
         checklistItems: [],
         due: null,
+        description: null,
+        url: 'https://trello.com/c/test',
+        labels: [],
         latestComment: null,
         members: [],
         comments: [],
@@ -430,6 +456,9 @@ describe('syncJobFromTrello', () => {
         listName: 'Em Captação 2026',
         checklistItems: [],
         due: null,
+        description: null,
+        url: 'https://trello.com/c/test',
+        labels: [],
         latestComment: 'Bora',
         members: [],
         comments: [{ author: 'Wilka Nepomoceno', text: 'Bora', postedAt: '2026-08-20T13:51:00.000Z' }],
@@ -444,6 +473,73 @@ describe('syncJobFromTrello', () => {
     });
   });
 
+  it('also matches Atendimento/roles from label names — this board uses labels to mark responsible people', async () => {
+    await withTestTransaction(async (db) => {
+      const created = await createJob(db, { name: 'Job Sync Etiqueta Teste' });
+      await setTrelloLink(db, created.id, 'card1');
+      const job = (await getJobById(db, created.id))!;
+
+      const cardDetail: TrelloCardDetail = {
+        name: 'Job Sync Etiqueta Teste',
+        listName: 'Em Captação 2026',
+        checklistItems: [],
+        due: null,
+        description: null,
+        url: 'https://trello.com/c/test',
+        labels: [{ name: 'Wilka Nepomoceno', color: 'purple' }],
+        latestComment: null,
+        members: [],
+        comments: [],
+      };
+      const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
+
+      await syncJobFromTrello(db, trelloClient, undefined, job, { bypassConfidenceGate: false });
+
+      const updatedJob = await getJobById(db, created.id);
+      const wilka = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Wilka' AND area = 'Atendimento'`);
+      expect(updatedJob?.atendimentoPersonId).toBe(wilka.rows[0].id);
+    });
+  });
+
+  it('returns a faithful trelloCard view: description, url, labels, and a deduped members+labels people list', async () => {
+    await withTestTransaction(async (db) => {
+      const created = await createJob(db, { name: 'Job Sync Card Fiel Teste' });
+      await setTrelloLink(db, created.id, 'card1');
+      const job = (await getJobById(db, created.id))!;
+
+      const cardDetail: TrelloCardDetail = {
+        name: 'Job Sync Card Fiel Teste',
+        listName: 'Em Pós Produção',
+        checklistItems: [],
+        due: null,
+        description: 'Briefing: https://drive.google.com/drive/folders/abc123',
+        url: 'https://trello.com/c/card-fiel',
+        // "Wilka Nepomoceno" está tanto como membro quanto (redundantemente)
+        // como etiqueta — não deve duplicar na lista de pessoas envolvidas.
+        labels: [{ name: 'Wilka Nepomoceno', color: 'purple' }, { name: '', color: 'green' }],
+        latestComment: null,
+        members: ['Wilka Nepomoceno', 'Camila'],
+        comments: [],
+      };
+      const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
+
+      const result = await syncJobFromTrello(db, trelloClient, undefined, job, { bypassConfidenceGate: false });
+
+      expect(result.status).toBe('synced');
+      if (result.status === 'synced') {
+        expect(result.trelloCard).toEqual({
+          name: 'Job Sync Card Fiel Teste',
+          listName: 'Em Pós Produção',
+          description: 'Briefing: https://drive.google.com/drive/folders/abc123',
+          url: 'https://trello.com/c/card-fiel',
+          labels: [{ name: 'Wilka Nepomoceno', color: 'purple' }, { name: '', color: 'green' }],
+          members: ['Wilka Nepomoceno', 'Camila'],
+          people: ['Wilka Nepomoceno', 'Camila'],
+        });
+      }
+    });
+  });
+
   it('persists only the comments that look like a team STATUS update, newest first', async () => {
     await withTestTransaction(async (db) => {
       const created = await createJob(db, { name: 'Job Sync Status Teste' });
@@ -455,6 +551,9 @@ describe('syncJobFromTrello', () => {
         listName: 'Em Pós Produção',
         checklistItems: [],
         due: null,
+        description: null,
+        url: 'https://trello.com/c/test',
+        labels: [],
         latestComment: '📌STATUS 20.08 às 13h51',
         members: [],
         comments: [
@@ -503,6 +602,9 @@ describe('syncJobFromTrello', () => {
         listName: 'Em Pós Produção',
         checklistItems: [],
         due: null,
+        description: null,
+        url: 'https://trello.com/c/test',
+        labels: [],
         latestComment: 'Sem status ainda',
         members: [],
         comments: [{ author: 'Alguém', text: 'Sem status ainda', postedAt: '2026-08-20T13:51:00.000Z' }],
@@ -531,6 +633,9 @@ describe('syncJobFromTrello', () => {
           { name: 'Entrega final do filme', checked: false },
         ],
         due: null,
+        description: null,
+        url: 'https://trello.com/c/test',
+        labels: [],
         latestComment: null,
         members: [],
         comments: [],
@@ -559,6 +664,9 @@ describe('syncJobFromTrello', () => {
         listName: 'Em Pós Produção',
         checklistItems: [],
         due: null,
+        description: null,
+        url: 'https://trello.com/c/test',
+        labels: [],
         latestComment: null,
         members: [],
         comments: [],

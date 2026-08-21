@@ -22,6 +22,37 @@ function hoursSince(iso: string): number {
   return Math.floor((Date.now() - new Date(iso).getTime()) / (1000 * 60 * 60));
 }
 
+const URL_PATTERN = /(https?:\/\/[^\s<>"']+)/g;
+
+/** Descrição/comentários do Trello são texto puro — isso só torna as URLs que já vêm ali clicáveis. */
+function linkify(text: string): (string | JSX.Element)[] {
+  // O regex tem um grupo de captura, então split() intercala os trechos que
+  // NÃO são URL (índices pares) com os que SÃO (índices ímpares) — não precisa
+  // testar de novo com o regex global (que tem estado e erraria alternando).
+  return text.split(URL_PATTERN).map((part, index) =>
+    index % 2 === 1 ? (
+      <a key={index} href={part} target="_blank" rel="noreferrer noopener">
+        {part}
+      </a>
+    ) : (
+      part
+    ),
+  );
+}
+
+const TRELLO_LABEL_COLORS: Record<string, string> = {
+  green: '#4bce97',
+  yellow: '#e2b203',
+  orange: '#faa53d',
+  red: '#f87462',
+  purple: '#9f8fef',
+  blue: '#579dff',
+  sky: '#6cc3e0',
+  lime: '#94c748',
+  pink: '#e774bb',
+  black: '#8590a2',
+};
+
 export function JobDetailPage() {
   const { id } = useParams<{ id: string }>();
   const jobId = Number(id);
@@ -107,6 +138,19 @@ export function JobDetailPage() {
     }
   }
 
+  async function linkAndSync(targetJobId: number, card: { id: string; name: string; listName: string }) {
+    await api.setTrelloLink(targetJobId, card.id);
+    try {
+      const res = await api.syncTrello(targetJobId);
+      setSuggestions(res.suggestions);
+      setTrelloCard(res.trelloCard);
+    } catch {
+      // Sincronização (dados ricos: descrição, etiquetas, pessoas) falhou logo
+      // após vincular — mostra pelo menos o nome/lista já conhecidos do card.
+      setTrelloCard({ name: card.name, listName: card.listName });
+    }
+  }
+
   async function syncOrLinkTrello(currentJob: JobDetailType) {
     if (currentJob.trelloCardId) {
       try {
@@ -132,12 +176,10 @@ export function JobDetailPage() {
       if (exactMatch) {
         // Nome do job idêntico ao do card — vincula direto, sem passar pelo
         // seletor de candidatos, mesmo que outros cards também deem match forte.
-        await api.setTrelloLink(currentJob.id, exactMatch.id);
-        setTrelloCard({ name: exactMatch.name, listName: exactMatch.listName });
+        await linkAndSync(currentJob.id, exactMatch);
         await refresh();
       } else if (strongMatches.length === 1) {
-        await api.setTrelloLink(currentJob.id, strongMatches[0].id);
-        setTrelloCard({ name: strongMatches[0].name, listName: strongMatches[0].listName });
+        await linkAndSync(currentJob.id, strongMatches[0]);
         await refresh();
       } else if (res.candidates.length > 0) {
         setTrelloCandidates(res.candidates);
@@ -262,16 +304,9 @@ export function JobDetailPage() {
   async function handleLinkTrello(card: { id: string; name: string; listName: string }) {
     setError(null);
     try {
-      await api.setTrelloLink(jobId, card.id);
       setTrelloCandidates(null);
       setAllTrelloCards(null);
-      try {
-        const res = await api.syncTrello(jobId);
-        setSuggestions(res.suggestions);
-        setTrelloCard(res.trelloCard);
-      } catch {
-        setTrelloCard({ name: card.name, listName: card.listName });
-      }
+      await linkAndSync(jobId, card);
       await refresh();
     } catch {
       setError('Não foi possível vincular o card do Trello.');
@@ -461,12 +496,44 @@ export function JobDetailPage() {
         )}
 
         {trelloCard && (
-          <p className="job-detail-trello-indicator label-caps">
-            Vinculado ao card: {trelloCard.name} ({trelloCard.listName}){' '}
-            <button type="button" className="job-detail-link-btn" onClick={() => void handleUnlinkTrello()}>
-              desvincular
-            </button>
-          </p>
+          <div className="job-detail-trello-card">
+            <p className="job-detail-trello-indicator label-caps">
+              Vinculado ao card: {trelloCard.name} ({trelloCard.listName}){' '}
+              {trelloCard.url && (
+                <a href={trelloCard.url} target="_blank" rel="noreferrer noopener">
+                  abrir no Trello
+                </a>
+              )}{' '}
+              <button type="button" className="job-detail-link-btn" onClick={() => void handleUnlinkTrello()}>
+                desvincular
+              </button>
+            </p>
+
+            {trelloCard.labels && trelloCard.labels.length > 0 && (
+              <ul className="job-detail-trello-labels">
+                {trelloCard.labels.map((label, index) => (
+                  <li
+                    key={index}
+                    className="job-detail-trello-label"
+                    style={{ background: TRELLO_LABEL_COLORS[label.color ?? ''] ?? 'var(--bg-subtle)' }}
+                  >
+                    {label.name || label.color || 'sem nome'}
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {trelloCard.people && trelloCard.people.length > 0 && (
+              <p className="job-detail-trello-people">
+                <span className="label-caps">Pessoas envolvidas: </span>
+                {trelloCard.people.join(', ')}
+              </p>
+            )}
+
+            {trelloCard.description && (
+              <p className="job-detail-trello-description">{linkify(trelloCard.description)}</p>
+            )}
+          </div>
         )}
 
         {job.trelloChecklistItems.length > 0 && (

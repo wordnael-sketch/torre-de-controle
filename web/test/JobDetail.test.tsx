@@ -366,6 +366,42 @@ describe('JobDetailPage', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
+  it('shows the Trello card faithfully: description with a clickable link, labels, people, and a link to open it', async () => {
+    mockedApi.getTrelloCandidates.mockResolvedValue({
+      candidates: [
+        { id: 'card1', name: 'WPP:: COLGATE:: CAMPANHA', listName: 'Em Captação 2026', strongMatch: true },
+      ],
+    });
+    mockedApi.setTrelloLink.mockResolvedValue({ job: { ...jobDetail, trelloCardId: 'card1' } });
+    mockedApi.syncTrello.mockResolvedValue({
+      suggestions: [],
+      trelloCard: {
+        name: 'WPP:: COLGATE:: CAMPANHA',
+        listName: 'Em Captação 2026',
+        description: 'Briefing: https://drive.google.com/drive/folders/abc123',
+        url: 'https://trello.com/c/card1',
+        labels: [{ name: 'Vicky Salles', color: 'purple' }],
+        members: ['Wilka Nepomoceno'],
+        people: ['Wilka Nepomoceno', 'Vicky Salles'],
+      },
+    });
+
+    renderJobDetail();
+
+    expect(await screen.findByRole('link', { name: 'abrir no Trello' })).toHaveAttribute(
+      'href',
+      'https://trello.com/c/card1',
+    );
+    expect(screen.getByText('Vicky Salles')).toBeInTheDocument();
+    expect(screen.getByText(/Pessoas envolvidas:/).closest('p')).toHaveTextContent(
+      'Wilka Nepomoceno, Vicky Salles',
+    );
+    expect(screen.getByRole('link', { name: 'https://drive.google.com/drive/folders/abc123' })).toHaveAttribute(
+      'href',
+      'https://drive.google.com/drive/folders/abc123',
+    );
+  });
+
   it('auto-links when exactly one strong Trello match is found', async () => {
     mockedApi.getTrelloCandidates.mockResolvedValue({
       candidates: [
