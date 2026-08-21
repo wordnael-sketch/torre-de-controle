@@ -18,6 +18,7 @@ export async function classifyAndApply(
   classifier: Classifier,
   jobId: number,
   pastedText: string,
+  options: { bypassConfidenceGate?: boolean } = {},
 ): Promise<ResolvedSuggestion[]> {
   const job = await getJobById(db, jobId);
   if (!job || !job.phaseId) {
@@ -56,6 +57,7 @@ export async function classifyAndApply(
   // merely re-confirms the position/side the job is already at.
   let trackedOrder = startingOrder;
   let trackedSide: BolaCom = job.bolaCom;
+  const bypassConfidenceGate = options.bypassConfidenceGate ?? false;
 
   const resolved: ResolvedSuggestion[] = [];
   for (const suggestion of raw) {
@@ -66,6 +68,7 @@ export async function classifyAndApply(
       trackedOrder,
       trackedSide,
       suggestion,
+      bypassConfidenceGate,
     );
     if (appliedOrder !== undefined) {
       trackedOrder = appliedOrder;
@@ -111,12 +114,13 @@ async function resolveAndApply(
   currentOrder: number,
   currentSide: BolaCom,
   suggestion: RawSuggestion,
+  bypassConfidenceGate: boolean,
 ): Promise<ResolveResult> {
   if (!isValidRawSuggestion(suggestion)) {
     return { outcome: 'descartado' };
   }
 
-  if (suggestion.confidence < SUGGEST_THRESHOLD) {
+  if (!bypassConfidenceGate && suggestion.confidence < SUGGEST_THRESHOLD) {
     return { outcome: 'descartado' };
   }
 
@@ -136,8 +140,9 @@ async function resolveAndApply(
 
     const isRegression = target.order < currentOrder;
     const evidenceNote = `IA (${suggestion.confidence.toFixed(2)}): ${suggestion.evidencia}`;
+    const meetsConfidence = bypassConfidenceGate || suggestion.confidence >= AUTO_APPLY_THRESHOLD;
 
-    if (suggestion.confidence >= AUTO_APPLY_THRESHOLD && !isRegression) {
+    if (meetsConfidence && !isRegression) {
       await setJobStatus(db, jobId, target.id, evidenceNote);
       return { outcome: 'auto_aplicado', appliedOrder: target.order };
     }
@@ -156,7 +161,8 @@ async function resolveAndApply(
     return { outcome: 'descartado' };
   }
 
-  if (suggestion.confidence >= AUTO_APPLY_THRESHOLD) {
+  const meetsConfidence = bypassConfidenceGate || suggestion.confidence >= AUTO_APPLY_THRESHOLD;
+  if (meetsConfidence) {
     const evidenceNote = `IA (${suggestion.confidence.toFixed(2)}): ${suggestion.evidencia}`;
     await setBolaCom(db, jobId, suggestion.valor, evidenceNote);
     return { outcome: 'auto_aplicado', appliedSide: suggestion.valor };

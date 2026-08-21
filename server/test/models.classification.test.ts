@@ -282,4 +282,104 @@ describe('classifyAndApply', () => {
       expect(resolved[0].outcome).toBe('descartado');
     });
   });
+
+  describe('classifyAndApply with bypassConfidenceGate', () => {
+    it('auto-applies a mid-confidence suggestion that would otherwise be pending', async () => {
+      await withTestTransaction(async (db) => {
+        const job = await createJob(db, { name: 'Job Bypass Confiança Teste' });
+
+        const classifier = fakeClassifier([
+          {
+            tipo: 'checklist_item',
+            valor: 'Briefing Recebido',
+            confidence: 0.7,
+            evidencia: 'Atualização automática vinda do Trello',
+          },
+        ]);
+
+        const resolved = await classifyAndApply(db, classifier, job.id, 'texto qualquer', {
+          bypassConfidenceGate: true,
+        });
+
+        expect(resolved[0].outcome).toBe('auto_aplicado');
+      });
+    });
+
+    it('still discards a suggestion with malformed confidence, even with bypassConfidenceGate', async () => {
+      await withTestTransaction(async (db) => {
+        const job = await createJob(db, { name: 'Job Bypass Confiança Malformada Teste' });
+
+        const classifier = fakeClassifier([
+          {
+            tipo: 'checklist_item',
+            valor: 'Briefing Recebido',
+            confidence: '0.9' as unknown as number,
+            evidencia: 'texto',
+          },
+        ]);
+
+        const resolved = await classifyAndApply(db, classifier, job.id, 'texto qualquer', {
+          bypassConfidenceGate: true,
+        });
+
+        expect(resolved[0].outcome).toBe('descartado');
+      });
+    });
+
+    it('still never auto-applies a phase regression, even with bypassConfidenceGate', async () => {
+      await withTestTransaction(async (db) => {
+        const job = await createJob(db, { name: 'Job Bypass Confiança Retrocesso Teste' });
+
+        const targetStatus = await db.query<{ id: number }>(
+          `SELECT id FROM statuses WHERE name = 'Orçamento e Decupagem'`,
+        );
+        await db.query('UPDATE jobs SET status_id = $1 WHERE id = $2', [targetStatus.rows[0].id, job.id]);
+
+        const classifier = fakeClassifier([
+          {
+            tipo: 'checklist_item',
+            valor: 'Briefing Recebido',
+            confidence: 0.95,
+            evidencia: 'Card do Trello movido de volta por engano',
+          },
+        ]);
+
+        const resolved = await classifyAndApply(db, classifier, job.id, 'texto qualquer', {
+          bypassConfidenceGate: true,
+        });
+
+        expect(resolved[0].outcome).toBe('pendente');
+
+        const updated = await db.query<{ status_id: number }>('SELECT status_id FROM jobs WHERE id = $1', [job.id]);
+        expect(updated.rows[0].status_id).toBe(targetStatus.rows[0].id);
+      });
+    });
+
+    it('still discards a bypassed suggestion that only re-confirms the current status, without a no-op history row', async () => {
+      await withTestTransaction(async (db) => {
+        const job = await createJob(db, { name: 'Job Bypass Confiança Reconfirma Teste' });
+
+        const classifier = fakeClassifier([
+          {
+            tipo: 'checklist_item',
+            valor: job.statusName!,
+            confidence: 0.95,
+            evidencia: 'confirma que já estava feito',
+          },
+        ]);
+
+        const resolved = await classifyAndApply(db, classifier, job.id, 'texto qualquer', {
+          bypassConfidenceGate: true,
+        });
+
+        expect(resolved[0].outcome).toBe('descartado');
+
+        const history = await db.query<{ count: string }>(
+          'SELECT count(*) FROM job_status_history WHERE job_id = $1',
+          [job.id],
+        );
+        expect(Number(history.rows[0].count)).toBe(1);
+      });
+    });
+  });
 });
