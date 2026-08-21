@@ -355,3 +355,6 @@ INSERT INTO people (name, area, title) VALUES
 ON CONFLICT (name, area) DO NOTHING;
 
 UPDATE people SET title = 'Head' WHERE name = 'Wilka' AND area = 'Atendimento';
+
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS trello_card_id TEXT;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS trello_linked_at TIMESTAMPTZ;
