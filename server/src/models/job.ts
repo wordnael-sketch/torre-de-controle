@@ -132,6 +132,14 @@ export async function getJobById(db: AppDatabase, id: number): Promise<Job | nul
   return rowToJob(db, result.rows[0]);
 }
 
+export async function getJobByTrelloCardId(db: AppDatabase, trelloCardId: string): Promise<Job | null> {
+  const result = await db.query<JobRow>(`${JOB_SELECT} WHERE j.trello_card_id = $1`, [trelloCardId]);
+  if (!result.rows[0]) {
+    return null;
+  }
+  return rowToJob(db, result.rows[0]);
+}
+
 export async function createJob(
   db: AppDatabase,
   input: { name: string; code?: string; client?: string; atendimentoPersonId?: number | null },

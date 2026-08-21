@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { createJob, listJobs, getJobById, advanceJobStatus, setJobStatus, setAtendimento } from '../src/models/job';
+import {
+  createJob,
+  listJobs,
+  getJobById,
+  getJobByTrelloCardId,
+  advanceJobStatus,
+  setJobStatus,
+  setAtendimento,
+} from '../src/models/job';
 import { withTestTransaction } from './helpers/testDb';
 
 describe('job model', () => {
@@ -16,6 +24,25 @@ describe('job model', () => {
       expect(job.code).toBe('0307-2026');
       expect(job.client).toBe('Colgate');
       expect(job.createdAt).toBeTruthy();
+    });
+  });
+
+  it('finds a job by its linked Trello card id', async () => {
+    await withTestTransaction(async (db) => {
+      const job = await createJob(db, { name: 'Job Busca Por Trello Card Teste' });
+      await db.query('UPDATE jobs SET trello_card_id = $1 WHERE id = $2', ['card-xyz', job.id]);
+
+      const found = await getJobByTrelloCardId(db, 'card-xyz');
+
+      expect(found?.id).toBe(job.id);
+    });
+  });
+
+  it('returns null when no job has the given Trello card id', async () => {
+    await withTestTransaction(async (db) => {
+      const found = await getJobByTrelloCardId(db, 'card-inexistente');
+
+      expect(found).toBeNull();
     });
   });
 
