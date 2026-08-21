@@ -613,6 +613,10 @@ export function createJobsRouter(deps: JobsRouterDeps): Router {
         res.status(404).json({ error: 'trello_card_not_found' });
         return;
       }
+      if (result.status === 'card_archived') {
+        res.status(404).json({ error: 'trello_card_archived' });
+        return;
+      }
 
       res.json({ suggestions: result.suggestions, trelloCard: result.trelloCard });
     }),

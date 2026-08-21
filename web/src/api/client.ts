@@ -100,6 +100,7 @@ export interface Job {
   actionRequired: string | null;
   triggerLabel: string | null;
   trelloCardId: string | null;
+  trelloAutoUnlinkedAt: string | null;
   atendimentoPersonId: number | null;
   atendimentoPersonName: string | null;
   trelloStatusUpdates: TrelloStatusUpdate[];

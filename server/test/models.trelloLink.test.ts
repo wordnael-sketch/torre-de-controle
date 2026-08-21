@@ -2,9 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { createJob, getJobById } from '../src/models/job';
 import {
   setTrelloLink,
+  autoUnlinkTrello,
   syncTrelloMembersToRoles,
   syncTrelloMembersToAtendimento,
   syncJobFromTrello,
+  createJobFromTrelloCard,
 } from '../src/models/trelloLink';
 import { getJobRoleAssignments, setJobRoleAssignment } from '../src/models/jobRoleAssignments';
 import type { Classifier, RawSuggestion } from '../src/services/classifier';
@@ -233,6 +235,37 @@ describe('syncJobFromTrello', () => {
       expect(result.status).toBe('card_not_found');
       const updated = await getJobById(db, created.id);
       expect(updated?.trelloCardId).toBeNull();
+      expect(updated?.trelloAutoUnlinkedAt).not.toBeNull();
+    });
+  });
+
+  it('unlinks the job and returns card_archived when the Trello card is archived (closed: true)', async () => {
+    await withTestTransaction(async (db) => {
+      const created = await createJob(db, { name: 'Job Sync Card Arquivado Teste' });
+      await setTrelloLink(db, created.id, 'card-arquivado');
+      const job = (await getJobById(db, created.id))!;
+      const cardDetail: TrelloCardDetail = {
+        name: 'Job Sync Card Arquivado Teste',
+        listName: 'Em Captação 2026',
+        checklistItems: [],
+        due: null,
+        description: null,
+        url: 'https://trello.com/c/test',
+        labels: [],
+        latestComment: null,
+        members: [],
+        comments: [],
+        closed: true,
+      };
+      const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
+      const classifier = fakeClassifier([]);
+
+      const result = await syncJobFromTrello(db, trelloClient, classifier, job, { bypassConfidenceGate: false });
+
+      expect(result.status).toBe('card_archived');
+      const updated = await getJobById(db, created.id);
+      expect(updated?.trelloCardId).toBeNull();
+      expect(updated?.trelloAutoUnlinkedAt).not.toBeNull();
     });
   });
 
@@ -678,6 +711,146 @@ describe('syncJobFromTrello', () => {
       const updatedJob = await getJobById(db, created.id);
       expect(updatedJob?.trelloChecklistItems).toEqual([]);
       expect(updatedJob?.updatedAt).toBe(job.updatedAt);
+    });
+  });
+});
+
+describe('autoUnlinkTrello', () => {
+  it('clears the link and sets trelloAutoUnlinkedAt', async () => {
+    await withTestTransaction(async (db) => {
+      const created = await createJob(db, { name: 'Job Auto Desvincular Teste' });
+      await setTrelloLink(db, created.id, 'card1');
+
+      await autoUnlinkTrello(db, created.id);
+
+      const updated = await getJobById(db, created.id);
+      expect(updated?.trelloCardId).toBeNull();
+      expect(updated?.trelloAutoUnlinkedAt).not.toBeNull();
+    });
+  });
+});
+
+describe('setTrelloLink clearing the auto-unlink warning', () => {
+  it('clears trelloAutoUnlinkedAt when the job is linked to a card again', async () => {
+    await withTestTransaction(async (db) => {
+      const created = await createJob(db, { name: 'Job Relink Depois De Auto Teste' });
+      await setTrelloLink(db, created.id, 'card1');
+      await autoUnlinkTrello(db, created.id);
+
+      await setTrelloLink(db, created.id, 'card-novo');
+
+      const updated = await getJobById(db, created.id);
+      expect(updated?.trelloCardId).toBe('card-novo');
+      expect(updated?.trelloAutoUnlinkedAt).toBeNull();
+    });
+  });
+});
+
+function trelloCard(overrides: Partial<TrelloCardDetail> = {}): TrelloCardDetail {
+  return {
+    name: 'Card Novo Teste',
+    listName: 'Em Captação 2026',
+    checklistItems: [],
+    due: null,
+    description: null,
+    url: 'https://trello.com/c/card-novo',
+    labels: [],
+    latestComment: null,
+    members: [],
+    comments: [],
+    closed: false,
+    ...overrides,
+  };
+}
+
+describe('createJobFromTrelloCard', () => {
+  it('creates a new job matching the Atendimento of whoever created the card', async () => {
+    await withTestTransaction(async (db) => {
+      const trelloClient = fakeTrelloClient({ getCard: async () => trelloCard({ name: 'Job Criado Do Zero Teste' }) });
+
+      const result = await createJobFromTrelloCard(db, trelloClient, undefined, 'card-novo', 'Wilka Nepomoceno');
+
+      expect(result.status).toBe('synced');
+      const created = (await db.query<{ id: number }>(`SELECT id FROM jobs WHERE name = 'Job Criado Do Zero Teste'`))
+        .rows[0];
+      expect(created).toBeDefined();
+      const wilka = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Wilka' AND area = 'Atendimento'`);
+      const createdJob = await getJobById(db, created.id);
+      expect(createdJob?.atendimentoPersonId).toBe(wilka.rows[0].id);
+      expect(createdJob?.trelloCardId).toBe('card-novo');
+    });
+  });
+
+  it('creates the job without an Atendimento when the creator cannot be matched', async () => {
+    await withTestTransaction(async (db) => {
+      const trelloClient = fakeTrelloClient({
+        getCard: async () => trelloCard({ name: 'Job Criador Desconhecido Teste' }),
+      });
+
+      await createJobFromTrelloCard(db, trelloClient, undefined, 'card-novo', 'Alguém De Fora');
+
+      const created = (
+        await db.query<{ id: number }>(`SELECT id FROM jobs WHERE name = 'Job Criador Desconhecido Teste'`)
+      ).rows[0];
+      const createdJob = await getJobById(db, created.id);
+      expect(createdJob?.atendimentoPersonId).toBeNull();
+    });
+  });
+
+  it('creates the job without an Atendimento when no creator name is provided', async () => {
+    await withTestTransaction(async (db) => {
+      const trelloClient = fakeTrelloClient({ getCard: async () => trelloCard({ name: 'Job Sem Criador Teste' }) });
+
+      await createJobFromTrelloCard(db, trelloClient, undefined, 'card-novo', undefined);
+
+      const created = (await db.query<{ id: number }>(`SELECT id FROM jobs WHERE name = 'Job Sem Criador Teste'`))
+        .rows[0];
+      const createdJob = await getJobById(db, created.id);
+      expect(createdJob?.atendimentoPersonId).toBeNull();
+    });
+  });
+
+  it('links to an existing unlinked job with the exact same name instead of creating a duplicate', async () => {
+    await withTestTransaction(async (db) => {
+      const existing = await createJob(db, { name: 'Job Já Existe Sem Vínculo Teste' });
+      const trelloClient = fakeTrelloClient({
+        getCard: async () => trelloCard({ name: 'Job Já Existe Sem Vínculo Teste' }),
+      });
+
+      await createJobFromTrelloCard(db, trelloClient, undefined, 'card-novo', undefined);
+
+      const updated = await getJobById(db, existing.id);
+      expect(updated?.trelloCardId).toBe('card-novo');
+      const dupCount = (
+        await db.query<{ count: string }>(
+          `SELECT COUNT(*) FROM jobs WHERE lower(trim(name)) = lower(trim('Job Já Existe Sem Vínculo Teste'))`,
+        )
+      ).rows[0].count;
+      expect(dupCount).toBe('1');
+    });
+  });
+
+  it('skips creating a job when a job with that exact name already exists and is linked to a different card', async () => {
+    await withTestTransaction(async (db) => {
+      const existing = await createJob(db, { name: 'Job Já Vinculado A Outro Card Teste' });
+      await setTrelloLink(db, existing.id, 'card-antigo');
+      const trelloClient = fakeTrelloClient({
+        getCard: async () => trelloCard({ name: 'Job Já Vinculado A Outro Card Teste' }),
+      });
+
+      const result = await createJobFromTrelloCard(db, trelloClient, undefined, 'card-novo', undefined);
+
+      expect(result.status).toBe('skipped');
+      const stillOnOldCard = await getJobById(db, existing.id);
+      expect(stillOnOldCard?.trelloCardId).toBe('card-antigo');
+    });
+  });
+
+  it('skips when the card no longer exists or is archived', async () => {
+    await withTestTransaction(async (db) => {
+      const trelloClient = fakeTrelloClient({ getCard: async () => null });
+      const result = await createJobFromTrelloCard(db, trelloClient, undefined, 'card-sumiu', undefined);
+      expect(result.status).toBe('skipped');
     });
   });
 });

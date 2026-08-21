@@ -2,11 +2,13 @@ import type { AppDatabase } from '../db';
 import { listPeople, type Person } from './people';
 import { getJobRoleAssignments, setJobRoleAssignment } from './jobRoleAssignments';
 import {
+  createJob,
   setAtendimento,
   setJobName,
   setTrelloStatusUpdates,
   setTrelloChecklistItems,
   findJobByName,
+  getJobById,
   type Job,
 } from './job';
 import { classifyAndApply, type ResolvedSuggestion } from './classification';
@@ -19,13 +21,35 @@ export async function setTrelloLink(
   jobId: number,
   trelloCardId: string | null,
 ): Promise<void> {
+  // Qualquer ação deliberada sobre o vínculo (linkar de novo ou desvincular
+  // pelo botão) limpa o aviso de "desvinculado sozinho" — ele só faz
+  // sentido enquanto ninguém tomou conhecimento/ação sobre isso.
   await db.query(
     `UPDATE jobs
      SET trello_card_id = $1,
          trello_linked_at = CASE WHEN $1::text IS NULL THEN NULL ELSE now() END,
+         trello_auto_unlinked_at = NULL,
          updated_at = now()
      WHERE id = $2`,
     [trelloCardId, jobId],
+  );
+}
+
+/**
+ * Diferente de setTrelloLink(db, jobId, null): isso é o próprio sistema
+ * desvinculando sozinho porque o card sumiu do Trello (apagado ou
+ * arquivado) — não uma ação da pessoa. Marca trello_auto_unlinked_at pra
+ * mostrar um aviso na tela do job, já que ninguém pediu essa desvinculação.
+ */
+export async function autoUnlinkTrello(db: AppDatabase, jobId: number): Promise<void> {
+  await db.query(
+    `UPDATE jobs
+     SET trello_card_id = NULL,
+         trello_linked_at = NULL,
+         trello_auto_unlinked_at = now(),
+         updated_at = now()
+     WHERE id = $1`,
+    [jobId],
   );
 }
 
@@ -155,7 +179,8 @@ function buildTrelloCardView(card: TrelloCardDetail): TrelloCardView {
 
 export type TrelloSyncResult =
   | { status: 'synced'; suggestions: ResolvedSuggestion[]; trelloCard: TrelloCardView }
-  | { status: 'card_not_found' };
+  | { status: 'card_not_found' }
+  | { status: 'card_archived' };
 
 /**
  * Shared by both the manual "open the job" sync (POST /:id/trello-sync,
@@ -185,8 +210,12 @@ export async function syncJobFromTrello(
 
   const card = await trelloClient.getCard(job.trelloCardId);
   if (!card) {
-    await setTrelloLink(db, job.id, null);
+    await autoUnlinkTrello(db, job.id);
     return { status: 'card_not_found' };
+  }
+  if (card.closed) {
+    await autoUnlinkTrello(db, job.id);
+    return { status: 'card_archived' };
   }
 
   // O card do Trello é a fonte da verdade pro nome, uma vez vinculado —
@@ -237,4 +266,54 @@ export async function syncJobFromTrello(
   }
 
   return { status: 'synced', suggestions, trelloCard: buildTrelloCardView(card) };
+}
+
+async function matchAtendimentoPersonId(db: AppDatabase, name: string): Promise<number | null> {
+  const atendimentoPeople = (await listPeople(db, { activeOnly: true })).filter(
+    (person) => person.area === 'Atendimento',
+  );
+  const match = findMatchingPerson(atendimentoPeople, [normalizePersonName(name)]);
+  return match?.id ?? null;
+}
+
+/**
+ * Um card novo no Trello não tem job nenhum esperando por ele — isso cria
+ * (ou, se já existir um job com esse nome exato ainda sem vínculo, linka
+ * nele em vez de duplicar) e sincroniza tudo de uma vez. Quem criou o card
+ * no Trello vira o Atendimento responsável quando dá pra reconhecer essa
+ * pessoa no cadastro; senão o job entra sem Atendimento definido, do mesmo
+ * jeito que qualquer outro job sem responsável hoje.
+ */
+export async function createJobFromTrelloCard(
+  db: AppDatabase,
+  trelloClient: TrelloClient,
+  classifier: Classifier | undefined,
+  cardId: string,
+  creatorName: string | undefined,
+): Promise<TrelloSyncResult | { status: 'skipped' }> {
+  const card = await trelloClient.getCard(cardId);
+  if (!card || card.closed) {
+    return { status: 'skipped' };
+  }
+
+  const existingJob = await findJobByName(db, card.name);
+  let job: Job;
+
+  if (existingJob) {
+    if (existingJob.trelloCardId) {
+      // Já existe um job com esse nome, vinculado a outro card — não mexe:
+      // criar um segundo job com o mesmo nome é a duplicata que o índice
+      // único existe pra impedir.
+      return { status: 'skipped' };
+    }
+    await setTrelloLink(db, existingJob.id, cardId);
+    job = (await getJobById(db, existingJob.id))!;
+  } else {
+    const atendimentoPersonId = creatorName ? await matchAtendimentoPersonId(db, creatorName) : null;
+    const created = await createJob(db, { name: card.name, atendimentoPersonId });
+    await setTrelloLink(db, created.id, cardId);
+    job = (await getJobById(db, created.id))!;
+  }
+
+  return syncJobFromTrello(db, trelloClient, classifier, job, { bypassConfidenceGate: true });
 }

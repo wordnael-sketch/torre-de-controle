@@ -254,4 +254,73 @@ describe('POST /api/trello-webhook', () => {
       expect(res.status).toBe(200);
     });
   });
+
+  it('creates a new job when a "createCard" action arrives for a card with no matching job, using the creator as Atendimento', async () => {
+    await withTestTransaction(async (db) => {
+      const cardDetail: TrelloCardDetail = {
+        name: 'Job Novo Via Webhook Teste',
+        listName: 'Em Captação 2026',
+        checklistItems: [],
+        due: null,
+        description: null,
+        url: 'https://trello.com/c/card-webhook-novo',
+        labels: [],
+        latestComment: null,
+        comments: [],
+        members: [],
+        closed: false,
+      };
+      const app = buildApp(db, {
+        trelloClient: fakeTrelloClient({ getCard: async () => cardDetail }),
+        trelloWebhookSecret: WEBHOOK_SECRET,
+        trelloWebhookCallbackUrl: WEBHOOK_CALLBACK_URL,
+      });
+      const payload = {
+        action: {
+          type: 'createCard',
+          memberCreator: { fullName: 'Wilka Nepomoceno' },
+          data: { card: { id: 'card-webhook-novo' } },
+        },
+      };
+
+      const res = await request(app)
+        .post('/api/trello-webhook')
+        .set('x-trello-webhook', sign(payload, WEBHOOK_SECRET, WEBHOOK_CALLBACK_URL))
+        .send(payload);
+
+      expect(res.status).toBe(200);
+
+      const created = (
+        await db.query<{ id: number }>(`SELECT id FROM jobs WHERE name = 'Job Novo Via Webhook Teste'`)
+      ).rows[0];
+      expect(created).toBeDefined();
+      const wilka = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Wilka' AND area = 'Atendimento'`);
+      const job = await getJobById(db, created.id);
+      expect(job?.atendimentoPersonId).toBe(wilka.rows[0].id);
+      expect(job?.trelloCardId).toBe('card-webhook-novo');
+    });
+  });
+
+  it('does not create a job for other action types on a card with no matching job (only "createCard" triggers import)', async () => {
+    await withTestTransaction(async (db) => {
+      const before = (await db.query<{ count: string }>('SELECT COUNT(*) FROM jobs')).rows[0].count;
+      const app = buildApp(db, {
+        trelloClient: fakeTrelloClient({ getCard: async () => null }),
+        trelloWebhookSecret: WEBHOOK_SECRET,
+        trelloWebhookCallbackUrl: WEBHOOK_CALLBACK_URL,
+      });
+      const payload = {
+        action: { type: 'commentCard', data: { card: { id: 'card-antigo-nunca-vinculado' } } },
+      };
+
+      const res = await request(app)
+        .post('/api/trello-webhook')
+        .set('x-trello-webhook', sign(payload, WEBHOOK_SECRET, WEBHOOK_CALLBACK_URL))
+        .send(payload);
+
+      expect(res.status).toBe(200);
+      const after = (await db.query<{ count: string }>('SELECT COUNT(*) FROM jobs')).rows[0].count;
+      expect(after).toBe(before);
+    });
+  });
 });

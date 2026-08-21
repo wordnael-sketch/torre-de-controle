@@ -1005,6 +1005,43 @@ describe('POST /api/jobs/:id/trello-sync', () => {
     });
   });
 
+  it('unlinks and returns 404 with an auto-unlink warning when the linked card was archived', async () => {
+    await withTestTransaction(async (db) => {
+      const cardDetail: TrelloCardDetail = {
+        name: 'Job Trello Card Arquivado Rota Teste',
+        listName: 'Em Captação 2026',
+        checklistItems: [],
+        due: null,
+        description: null,
+        url: 'https://trello.com/c/test',
+        labels: [],
+        latestComment: null,
+        comments: [],
+        members: [],
+        closed: true,
+      };
+      const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
+      const classifier: Classifier = { classify: async () => [] };
+      const app = buildAppWithDeps(db, { trelloClient, classifier });
+      const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+
+      const created = await agent
+        .post('/api/jobs')
+        .send({ name: 'Job Trello Card Arquivado Rota Teste', atendimentoPersonId });
+      await agent.post(`/api/jobs/${created.body.job.id}/trello-link`).send({ trelloCardId: 'card1' });
+
+      const res = await agent.post(`/api/jobs/${created.body.job.id}/trello-sync`).send({});
+
+      expect(res.status).toBe(404);
+      expect(res.body.error).toBe('trello_card_archived');
+
+      const jobRes = await agent.get(`/api/jobs/${created.body.job.id}`);
+      expect(jobRes.body.job.trelloCardId).toBeNull();
+      expect(jobRes.body.job.trelloAutoUnlinkedAt).not.toBeNull();
+    });
+  });
+
   it('builds evidence text from the Trello card and classifies it', async () => {
     await withTestTransaction(async (db) => {
       const cardDetail: TrelloCardDetail = {

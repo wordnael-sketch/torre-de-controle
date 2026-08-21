@@ -388,3 +388,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS jobs_trello_card_id_unique_idx
 -- espaços nas pontas) — nomes duplicados criados por engano confundiam
 -- qual job era o "de verdade".
 CREATE UNIQUE INDEX IF NOT EXISTS jobs_name_unique_idx ON jobs (lower(trim(name)));
+
+-- Marca quando o sistema desvinculou um job do Trello sozinho (card
+-- arquivado ou apagado lá) — distinto da desvinculação manual pelo botão
+-- "desvincular", que nunca marca isso. Mostrado como aviso na tela do job;
+-- limpo automaticamente assim que o job é vinculado a um card de novo.
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS trello_auto_unlinked_at TIMESTAMPTZ;

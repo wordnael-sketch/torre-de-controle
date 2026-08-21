@@ -25,6 +25,7 @@ export interface Job {
   triggerLabel: string | null;
   trelloCardId: string | null;
   trelloLinkedAt: string | null;
+  trelloAutoUnlinkedAt: string | null;
   atendimentoPersonId: number | null;
   atendimentoPersonName: string | null;
   trelloStatusUpdates: TrelloStatusUpdate[];
@@ -50,6 +51,7 @@ interface JobRow {
   status_trigger_label: string | null;
   trello_card_id: string | null;
   trello_linked_at: string | Date | null;
+  trello_auto_unlinked_at: string | Date | null;
   atendimento_person_id: number | null;
   atendimento_person_name: string | null;
   trello_status_updates: TrelloStatusUpdate[];
@@ -114,6 +116,7 @@ async function rowToJob(db: AppDatabase, row: JobRow, precomputedLastStatusChang
     triggerLabel: row.status_trigger_label,
     trelloCardId: row.trello_card_id,
     trelloLinkedAt: row.trello_linked_at ? new Date(row.trello_linked_at).toISOString() : null,
+    trelloAutoUnlinkedAt: row.trello_auto_unlinked_at ? new Date(row.trello_auto_unlinked_at).toISOString() : null,
     atendimentoPersonId: row.atendimento_person_id,
     atendimentoPersonName: row.atendimento_person_name,
     trelloStatusUpdates: row.trello_status_updates,

@@ -31,6 +31,8 @@ export interface TrelloCardDetail {
   description: string | null;
   url: string;
   labels: TrelloLabel[];
+  /** Arquivado no Trello (não é o mesmo que apagado — apagado é getCard retornando null). */
+  closed: boolean;
 }
 
 export interface TrelloClient {
@@ -74,6 +76,7 @@ interface TrelloCardDetailResponse {
   due: string | null;
   desc: string | null;
   shortUrl: string;
+  closed: boolean;
   list?: { name: string };
   checklists?: TrelloChecklistResponse[];
   members?: TrelloMemberResponse[];
@@ -119,7 +122,7 @@ export function createHttpTrelloClient(
     async getCard(cardId: string): Promise<TrelloCardDetail | null> {
       const res = await fetchImpl(
         `https://api.trello.com/1/cards/${cardId}?${authQuery}` +
-          '&fields=name,due,desc,shortUrl&checklists=all&checklist_fields=name&list=true' +
+          '&fields=name,due,desc,shortUrl,closed&checklists=all&checklist_fields=name&list=true' +
           '&members=true&member_fields=fullName&labels=true',
       );
 
@@ -161,6 +164,7 @@ export function createHttpTrelloClient(
         description: card.desc || null,
         url: card.shortUrl,
         labels: (card.labels ?? []).map((l) => ({ name: l.name, color: l.color })),
+        closed: card.closed,
       };
     },
   };

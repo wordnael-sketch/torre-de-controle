@@ -2,7 +2,7 @@ import { Router } from 'express';
 import crypto from 'crypto';
 import type { AppDatabase } from '../db';
 import { getJobByTrelloCardId } from '../models/job';
-import { syncJobFromTrello } from '../models/trelloLink';
+import { syncJobFromTrello, createJobFromTrelloCard } from '../models/trelloLink';
 import type { Classifier } from '../services/classifier';
 import type { TrelloClient } from '../services/trello';
 import { asyncHandler } from '../utils/asyncHandler';
@@ -17,6 +17,10 @@ export interface TrelloWebhookRouterDeps {
 
 interface TrelloWebhookPayload {
   action?: {
+    type?: string;
+    memberCreator?: {
+      fullName?: string;
+    };
     data?: {
       card?: {
         id?: string;
@@ -97,6 +101,20 @@ export function createTrelloWebhookRouter(deps: TrelloWebhookRouterDeps): Router
 
       const job = await getJobByTrelloCardId(deps.db, cardId);
       if (!job) {
+        // Sem job vinculado ainda: só vale a pena tentar importar quando é
+        // exatamente o momento em que o card foi criado — qualquer outra
+        // action (comentário, checklist etc.) num card sem job é ignorada,
+        // senão todo o backlog de cards antigos nunca linkados viraria job
+        // sozinho na primeira interação, o que ninguém pediu.
+        if (payload.action?.type === 'createCard') {
+          await createJobFromTrelloCard(
+            deps.db,
+            deps.trelloClient,
+            deps.classifier,
+            cardId,
+            payload.action.memberCreator?.fullName,
+          );
+        }
         res.status(200).json({ ok: true });
         return;
       }

@@ -469,6 +469,14 @@ export function JobDetailPage() {
           </p>
         )}
 
+        {job.trelloAutoUnlinkedAt && (
+          <p className="job-detail-warning job-detail-warning--amber">
+            Desvinculado do Trello automaticamente em{' '}
+            {new Date(job.trelloAutoUnlinkedAt).toLocaleDateString('pt-BR')} — o card foi arquivado ou apagado
+            lá.
+          </p>
+        )}
+
         {isStuck && counts && (
           <p className="job-detail-warning job-detail-warning--red">
             {counts.currentStreakDays} dias com {job.bolaCom === 'cliente' ? 'o cliente' : 'a Ilha'}

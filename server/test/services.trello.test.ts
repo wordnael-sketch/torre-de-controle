@@ -183,6 +183,29 @@ describe('createHttpTrelloClient', () => {
       expect(card?.labels).toEqual([]);
     });
 
+    it('parses closed: true for an archived card', async () => {
+      const fetchMock = vi.fn(async (url: string) => {
+        if (url.includes('/actions')) {
+          return jsonResponse([]);
+        }
+        return jsonResponse({
+          name: 'Card arquivado',
+          due: null,
+          desc: '',
+          shortUrl: 'https://trello.com/c/card-arquivado',
+          closed: true,
+          list: { name: 'Em Orçamento 2026' },
+          checklists: [],
+          members: [],
+        });
+      });
+
+      const client = createHttpTrelloClient('key', 'token', 'board123', fetchMock as unknown as typeof fetch);
+      const card = await client.getCard('card-arquivado');
+
+      expect(card?.closed).toBe(true);
+    });
+
     it('throws on a non-404 error response, for the caller to handle', async () => {
       const fetchMock = vi.fn(async () => jsonResponse({ error: 'rate limited' }, 429));
       const client = createHttpTrelloClient('key', 'token', 'board123', fetchMock as unknown as typeof fetch);

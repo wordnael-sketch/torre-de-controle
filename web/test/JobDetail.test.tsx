@@ -65,6 +65,7 @@ const jobDetail = {
   actionRequired: 'Preenchimento do Briefing Padronizado.',
   triggerLabel: 'Avançar para: Briefing Recebido',
   trelloCardId: null,
+  trelloAutoUnlinkedAt: null,
   trelloStatusUpdates: [],
   trelloChecklistItems: [],
   bolaComDayCounts: { ilhaDays: 3, clienteDays: 0, currentSide: 'ilha' as const, currentStreakDays: 3 },
@@ -208,6 +209,23 @@ describe('JobDetailPage', () => {
     expect(
       await screen.findByText('Nenhum Atendimento responsável atribuído — selecione um acima.'),
     ).toBeInTheDocument();
+  });
+
+  it('shows a warning when the job was auto-unlinked from Trello (card archived/deleted)', async () => {
+    mockedApi.getJob.mockResolvedValue({
+      job: { ...jobDetail, trelloAutoUnlinkedAt: '2026-08-21T00:00:00.000Z' },
+    });
+
+    renderJobDetail();
+
+    expect(await screen.findByText(/Desvinculado do Trello automaticamente/)).toBeInTheDocument();
+  });
+
+  it('does not show the auto-unlink warning for a job that was never auto-unlinked', async () => {
+    renderJobDetail();
+
+    await screen.findByText('Colgate - Color Correct Wave 2');
+    expect(screen.queryByText(/Desvinculado do Trello automaticamente/)).not.toBeInTheDocument();
   });
 
   it('reassigns the Atendimento responsável via the select', async () => {
