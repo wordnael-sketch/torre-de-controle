@@ -13,14 +13,18 @@ import { setBolaCom, getBolaComDayCounts, getBolaComDayCountsForJobs } from '../
 import { getJobStatusHistory } from '../models/jobStatusHistory';
 import { getJobRoleAssignments, setJobRoleAssignment } from '../models/jobRoleAssignments';
 import { classifyAndApply } from '../models/classification';
+import { findTrelloCandidates, buildTrelloEvidenceText } from '../models/trelloMatch';
+import { setTrelloLink, syncTrelloMembersToRoles, syncTrelloMembersToAtendimento } from '../models/trelloLink';
 import { requireAuth, requireActiveUser } from '../auth/middleware';
 import { asyncHandler } from '../utils/asyncHandler';
 import type { Classifier } from '../services/classifier';
+import type { TrelloClient } from '../services/trello';
 
 export interface JobsRouterDeps {
   db: AppDatabase;
   jwtSecret: string;
   classifier?: Classifier;
+  trelloClient?: TrelloClient;
 }
 
 function parseId(raw: string): number | null {
@@ -362,6 +366,120 @@ export function createJobsRouter(deps: JobsRouterDeps): Router {
 
       const suggestions = await classifyAndApply(deps.db, deps.classifier, jobId, text);
       res.json({ suggestions });
+    }),
+  );
+
+  router.get(
+    '/:id/trello-candidates',
+    asyncHandler(async (req, res) => {
+      const jobId = parseId(req.params.id);
+      if (jobId === null) {
+        res.status(400).json({ error: 'invalid job id' });
+        return;
+      }
+
+      if (!deps.trelloClient) {
+        res.status(503).json({ error: 'trello_nao_configurado' });
+        return;
+      }
+
+      const job = await getJobById(deps.db, jobId);
+      if (!job) {
+        res.status(404).json({ error: 'Job not found' });
+        return;
+      }
+
+      let cards;
+      try {
+        cards = await deps.trelloClient.listBoardCards();
+      } catch {
+        res.status(502).json({ error: 'trello_api_error' });
+        return;
+      }
+
+      const candidates = findTrelloCandidates(job, cards);
+      res.json({ candidates });
+    }),
+  );
+
+  router.post(
+    '/:id/trello-link',
+    asyncHandler(async (req, res) => {
+      const jobId = parseId(req.params.id);
+      if (jobId === null) {
+        res.status(400).json({ error: 'invalid job id' });
+        return;
+      }
+
+      if (!('trelloCardId' in req.body)) {
+        res.status(400).json({ error: 'trelloCardId is required (use null to unlink)' });
+        return;
+      }
+
+      const { trelloCardId } = req.body as { trelloCardId: string | null };
+
+      const existing = await getJobById(deps.db, jobId);
+      if (!existing) {
+        res.status(404).json({ error: 'Job not found' });
+        return;
+      }
+
+      await setTrelloLink(deps.db, jobId, trelloCardId);
+      const job = await getJobById(deps.db, jobId);
+      res.json({ job });
+    }),
+  );
+
+  router.post(
+    '/:id/trello-sync',
+    asyncHandler(async (req, res) => {
+      const jobId = parseId(req.params.id);
+      if (jobId === null) {
+        res.status(400).json({ error: 'invalid job id' });
+        return;
+      }
+
+      if (!deps.trelloClient) {
+        res.status(503).json({ error: 'trello_nao_configurado' });
+        return;
+      }
+      if (!deps.classifier) {
+        res.status(503).json({ error: 'ia_nao_configurada' });
+        return;
+      }
+
+      const job = await getJobById(deps.db, jobId);
+      if (!job) {
+        res.status(404).json({ error: 'Job not found' });
+        return;
+      }
+      if (!job.trelloCardId) {
+        res.status(400).json({ error: 'job is not linked to a Trello card' });
+        return;
+      }
+
+      let card;
+      try {
+        card = await deps.trelloClient.getCard(job.trelloCardId);
+      } catch {
+        res.status(502).json({ error: 'trello_api_error' });
+        return;
+      }
+
+      if (!card) {
+        await setTrelloLink(deps.db, jobId, null);
+        res.status(404).json({ error: 'trello_card_not_found' });
+        return;
+      }
+
+      if (job.phaseId) {
+        await syncTrelloMembersToRoles(deps.db, jobId, job.phaseId, card.members);
+      }
+      await syncTrelloMembersToAtendimento(deps.db, jobId, job.atendimentoPersonId, card.members);
+
+      const evidenceText = buildTrelloEvidenceText(card);
+      const suggestions = await classifyAndApply(deps.db, deps.classifier, jobId, evidenceText);
+      res.json({ suggestions, trelloCard: { name: card.name, listName: card.listName } });
     }),
   );
 

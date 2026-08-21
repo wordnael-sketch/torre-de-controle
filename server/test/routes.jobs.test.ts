@@ -4,6 +4,7 @@ import { createApp } from '../src/app';
 import type { AppDatabase } from '../src/db';
 import type { GoogleProfile } from '../src/routes/auth';
 import type { Classifier, RawSuggestion } from '../src/services/classifier';
+import type { TrelloClient, TrelloCardSummary, TrelloCardDetail } from '../src/services/trello';
 import { withTestTransaction } from './helpers/testDb';
 
 const JWT_SECRET = 'test-secret';
@@ -685,6 +686,338 @@ describe('PATCH /api/jobs/:id/atendimento', () => {
         .send({ personId: atendimentoPersonId });
 
       expect(res.status).toBe(404);
+    });
+  });
+});
+
+function fakeTrelloClient(overrides: Partial<TrelloClient> = {}): TrelloClient {
+  return {
+    listBoardCards: async () => [],
+    getCard: async () => null,
+    ...overrides,
+  };
+}
+
+function buildAppWithDeps(db: AppDatabase, extra: { classifier?: Classifier; trelloClient?: TrelloClient }) {
+  return createApp({
+    db,
+    verifyIdToken: async () => ({
+      sub: 'google-sub-1',
+      email: 'wilka@ilhacrossmidia.com.br',
+      name: 'Wilka',
+    }),
+    jwtSecret: JWT_SECRET,
+    allowedDomain: ALLOWED_DOMAIN,
+    frontendUrl: FRONTEND_URL,
+    ...extra,
+  });
+}
+
+describe('GET /api/jobs/:id/trello-candidates', () => {
+  it('returns 503 when Trello is not configured', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+
+      const created = await agent.post('/api/jobs').send({ name: 'Job Trello Candidatos Teste', atendimentoPersonId });
+      const res = await agent.get(`/api/jobs/${created.body.job.id}/trello-candidates`);
+
+      expect(res.status).toBe(503);
+    });
+  });
+
+  it('returns scored candidates from the configured board', async () => {
+    await withTestTransaction(async (db) => {
+      const trelloClient = fakeTrelloClient({
+        listBoardCards: async (): Promise<TrelloCardSummary[]> => [
+          { id: 'card1', name: 'WPP:: Colgate Campanha Teste', listName: 'Em Captação 2026' },
+        ],
+      });
+      const app = buildAppWithDeps(db, { trelloClient });
+      const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+
+      const created = await agent
+        .post('/api/jobs')
+        .send({ name: 'Colgate Campanha Teste', client: 'Colgate', atendimentoPersonId });
+      const res = await agent.get(`/api/jobs/${created.body.job.id}/trello-candidates`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.candidates).toHaveLength(1);
+      expect(res.body.candidates[0].id).toBe('card1');
+      expect(res.body.candidates[0].strongMatch).toBe(true);
+    });
+  });
+
+  it('returns 502 when the Trello API call fails', async () => {
+    await withTestTransaction(async (db) => {
+      const trelloClient = fakeTrelloClient({
+        listBoardCards: async () => {
+          throw new Error('Trello API error 429');
+        },
+      });
+      const app = buildAppWithDeps(db, { trelloClient });
+      const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+
+      const created = await agent.post('/api/jobs').send({ name: 'Job Trello Erro Teste', atendimentoPersonId });
+      const res = await agent.get(`/api/jobs/${created.body.job.id}/trello-candidates`);
+
+      expect(res.status).toBe(502);
+    });
+  });
+});
+
+describe('POST /api/jobs/:id/trello-link', () => {
+  it('links a job to a Trello card id', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+
+      const created = await agent.post('/api/jobs').send({ name: 'Job Trello Link Teste', atendimentoPersonId });
+      const res = await agent
+        .post(`/api/jobs/${created.body.job.id}/trello-link`)
+        .send({ trelloCardId: 'card1' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.job.trelloCardId).toBe('card1');
+    });
+  });
+
+  it('unlinks when trelloCardId is null', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+
+      const created = await agent.post('/api/jobs').send({ name: 'Job Trello Unlink Teste', atendimentoPersonId });
+      await agent.post(`/api/jobs/${created.body.job.id}/trello-link`).send({ trelloCardId: 'card1' });
+      const res = await agent
+        .post(`/api/jobs/${created.body.job.id}/trello-link`)
+        .send({ trelloCardId: null });
+
+      expect(res.status).toBe(200);
+      expect(res.body.job.trelloCardId).toBeNull();
+    });
+  });
+
+  it('rejects a body missing trelloCardId', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+
+      const created = await agent.post('/api/jobs').send({ name: 'Job Trello Link Inválido Teste', atendimentoPersonId });
+      const res = await agent.post(`/api/jobs/${created.body.job.id}/trello-link`).send({});
+
+      expect(res.status).toBe(400);
+    });
+  });
+});
+
+describe('POST /api/jobs/:id/trello-sync', () => {
+  it('returns 503 when Trello is not configured', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+
+      const created = await agent.post('/api/jobs').send({ name: 'Job Trello Sync Sem Config Teste', atendimentoPersonId });
+      const res = await agent.post(`/api/jobs/${created.body.job.id}/trello-sync`).send({});
+
+      expect(res.status).toBe(503);
+    });
+  });
+
+  it('returns 400 when the job has no linked card', async () => {
+    await withTestTransaction(async (db) => {
+      const trelloClient = fakeTrelloClient();
+      const classifier: Classifier = { classify: async () => [] };
+      const app = buildAppWithDeps(db, { trelloClient, classifier });
+      const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+
+      const created = await agent.post('/api/jobs').send({ name: 'Job Trello Não Vinculado Teste', atendimentoPersonId });
+      const res = await agent.post(`/api/jobs/${created.body.job.id}/trello-sync`).send({});
+
+      expect(res.status).toBe(400);
+    });
+  });
+
+  it('unlinks and returns 404 when the linked card no longer exists', async () => {
+    await withTestTransaction(async (db) => {
+      const trelloClient = fakeTrelloClient({ getCard: async () => null });
+      const classifier: Classifier = { classify: async () => [] };
+      const app = buildAppWithDeps(db, { trelloClient, classifier });
+      const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+
+      const created = await agent.post('/api/jobs').send({ name: 'Job Trello Card Sumiu Teste', atendimentoPersonId });
+      await agent.post(`/api/jobs/${created.body.job.id}/trello-link`).send({ trelloCardId: 'card1' });
+
+      const res = await agent.post(`/api/jobs/${created.body.job.id}/trello-sync`).send({});
+
+      expect(res.status).toBe(404);
+
+      const jobRes = await agent.get(`/api/jobs/${created.body.job.id}`);
+      expect(jobRes.body.job.trelloCardId).toBeNull();
+    });
+  });
+
+  it('builds evidence text from the Trello card and classifies it', async () => {
+    await withTestTransaction(async (db) => {
+      const cardDetail: TrelloCardDetail = {
+        name: 'WPP:: Colgate Campanha Teste',
+        listName: 'Em Captação 2026',
+        checklistItems: [{ name: 'Contrato assinado', checked: true }],
+        due: null,
+        latestComment: null,
+        members: [],
+      };
+      const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
+      const classifyMock = async (input: { pastedText: string }): Promise<RawSuggestion[]> => {
+        expect(input.pastedText).toContain('Em Captação 2026');
+        expect(input.pastedText).toContain('Contrato assinado');
+        return [
+          {
+            tipo: 'checklist_item',
+            valor: 'Briefing Recebido',
+            confidence: 0.9,
+            evidencia: 'Lista atual no Trello: Em Captação 2026',
+          },
+        ];
+      };
+      const classifier: Classifier = { classify: classifyMock };
+      const app = buildAppWithDeps(db, { trelloClient, classifier });
+      const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+
+      const created = await agent.post('/api/jobs').send({ name: 'Job Trello Sync Sucesso Teste', atendimentoPersonId });
+      await agent.post(`/api/jobs/${created.body.job.id}/trello-link`).send({ trelloCardId: 'card1' });
+
+      const res = await agent.post(`/api/jobs/${created.body.job.id}/trello-sync`).send({});
+
+      expect(res.status).toBe(200);
+      expect(res.body.suggestions).toHaveLength(1);
+      expect(res.body.suggestions[0].outcome).toBe('auto_aplicado');
+      expect(res.body.trelloCard).toEqual({ name: 'WPP:: Colgate Campanha Teste', listName: 'Em Captação 2026' });
+    });
+  });
+
+  it('returns 502 when the Trello API call fails', async () => {
+    await withTestTransaction(async (db) => {
+      const trelloClient = fakeTrelloClient({
+        getCard: async () => {
+          throw new Error('Trello API error 500');
+        },
+      });
+      const classifier: Classifier = { classify: async () => [] };
+      const app = buildAppWithDeps(db, { trelloClient, classifier });
+      const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+
+      const created = await agent.post('/api/jobs').send({ name: 'Job Trello Sync Erro API Teste', atendimentoPersonId });
+      await agent.post(`/api/jobs/${created.body.job.id}/trello-link`).send({ trelloCardId: 'card1' });
+
+      const res = await agent.post(`/api/jobs/${created.body.job.id}/trello-sync`).send({});
+
+      expect(res.status).toBe(502);
+    });
+  });
+
+  it('auto-assigns an empty role area from the card members, alongside the AI suggestions', async () => {
+    await withTestTransaction(async (db) => {
+      const cardDetail: TrelloCardDetail = {
+        name: 'WPP:: Colgate Campanha Teste',
+        listName: 'Em Orçamento 2026',
+        checklistItems: [],
+        due: null,
+        latestComment: null,
+        // Job novo começa na fase "Comercial e Orçamento", que tem a área "Comercial" —
+        // "Anne Something" deve bater com a pessoa "Anne" (área Comercial) já seedada.
+        members: ['Anne Something'],
+      };
+      const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
+      const classifier: Classifier = { classify: async () => [] };
+      const app = buildAppWithDeps(db, { trelloClient, classifier });
+      const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+
+      const created = await agent.post('/api/jobs').send({ name: 'Job Trello Membro Rota Teste', atendimentoPersonId });
+      await agent.post(`/api/jobs/${created.body.job.id}/trello-link`).send({ trelloCardId: 'card1' });
+
+      await agent.post(`/api/jobs/${created.body.job.id}/trello-sync`).send({});
+
+      const jobRes = await agent.get(`/api/jobs/${created.body.job.id}`);
+      const comercial = jobRes.body.job.roleAssignments.find((a: { area: string }) => a.area === 'Comercial');
+      expect(comercial.personName).toBe('Anne');
+    });
+  });
+
+  it('does NOT overwrite the Atendimento chosen at job creation, even if a different member matches', async () => {
+    await withTestTransaction(async (db) => {
+      const cardDetail: TrelloCardDetail = {
+        name: 'WPP:: Colgate Campanha Teste',
+        listName: 'Em Orçamento 2026',
+        checklistItems: [],
+        due: null,
+        latestComment: null,
+        // O card do Trello traz Camila como membro, mas o job já foi criado com
+        // Wilka como Atendimento responsável — a sincronização nunca deve trocar
+        // isso, mesmo achando um match diferente.
+        members: ['Camila'],
+      };
+      const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
+      const classifier: Classifier = { classify: async () => [] };
+      const app = buildAppWithDeps(db, { trelloClient, classifier });
+      const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+
+      const created = await agent
+        .post('/api/jobs')
+        .send({ name: 'Job Trello Atendimento Não Sobrescreve Teste', atendimentoPersonId });
+      await agent.post(`/api/jobs/${created.body.job.id}/trello-link`).send({ trelloCardId: 'card1' });
+
+      await agent.post(`/api/jobs/${created.body.job.id}/trello-sync`).send({});
+
+      const jobRes = await agent.get(`/api/jobs/${created.body.job.id}`);
+      expect(jobRes.body.job.atendimentoPersonId).toBe(atendimentoPersonId);
+      expect(jobRes.body.job.atendimentoPersonName).toBe('Wilka');
+    });
+  });
+
+  it('fills a null Atendimento (legacy job, predating the requirement) from a matching Trello member', async () => {
+    await withTestTransaction(async (db) => {
+      const cardDetail: TrelloCardDetail = {
+        name: 'WPP:: Colgate Campanha Teste',
+        listName: 'Em Orçamento 2026',
+        checklistItems: [],
+        due: null,
+        latestComment: null,
+        members: ['Wilka Nepomoceno'],
+      };
+      const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
+      const classifier: Classifier = { classify: async () => [] };
+      const app = buildAppWithDeps(db, { trelloClient, classifier });
+      const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+
+      const created = await agent
+        .post('/api/jobs')
+        .send({ name: 'Job Trello Atendimento Legado Teste', atendimentoPersonId });
+      // Simula um job anterior à obrigatoriedade de Atendimento (os 27 jobs reais
+      // importados antes do plano "Atendimento Responsável") — a rota de criação
+      // não permite isso diretamente, então zeramos o campo direto no banco, o
+      // mesmo estado em que aqueles jobs ficaram.
+      await db.query('UPDATE jobs SET atendimento_person_id = NULL WHERE id = $1', [created.body.job.id]);
+      await agent.post(`/api/jobs/${created.body.job.id}/trello-link`).send({ trelloCardId: 'card1' });
+
+      await agent.post(`/api/jobs/${created.body.job.id}/trello-sync`).send({});
+
+      const jobRes = await agent.get(`/api/jobs/${created.body.job.id}`);
+      expect(jobRes.body.job.atendimentoPersonName).toBe('Wilka');
     });
   });
 });

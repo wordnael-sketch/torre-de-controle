@@ -21,6 +21,8 @@ export interface Job {
   lastWhatsappActivityAt: string | null;
   actionRequired: string | null;
   triggerLabel: string | null;
+  trelloCardId: string | null;
+  trelloLinkedAt: string | null;
   atendimentoPersonId: number | null;
   atendimentoPersonName: string | null;
 }
@@ -42,6 +44,8 @@ interface JobRow {
   last_whatsapp_activity_at: string | Date | null;
   status_action_required: string | null;
   status_trigger_label: string | null;
+  trello_card_id: string | null;
+  trello_linked_at: string | Date | null;
   atendimento_person_id: number | null;
   atendimento_person_name: string | null;
 }
@@ -98,6 +102,8 @@ async function rowToJob(db: AppDatabase, row: JobRow): Promise<Job> {
       : null,
     actionRequired: row.status_action_required,
     triggerLabel: row.status_trigger_label,
+    trelloCardId: row.trello_card_id,
+    trelloLinkedAt: row.trello_linked_at ? new Date(row.trello_linked_at).toISOString() : null,
     atendimentoPersonId: row.atendimento_person_id,
     atendimentoPersonName: row.atendimento_person_name,
   };

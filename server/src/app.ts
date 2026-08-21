@@ -7,6 +7,7 @@ import { createJobsRouter } from './routes/jobs';
 import { createReferenceRouter } from './routes/reference';
 import { createUsersRouter } from './routes/users';
 import type { Classifier } from './services/classifier';
+import type { TrelloClient } from './services/trello';
 
 export interface AppDeps {
   db: AppDatabase;
@@ -15,6 +16,7 @@ export interface AppDeps {
   allowedDomain: string;
   frontendUrl: string;
   classifier?: Classifier;
+  trelloClient?: TrelloClient;
 }
 
 export function createApp(deps: AppDeps): Express {
