@@ -440,7 +440,7 @@ export function JobDetailPage() {
           </p>
         )}
         {!job.lastWhatsappActivityAt && (
-          <button type="button" className="job-detail-link-btn" onClick={handleSetLastActivityNow}>
+          <button type="button" className="job-detail-action-btn" onClick={handleSetLastActivityNow}>
             Marcar atividade do grupo agora
           </button>
         )}
@@ -527,7 +527,7 @@ export function JobDetailPage() {
 
         <button
           type="button"
-          className="job-detail-link-btn"
+          className="job-detail-action-btn"
           onClick={() => void handleShowAllTrelloCards()}
           disabled={loadingAllTrelloCards}
         >
@@ -721,7 +721,7 @@ export function JobDetailPage() {
         {user?.role === 'admin' && (
           <button
             type="button"
-            className="job-detail-link-btn job-detail-delete-btn"
+            className="job-detail-delete-btn"
             onClick={() => setPendingDelete(true)}
             disabled={deleting}
           >

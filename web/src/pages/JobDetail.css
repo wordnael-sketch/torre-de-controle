@@ -252,7 +252,9 @@
   .job-detail-checklist-item,
   .job-detail-bola-btn,
   .job-detail-close,
-  .job-detail-phase-header {
+  .job-detail-phase-header,
+  .job-detail-action-btn,
+  .job-detail-delete-btn {
     min-height: 48px;
   }
 
@@ -368,8 +370,39 @@
   text-decoration: line-through;
 }
 
+.job-detail-action-btn {
+  display: inline-block;
+  margin: 0.5rem 0.5rem 0.5rem 0;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.job-detail-action-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .job-detail-delete-btn {
   display: block;
   margin: 1.5rem 0 0;
-  color: var(--farol-travado);
+  padding: 0.5rem 1.1rem;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--farol-travado-fill);
+  color: var(--text-inverse);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.job-detail-delete-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
