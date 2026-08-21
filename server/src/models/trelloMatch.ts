@@ -1,4 +1,4 @@
-import type { TrelloCardDetail, TrelloCardSummary } from '../services/trello';
+import type { TrelloCardDetail, TrelloCardSummary, TrelloComment } from '../services/trello';
 
 export interface TrelloCandidate {
   id: string;
@@ -69,4 +69,21 @@ export function buildTrelloEvidenceText(card: TrelloCardDetail): string {
   }
 
   return lines.join('\n');
+}
+
+export interface TrelloStatusUpdate {
+  author: string;
+  text: string;
+  postedAt: string;
+}
+
+// Convenção do time no Trello: um comentário de acompanhamento começa com
+// "STATUS" (com ou sem o emoji de alfinete na frente), ex.: "📌STATUS 20.08 às 13h51".
+const STATUS_COMMENT_PATTERN = /^\s*(?:\p{Emoji_Presentation}\s*)?status\b/iu;
+
+export function extractStatusUpdates(comments: TrelloComment[], limit = 5): TrelloStatusUpdate[] {
+  return comments
+    .filter((comment) => STATUS_COMMENT_PATTERN.test(comment.text))
+    .slice(0, limit)
+    .map(({ author, text, postedAt }) => ({ author, text, postedAt }));
 }

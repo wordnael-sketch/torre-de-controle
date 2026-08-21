@@ -4,11 +4,14 @@ import {
   createJob,
   listJobs,
   getJobById,
+  getJobByTrelloCardId,
+  findJobByName,
   advanceJobStatus,
   setJobStatus,
   setLastWhatsappActivity,
   setAtendimento,
   setJobName,
+  deleteJob,
 } from '../models/job';
 import { setBolaCom, getBolaComDayCounts, getBolaComDayCountsForJobs } from '../models/bolaCom';
 import { getJobStatusHistory } from '../models/jobStatusHistory';
@@ -16,7 +19,7 @@ import { getJobRoleAssignments, setJobRoleAssignment } from '../models/jobRoleAs
 import { classifyAndApply } from '../models/classification';
 import { findTrelloCandidates } from '../models/trelloMatch';
 import { setTrelloLink, syncJobFromTrello } from '../models/trelloLink';
-import { requireAuth, requireActiveUser } from '../auth/middleware';
+import { requireAuth, requireActiveUser, requireAdmin } from '../auth/middleware';
 import { asyncHandler } from '../utils/asyncHandler';
 import type { Classifier } from '../services/classifier';
 import type { TrelloClient } from '../services/trello';
@@ -91,6 +94,12 @@ export function createJobsRouter(deps: JobsRouterDeps): Router {
         res.status(400).json({
           error: 'atendimentoPersonId must reference an active person in the Atendimento area',
         });
+        return;
+      }
+
+      const nameConflict = await findJobByName(deps.db, name);
+      if (nameConflict) {
+        res.status(409).json({ error: 'job_name_ja_existe', existingJobId: nameConflict.id });
         return;
       }
 
@@ -483,9 +492,41 @@ export function createJobsRouter(deps: JobsRouterDeps): Router {
         return;
       }
 
+      if (trelloCardId) {
+        const other = await getJobByTrelloCardId(deps.db, trelloCardId);
+        if (other && other.id !== jobId) {
+          res.status(409).json({
+            error: 'trello_card_ja_vinculado',
+            existingJobId: other.id,
+            existingJobName: other.name,
+          });
+          return;
+        }
+      }
+
       await setTrelloLink(deps.db, jobId, trelloCardId);
       const job = await getJobById(deps.db, jobId);
       res.json({ job });
+    }),
+  );
+
+  router.delete(
+    '/:id',
+    requireAdmin(),
+    asyncHandler(async (req, res) => {
+      const jobId = parseId(req.params.id);
+      if (jobId === null) {
+        res.status(400).json({ error: 'invalid job id' });
+        return;
+      }
+
+      const deleted = await deleteJob(deps.db, jobId);
+      if (!deleted) {
+        res.status(404).json({ error: 'Job not found' });
+        return;
+      }
+
+      res.status(204).end();
     }),
   );
 

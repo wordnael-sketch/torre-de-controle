@@ -59,10 +59,17 @@ describe('createHttpTrelloClient', () => {
       expect(result).toBeNull();
     });
 
-    it('parses name, list name, checklist items, due date, comment, and members', async () => {
+    it('parses name, list name, checklist items, due date, comments (with author), and members', async () => {
       const fetchMock = vi.fn(async (url: string) => {
         if (url.includes('/cards/card1/actions')) {
-          return jsonResponse([{ data: { text: 'Cliente aprovou o orçamento hoje' } }]);
+          expect(url).toContain('member_creator=true');
+          return jsonResponse([
+            {
+              date: '2026-08-20T13:51:00.000Z',
+              data: { text: 'Cliente aprovou o orçamento hoje' },
+              memberCreator: { fullName: 'Bianca de Souza Andrade' },
+            },
+          ]);
         }
         return jsonResponse({
           name: 'WPP:: COLGATE:: CAMPANHA',
@@ -93,7 +100,36 @@ describe('createHttpTrelloClient', () => {
         due: '2026-08-28T00:00:00.000Z',
         latestComment: 'Cliente aprovou o orçamento hoje',
         members: ['Wilka Nepomoceno'],
+        comments: [
+          {
+            author: 'Bianca de Souza Andrade',
+            text: 'Cliente aprovou o orçamento hoje',
+            postedAt: '2026-08-20T13:51:00.000Z',
+          },
+        ],
       });
+    });
+
+    it('falls back to "Desconhecido" when a comment has no memberCreator', async () => {
+      const fetchMock = vi.fn(async (url: string) => {
+        if (url.includes('/actions')) {
+          return jsonResponse([{ date: '2026-08-20T13:51:00.000Z', data: { text: 'Sem autor' } }]);
+        }
+        return jsonResponse({
+          name: 'Card sem autor',
+          due: null,
+          list: { name: 'Em Orçamento 2026' },
+          checklists: [],
+          members: [],
+        });
+      });
+
+      const client = createHttpTrelloClient('key', 'token', 'board123', fetchMock as unknown as typeof fetch);
+      const card = await client.getCard('card1');
+
+      expect(card?.comments).toEqual([
+        { author: 'Desconhecido', text: 'Sem autor', postedAt: '2026-08-20T13:51:00.000Z' },
+      ]);
     });
 
     it('returns latestComment null when there are no comments', async () => {
@@ -114,6 +150,7 @@ describe('createHttpTrelloClient', () => {
       const card = await client.getCard('card2');
 
       expect(card?.latestComment).toBeNull();
+      expect(card?.comments).toEqual([]);
     });
 
     it('throws on a non-404 error response, for the caller to handle', async () => {

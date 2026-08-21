@@ -15,6 +15,7 @@ import {
 import { phaseMarkerColor, phaseTextColor } from '../theme/phase';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { showToast } from '../components/Toast';
+import { useAuth } from '../auth/AuthContext';
 import './JobDetail.css';
 
 function hoursSince(iso: string): number {
@@ -25,6 +26,7 @@ export function JobDetailPage() {
   const { id } = useParams<{ id: string }>();
   const jobId = Number(id);
 
+  const { user } = useAuth();
   const navigate = useNavigate();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const hasFocusedRef = useRef(false);
@@ -38,10 +40,11 @@ export function JobDetailPage() {
   // keydown event, so this handler must skip closing the whole drawer and let
   // ConfirmDialog's own listener handle dismissing just the confirmation.
   const pendingCompleteStatusIdRef = useRef<number | null>(null);
+  const pendingDeleteRef = useRef(false);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape' && pendingCompleteStatusIdRef.current === null) {
+      if (event.key === 'Escape' && pendingCompleteStatusIdRef.current === null && !pendingDeleteRef.current) {
         handleClose();
       }
     }
@@ -63,6 +66,8 @@ export function JobDetailPage() {
   const [suggestions, setSuggestions] = useState<ClassifySuggestion[] | null>(null);
   const [classifying, setClassifying] = useState(false);
   const [pendingCompleteStatusId, setPendingCompleteStatusId] = useState<number | null>(null);
+  const [pendingDelete, setPendingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [trelloCandidates, setTrelloCandidates] = useState<TrelloCandidate[] | null>(null);
   const [trelloCard, setTrelloCard] = useState<TrelloCardSummary | null>(null);
   const trelloSyncedRef = useRef(false);
@@ -80,6 +85,10 @@ export function JobDetailPage() {
   useEffect(() => {
     pendingCompleteStatusIdRef.current = pendingCompleteStatusId;
   }, [pendingCompleteStatusId]);
+
+  useEffect(() => {
+    pendingDeleteRef.current = pendingDelete;
+  }, [pendingDelete]);
 
   async function refresh() {
     const [jobRes, referenceRes, peopleRes] = await Promise.all([
@@ -179,6 +188,19 @@ export function JobDetailPage() {
     const statusId = pendingCompleteStatusId;
     setPendingCompleteStatusId(null);
     await applyStatusChange(statusId, 'Job concluído!');
+  }
+
+  async function handleDeleteJob() {
+    setPendingDelete(false);
+    setDeleting(true);
+    try {
+      await api.deleteJob(jobId);
+      showToast('Job excluído.', 'success');
+      navigate('/');
+    } catch {
+      setError('Não foi possível excluir o job.');
+      setDeleting(false);
+    }
   }
 
   async function handleBolaComToggle(side: 'ilha' | 'cliente') {
@@ -438,6 +460,53 @@ export function JobDetailPage() {
           </p>
         )}
 
+        {job.trelloChecklistItems.length > 0 && (
+          <div className="job-detail-trello-checklist">
+            <p className="label-caps">
+              Checklist do Trello ({job.trelloChecklistItems.filter((i) => i.checked).length}/
+              {job.trelloChecklistItems.length})
+            </p>
+            <ul className="job-detail-trello-checklist-items">
+              {job.trelloChecklistItems.map((item, index) => (
+                <li
+                  key={index}
+                  className={`job-detail-trello-checklist-item${item.checked ? ' is-checked' : ''}`}
+                >
+                  <span className="job-detail-checkbox" aria-hidden="true">
+                    {item.checked ? '✓' : ''}
+                  </span>
+                  {item.name}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {job.trelloStatusUpdates.length > 0 && (
+          <div className="job-detail-trello-status">
+            <p className="label-caps">Últimos status do Trello</p>
+            <ul className="job-detail-trello-status-list">
+              {job.trelloStatusUpdates.map((update, index) => (
+                <li key={index} className="job-detail-trello-status-item">
+                  <p className="job-detail-trello-status-meta">
+                    <span className="job-detail-trello-status-author">{update.author}</span>
+                    {' · '}
+                    <time dateTime={update.postedAt}>
+                      {new Date(update.postedAt).toLocaleString('pt-BR', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </time>
+                  </p>
+                  <p className="job-detail-trello-status-text">{update.text}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {trelloCandidates && trelloCandidates.length > 0 && (
           <div className="job-detail-trello-picker">
             <p className="label-caps">Vincular ao card do Trello</p>
@@ -646,6 +715,27 @@ export function JobDetailPage() {
             confirmLabel="Concluir"
             onConfirm={() => void confirmComplete()}
             onCancel={() => setPendingCompleteStatusId(null)}
+          />
+        )}
+
+        {user?.role === 'admin' && (
+          <button
+            type="button"
+            className="job-detail-link-btn job-detail-delete-btn"
+            onClick={() => setPendingDelete(true)}
+            disabled={deleting}
+          >
+            Excluir job
+          </button>
+        )}
+
+        {pendingDelete && (
+          <ConfirmDialog
+            title="Excluir job"
+            message={`Excluir "${job.name}" permanentemente? Essa ação não pode ser desfeita.`}
+            confirmLabel="Excluir"
+            onConfirm={() => void handleDeleteJob()}
+            onCancel={() => setPendingDelete(false)}
           />
         )}
       </div>

@@ -171,6 +171,26 @@ describe('syncTrelloMembersToAtendimento', () => {
       expect(result.rows[0].atendimento_person_id).toBeNull();
     });
   });
+
+  it('matches a person whose system name carries a city disambiguator (e.g. "Bianca (Brasília)") against their plain Trello full name', async () => {
+    await withTestTransaction(async (db) => {
+      // Bug real: o sufixo "(Brasília)" existe só pra desambiguar no cadastro
+      // interno — nunca aparece no nome de ninguém no Trello — então a
+      // comparação por substring falhava sempre pra essas pessoas.
+      const job = await createJob(db, { name: 'Job Trello Atendimento Desambiguado Teste' });
+
+      await syncTrelloMembersToAtendimento(db, job.id, null, ['Bianca de Souza Andrade']);
+
+      const result = await db.query<{ atendimento_person_id: number | null }>(
+        'SELECT atendimento_person_id FROM jobs WHERE id = $1',
+        [job.id],
+      );
+      const bianca = await db.query<{ id: number }>(
+        `SELECT id FROM people WHERE name = 'Bianca (Brasília)' AND area = 'Atendimento'`,
+      );
+      expect(result.rows[0].atendimento_person_id).toBe(bianca.rows[0].id);
+    });
+  });
 });
 
 function fakeClassifier(suggestions: RawSuggestion[]): Classifier {
@@ -228,6 +248,7 @@ describe('syncJobFromTrello', () => {
         checklistItems: [],
         due: null,
         latestComment: null,
+        comments: [],
         members: [],
       };
       const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
@@ -262,6 +283,7 @@ describe('syncJobFromTrello', () => {
         checklistItems: [],
         due: null,
         latestComment: null,
+        comments: [],
         members: [],
       };
       const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
@@ -295,6 +317,7 @@ describe('syncJobFromTrello', () => {
         checklistItems: [],
         due: null,
         latestComment: null,
+        comments: [],
         members: ['Wilka Nepomoceno'],
       };
       const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
@@ -326,6 +349,7 @@ describe('syncJobFromTrello', () => {
         checklistItems: [],
         due: null,
         latestComment: null,
+        comments: [],
         members: [],
       };
       const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
@@ -350,6 +374,7 @@ describe('syncJobFromTrello', () => {
         checklistItems: [],
         due: null,
         latestComment: null,
+        comments: [],
         members: [],
       };
       const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
@@ -359,6 +384,191 @@ describe('syncJobFromTrello', () => {
 
       const updatedJob = await getJobById(db, created.id);
       expect(updatedJob?.name).toBe('Nome Já Igual');
+      expect(updatedJob?.updatedAt).toBe(job.updatedAt);
+    });
+  });
+
+  it('does not rename the job to a name that already belongs to a different job', async () => {
+    await withTestTransaction(async (db) => {
+      // Roda sem supervisão via webhook — se renomeasse mesmo assim, criaria
+      // exatamente a duplicata de nome que a trava de unicidade existe pra
+      // impedir.
+      await createJob(db, { name: 'Nome Já Usado Por Outro Job' });
+      const created = await createJob(db, { name: 'Nome Original Deste Job' });
+      await setTrelloLink(db, created.id, 'card1');
+      const job = (await getJobById(db, created.id))!;
+
+      const cardDetail: TrelloCardDetail = {
+        name: 'Nome Já Usado Por Outro Job',
+        listName: 'Em Captação 2026',
+        checklistItems: [],
+        due: null,
+        latestComment: null,
+        members: [],
+        comments: [],
+      };
+      const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
+      const classifier = fakeClassifier([]);
+
+      await syncJobFromTrello(db, trelloClient, classifier, job, { bypassConfidenceGate: false });
+
+      const updatedJob = await getJobById(db, created.id);
+      expect(updatedJob?.name).toBe('Nome Original Deste Job');
+    });
+  });
+
+  it('also matches Atendimento/roles from comment authors, not just card members', async () => {
+    await withTestTransaction(async (db) => {
+      // Quem está de fato tocando o job às vezes só aparece comentando os
+      // status no Trello, sem estar marcado como "member" do card.
+      const created = await createJob(db, { name: 'Job Sync Autor Comentário Teste' });
+      await setTrelloLink(db, created.id, 'card1');
+      const job = (await getJobById(db, created.id))!;
+
+      const cardDetail: TrelloCardDetail = {
+        name: 'Job Sync Autor Comentário Teste',
+        listName: 'Em Captação 2026',
+        checklistItems: [],
+        due: null,
+        latestComment: 'Bora',
+        members: [],
+        comments: [{ author: 'Wilka Nepomoceno', text: 'Bora', postedAt: '2026-08-20T13:51:00.000Z' }],
+      };
+      const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
+
+      await syncJobFromTrello(db, trelloClient, undefined, job, { bypassConfidenceGate: false });
+
+      const updatedJob = await getJobById(db, created.id);
+      const wilka = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Wilka' AND area = 'Atendimento'`);
+      expect(updatedJob?.atendimentoPersonId).toBe(wilka.rows[0].id);
+    });
+  });
+
+  it('persists only the comments that look like a team STATUS update, newest first', async () => {
+    await withTestTransaction(async (db) => {
+      const created = await createJob(db, { name: 'Job Sync Status Teste' });
+      await setTrelloLink(db, created.id, 'card1');
+      const job = (await getJobById(db, created.id))!;
+
+      const cardDetail: TrelloCardDetail = {
+        name: 'Job Sync Status Teste',
+        listName: 'Em Pós Produção',
+        checklistItems: [],
+        due: null,
+        latestComment: '📌STATUS 20.08 às 13h51',
+        members: [],
+        comments: [
+          {
+            author: 'Bianca de Souza Andrade',
+            text: '📌STATUS 20.08 às 13h51\nFilme em montagem.',
+            postedAt: '2026-08-20T13:51:00.000Z',
+          },
+          { author: 'Cliente', text: 'Ficou ótimo, obrigado!', postedAt: '2026-08-20T10:00:00.000Z' },
+          {
+            author: 'Bianca de Souza Andrade',
+            text: 'STATUS 19.08 às 14h40\nPrevisto envio no fim do dia.',
+            postedAt: '2026-08-19T14:40:00.000Z',
+          },
+        ],
+      };
+      const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
+
+      await syncJobFromTrello(db, trelloClient, undefined, job, { bypassConfidenceGate: false });
+
+      const updatedJob = await getJobById(db, created.id);
+      expect(updatedJob?.trelloStatusUpdates).toEqual([
+        {
+          author: 'Bianca de Souza Andrade',
+          text: '📌STATUS 20.08 às 13h51\nFilme em montagem.',
+          postedAt: '2026-08-20T13:51:00.000Z',
+        },
+        {
+          author: 'Bianca de Souza Andrade',
+          text: 'STATUS 19.08 às 14h40\nPrevisto envio no fim do dia.',
+          postedAt: '2026-08-19T14:40:00.000Z',
+        },
+      ]);
+    });
+  });
+
+  it('does not write a no-op update when the extracted status updates already match what is stored', async () => {
+    await withTestTransaction(async (db) => {
+      const created = await createJob(db, { name: 'Job Sync Status Sem Mudança Teste' });
+      await setTrelloLink(db, created.id, 'card1');
+      const job = (await getJobById(db, created.id))!;
+      expect(job.trelloStatusUpdates).toEqual([]);
+
+      const cardDetail: TrelloCardDetail = {
+        name: 'Job Sync Status Sem Mudança Teste',
+        listName: 'Em Pós Produção',
+        checklistItems: [],
+        due: null,
+        latestComment: 'Sem status ainda',
+        members: [],
+        comments: [{ author: 'Alguém', text: 'Sem status ainda', postedAt: '2026-08-20T13:51:00.000Z' }],
+      };
+      const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
+
+      await syncJobFromTrello(db, trelloClient, undefined, job, { bypassConfidenceGate: false });
+
+      const updatedJob = await getJobById(db, created.id);
+      expect(updatedJob?.trelloStatusUpdates).toEqual([]);
+      expect(updatedJob?.updatedAt).toBe(job.updatedAt);
+    });
+  });
+
+  it('mirrors the Trello checklist onto the job as a read-only snapshot', async () => {
+    await withTestTransaction(async (db) => {
+      const created = await createJob(db, { name: 'Job Sync Checklist Espelho Teste' });
+      await setTrelloLink(db, created.id, 'card1');
+      const job = (await getJobById(db, created.id))!;
+
+      const cardDetail: TrelloCardDetail = {
+        name: 'Job Sync Checklist Espelho Teste',
+        listName: 'Em Pós Produção',
+        checklistItems: [
+          { name: 'Abrir card monstro no Trello', checked: true },
+          { name: 'Entrega final do filme', checked: false },
+        ],
+        due: null,
+        latestComment: null,
+        members: [],
+        comments: [],
+      };
+      const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
+
+      await syncJobFromTrello(db, trelloClient, undefined, job, { bypassConfidenceGate: false });
+
+      const updatedJob = await getJobById(db, created.id);
+      expect(updatedJob?.trelloChecklistItems).toEqual([
+        { name: 'Abrir card monstro no Trello', checked: true },
+        { name: 'Entrega final do filme', checked: false },
+      ]);
+    });
+  });
+
+  it('does not write a no-op update when the Trello checklist mirror is unchanged', async () => {
+    await withTestTransaction(async (db) => {
+      const created = await createJob(db, { name: 'Job Sync Checklist Sem Mudança Teste' });
+      await setTrelloLink(db, created.id, 'card1');
+      const job = (await getJobById(db, created.id))!;
+      expect(job.trelloChecklistItems).toEqual([]);
+
+      const cardDetail: TrelloCardDetail = {
+        name: 'Job Sync Checklist Sem Mudança Teste',
+        listName: 'Em Pós Produção',
+        checklistItems: [],
+        due: null,
+        latestComment: null,
+        members: [],
+        comments: [],
+      };
+      const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
+
+      await syncJobFromTrello(db, trelloClient, undefined, job, { bypassConfidenceGate: false });
+
+      const updatedJob = await getJobById(db, created.id);
+      expect(updatedJob?.trelloChecklistItems).toEqual([]);
       expect(updatedJob?.updatedAt).toBe(job.updatedAt);
     });
   });

@@ -4,10 +4,14 @@ import {
   listJobs,
   getJobById,
   getJobByTrelloCardId,
+  findJobByName,
   advanceJobStatus,
   setJobStatus,
   setAtendimento,
   setJobName,
+  setTrelloStatusUpdates,
+  setTrelloChecklistItems,
+  deleteJob,
 } from '../src/models/job';
 import { withTestTransaction } from './helpers/testDb';
 
@@ -47,19 +51,19 @@ describe('job model', () => {
     });
   });
 
-  it('returns the lowest-id job when multiple jobs share a Trello card id (defensive determinism, not an expected state)', async () => {
+  it('the database rejects a second job linked to a Trello card that is already linked to another job', async () => {
+    // Duas pessoas vinculando o mesmo card a dois jobs diferentes é
+    // exatamente o que gerava duplicatas travadas em produção (sync
+    // automático só enxergava um dos dois pra sempre) — a trava é o
+    // índice único jobs_trello_card_id_unique_idx, não lógica de app.
     await withTestTransaction(async (db) => {
       const jobA = await createJob(db, { name: 'Job Trello Card Duplicado A Teste' });
       const jobB = await createJob(db, { name: 'Job Trello Card Duplicado B Teste' });
-      await db.query('UPDATE jobs SET trello_card_id = $1 WHERE id IN ($2, $3)', [
-        'card-duplicado',
-        jobA.id,
-        jobB.id,
-      ]);
+      await db.query('UPDATE jobs SET trello_card_id = $1 WHERE id = $2', ['card-duplicado', jobA.id]);
 
-      const found = await getJobByTrelloCardId(db, 'card-duplicado');
-
-      expect(found?.id).toBe(Math.min(jobA.id, jobB.id));
+      await expect(
+        db.query('UPDATE jobs SET trello_card_id = $1 WHERE id = $2', ['card-duplicado', jobB.id]),
+      ).rejects.toThrow();
     });
   });
 
@@ -256,6 +260,61 @@ describe('atendimento responsável', () => {
     });
   });
 
+  it('new jobs start with an empty trelloStatusUpdates list', async () => {
+    await withTestTransaction(async (db) => {
+      const created = await createJob(db, { name: 'Job Status Trello Inicial Teste' });
+      expect(created.trelloStatusUpdates).toEqual([]);
+    });
+  });
+
+  it('new jobs start with an empty trelloChecklistItems list', async () => {
+    await withTestTransaction(async (db) => {
+      const created = await createJob(db, { name: 'Job Checklist Trello Inicial Teste' });
+      expect(created.trelloChecklistItems).toEqual([]);
+    });
+  });
+
+  it('setTrelloChecklistItems replaces the stored list and returns the updated job', async () => {
+    await withTestTransaction(async (db) => {
+      const created = await createJob(db, { name: 'Job Checklist Trello Teste' });
+
+      const updated = await setTrelloChecklistItems(db, created.id, [
+        { name: 'Abrir card monstro no Trello', checked: true },
+        { name: 'Entrega final do filme', checked: false },
+      ]);
+
+      expect(updated.trelloChecklistItems).toEqual([
+        { name: 'Abrir card monstro no Trello', checked: true },
+        { name: 'Entrega final do filme', checked: false },
+      ]);
+
+      const found = await getJobById(db, created.id);
+      expect(found?.trelloChecklistItems).toEqual([
+        { name: 'Abrir card monstro no Trello', checked: true },
+        { name: 'Entrega final do filme', checked: false },
+      ]);
+    });
+  });
+
+  it('setTrelloStatusUpdates replaces the stored list and returns the updated job', async () => {
+    await withTestTransaction(async (db) => {
+      const created = await createJob(db, { name: 'Job Status Trello Teste' });
+
+      const updated = await setTrelloStatusUpdates(db, created.id, [
+        { author: 'Bianca de Souza Andrade', text: 'STATUS 20.08', postedAt: '2026-08-20T13:51:00.000Z' },
+      ]);
+
+      expect(updated.trelloStatusUpdates).toEqual([
+        { author: 'Bianca de Souza Andrade', text: 'STATUS 20.08', postedAt: '2026-08-20T13:51:00.000Z' },
+      ]);
+
+      const found = await getJobById(db, created.id);
+      expect(found?.trelloStatusUpdates).toEqual([
+        { author: 'Bianca de Souza Andrade', text: 'STATUS 20.08', postedAt: '2026-08-20T13:51:00.000Z' },
+      ]);
+    });
+  });
+
   it('highlightedPersonName resolves from atendimentoPersonId when the current status is primarily Atendimento', async () => {
     await withTestTransaction(async (db) => {
       const wilka = await db.query<{ id: number }>(
@@ -273,6 +332,61 @@ describe('atendimento responsável', () => {
 
       expect(updated.statusName).toBe('Atendimento da conta definida');
       expect(updated.highlightedPersonName).toBe('Wilka');
+    });
+  });
+
+  describe('findJobByName', () => {
+    it('finds a job ignoring case and surrounding whitespace', async () => {
+      await withTestTransaction(async (db) => {
+        await createJob(db, { name: 'WPP :: Colgate :: Campanha Teste' });
+
+        const found = await findJobByName(db, '  wpp :: colgate :: campanha teste  ');
+
+        expect(found?.name).toBe('WPP :: Colgate :: Campanha Teste');
+      });
+    });
+
+    it('returns null when no job has that name', async () => {
+      await withTestTransaction(async (db) => {
+        const found = await findJobByName(db, 'Job Que Não Existe De Verdade');
+        expect(found).toBeNull();
+      });
+    });
+  });
+
+  describe('deleteJob', () => {
+    it('deletes the job and its dependent rows, returning true', async () => {
+      await withTestTransaction(async (db) => {
+        const wilka = await db.query<{ id: number }>(
+          `SELECT id FROM people WHERE name = 'Wilka' AND area = 'Atendimento'`,
+        );
+        const created = await createJob(db, {
+          name: 'Job Exclusão Teste',
+          atendimentoPersonId: wilka.rows[0].id,
+        });
+        const phaseRow = await db.query<{ id: number }>(`SELECT id FROM phases WHERE name = 'Comercial e Orçamento'`);
+        const comercial = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Ronaldo' AND area = 'Comercial'`);
+        await db.query(
+          `INSERT INTO job_role_assignments (job_id, phase_id, area, person_id) VALUES ($1, $2, 'Comercial', $3)`,
+          [created.id, phaseRow.rows[0].id, comercial.rows[0].id],
+        );
+
+        const deleted = await deleteJob(db, created.id);
+
+        expect(deleted).toBe(true);
+        expect(await getJobById(db, created.id)).toBeNull();
+        const roles = await db.query('SELECT * FROM job_role_assignments WHERE job_id = $1', [created.id]);
+        expect(roles.rows).toEqual([]);
+        const hist = await db.query('SELECT * FROM job_status_history WHERE job_id = $1', [created.id]);
+        expect(hist.rows).toEqual([]);
+      });
+    });
+
+    it('returns false for a job that does not exist', async () => {
+      await withTestTransaction(async (db) => {
+        const deleted = await deleteJob(db, 999999999);
+        expect(deleted).toBe(false);
+      });
     });
   });
 });

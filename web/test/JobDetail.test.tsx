@@ -28,6 +28,7 @@ vi.mock('../src/api/client', async () => {
       getAllTrelloCards: vi.fn(),
       setTrelloLink: vi.fn(),
       syncTrello: vi.fn(),
+      deleteJob: vi.fn(),
     },
   };
 });
@@ -64,6 +65,8 @@ const jobDetail = {
   actionRequired: 'Preenchimento do Briefing Padronizado.',
   triggerLabel: 'Avançar para: Briefing Recebido',
   trelloCardId: null,
+  trelloStatusUpdates: [],
+  trelloChecklistItems: [],
   bolaComDayCounts: { ilhaDays: 3, clienteDays: 0, currentSide: 'ilha' as const, currentStreakDays: 3 },
   roleAssignments: [
     { area: 'Comercial', personId: 5, personName: 'Anne' },
@@ -121,6 +124,7 @@ describe('JobDetailPage', () => {
     mockedApi.getAllTrelloCards.mockReset();
     mockedApi.setTrelloLink.mockReset();
     mockedApi.syncTrello.mockReset();
+    mockedApi.deleteJob.mockReset();
     mockedApi.listJobs.mockResolvedValue({ jobs: [] });
 
     mockedApi.getJob.mockResolvedValue({ job: jobDetail });
@@ -508,5 +512,39 @@ describe('JobDetailPage', () => {
     await waitFor(() => expect(mockedApi.setTrelloLink).toHaveBeenCalledWith(1, 'card1'));
     await waitFor(() => expect(mockedApi.syncTrello).toHaveBeenCalledWith(1));
     expect(await screen.findByText(/Vinculado ao card: WPP:: COLGATE:: CAMPANHA/)).toBeInTheDocument();
+  });
+
+  it('shows an "Excluir job" button for an admin, and deletes the job on confirmation', async () => {
+    mockedApi.deleteJob.mockResolvedValue(undefined);
+    const user = userEvent.setup();
+
+    renderJobDetail();
+
+    await user.click(await screen.findByText('Excluir job'));
+    await user.click(screen.getByRole('button', { name: 'Excluir' }));
+
+    await waitFor(() => expect(mockedApi.deleteJob).toHaveBeenCalledWith(1));
+    expect(screen.queryByText('Colgate - Color Correct Wave 2')).not.toBeInTheDocument();
+  });
+
+  it('does not delete the job when the confirmation is cancelled', async () => {
+    const user = userEvent.setup();
+
+    renderJobDetail();
+
+    await user.click(await screen.findByText('Excluir job'));
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }));
+
+    expect(mockedApi.deleteJob).not.toHaveBeenCalled();
+    expect(screen.getByText('Colgate - Color Correct Wave 2')).toBeInTheDocument();
+  });
+
+  it('does not show the "Excluir job" button for a non-admin member', async () => {
+    mockedApi.me.mockResolvedValue({ user: { ...loggedInUser, role: 'member' } });
+
+    renderJobDetail();
+
+    await screen.findByText('Colgate - Color Correct Wave 2');
+    expect(screen.queryByText('Excluir job')).not.toBeInTheDocument();
   });
 });

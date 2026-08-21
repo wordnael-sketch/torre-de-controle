@@ -153,6 +153,7 @@ describe('POST /api/trello-webhook', () => {
         checklistItems: [],
         due: null,
         latestComment: null,
+        comments: [],
         members: [],
       };
       // Confiança 0.7 ficaria "pendente" no fluxo manual (limiar de 85% pra
@@ -196,6 +197,7 @@ describe('POST /api/trello-webhook', () => {
         checklistItems: [],
         due: null,
         latestComment: null,
+        comments: [],
         members: ['Wilka Nepomoceno'],
       };
       const app = buildApp(db, {

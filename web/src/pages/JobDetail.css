@@ -310,3 +310,66 @@
   color: var(--text-secondary);
   font-size: 0.8rem;
 }
+
+.job-detail-trello-status,
+.job-detail-trello-checklist {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  margin: 0.75rem 0;
+}
+
+.job-detail-trello-status-list,
+.job-detail-trello-checklist-items {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.job-detail-trello-status-item {
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.job-detail-trello-status-item:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.job-detail-trello-status-meta {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.job-detail-trello-status-author {
+  font-weight: 600;
+}
+
+.job-detail-trello-status-text {
+  margin: 0.2rem 0 0;
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+}
+
+.job-detail-trello-checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+
+.job-detail-trello-checklist-item.is-checked {
+  color: var(--text-secondary);
+  text-decoration: line-through;
+}
+
+.job-detail-delete-btn {
+  display: block;
+  margin: 1.5rem 0 0;
+  color: var(--farol-travado);
+}

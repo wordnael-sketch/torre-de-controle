@@ -5,6 +5,7 @@ import type { AppDatabase } from '../src/db';
 import type { GoogleProfile } from '../src/routes/auth';
 import type { Classifier, RawSuggestion } from '../src/services/classifier';
 import type { TrelloClient, TrelloCardSummary, TrelloCardDetail } from '../src/services/trello';
+import { inviteUser, activateUser } from '../src/models/user';
 import { withTestTransaction } from './helpers/testDb';
 
 const JWT_SECRET = 'test-secret';
@@ -29,6 +30,20 @@ function buildApp(db: AppDatabase, verifyIdToken?: () => Promise<GoogleProfile>)
 }
 
 async function loggedInAgent(app: ReturnType<typeof buildApp>) {
+  const agent = request.agent(app);
+  await agent.post('/api/auth/google').send({ idToken: 'fake-token' });
+  return agent;
+}
+
+async function loggedInMemberAgent(db: AppDatabase) {
+  const invited = await inviteUser(db, { email: 'membro.jobs.rota.teste@ilhacrossmidia.com.br', role: 'member' });
+  await activateUser(db, invited.id, { googleSub: 'google-sub-membro-jobs-rota-teste', name: 'Membro Jobs Rota Teste' });
+
+  const app = buildApp(db, async () => ({
+    sub: 'google-sub-membro-jobs-rota-teste',
+    email: 'membro.jobs.rota.teste@ilhacrossmidia.com.br',
+    name: 'Membro Jobs Rota Teste',
+  }));
   const agent = request.agent(app);
   await agent.post('/api/auth/google').send({ idToken: 'fake-token' });
   return agent;
@@ -998,6 +1013,7 @@ describe('POST /api/jobs/:id/trello-sync', () => {
         checklistItems: [{ name: 'Contrato assinado', checked: true }],
         due: null,
         latestComment: null,
+        comments: [],
         members: [],
       };
       const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
@@ -1038,6 +1054,7 @@ describe('POST /api/jobs/:id/trello-sync', () => {
         checklistItems: [],
         due: null,
         latestComment: null,
+        comments: [],
         members: ['Wilka Nepomoceno'],
       };
       const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
@@ -1086,6 +1103,7 @@ describe('POST /api/jobs/:id/trello-sync', () => {
         checklistItems: [],
         due: null,
         latestComment: null,
+        comments: [],
         // Job novo começa na fase "Comercial e Orçamento", que tem a área "Comercial" —
         // "Anne Something" deve bater com a pessoa "Anne" (área Comercial) já seedada.
         members: ['Anne Something'],
@@ -1115,6 +1133,7 @@ describe('POST /api/jobs/:id/trello-sync', () => {
         checklistItems: [],
         due: null,
         latestComment: null,
+        comments: [],
         // O card do Trello traz Camila como membro, mas o job já foi criado com
         // Wilka como Atendimento responsável — a sincronização nunca deve trocar
         // isso, mesmo achando um match diferente.
@@ -1147,6 +1166,7 @@ describe('POST /api/jobs/:id/trello-sync', () => {
         checklistItems: [],
         due: null,
         latestComment: null,
+        comments: [],
         members: ['Wilka Nepomoceno'],
       };
       const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
@@ -1169,6 +1189,107 @@ describe('POST /api/jobs/:id/trello-sync', () => {
 
       const jobRes = await agent.get(`/api/jobs/${created.body.job.id}`);
       expect(jobRes.body.job.atendimentoPersonName).toBe('Wilka');
+    });
+  });
+});
+
+describe('POST /api/jobs — duplicate name prevention', () => {
+  it('rejects creating a job whose name already exists (case/whitespace-insensitive)', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+
+      await agent.post('/api/jobs').send({ name: 'WPP :: Duplicado :: Teste', atendimentoPersonId });
+      const res = await agent
+        .post('/api/jobs')
+        .send({ name: '  wpp :: duplicado :: teste  ', atendimentoPersonId });
+
+      expect(res.status).toBe(409);
+      expect(res.body.error).toBe('job_name_ja_existe');
+    });
+  });
+});
+
+describe('POST /api/jobs/:id/trello-link — duplicate card prevention', () => {
+  it('rejects linking a card that is already linked to a different job', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+
+      const jobA = await agent.post('/api/jobs').send({ name: 'Job Card Duplicado A Teste', atendimentoPersonId });
+      const jobB = await agent.post('/api/jobs').send({ name: 'Job Card Duplicado B Teste', atendimentoPersonId });
+      await agent.post(`/api/jobs/${jobA.body.job.id}/trello-link`).send({ trelloCardId: 'card-ja-vinculado' });
+
+      const res = await agent
+        .post(`/api/jobs/${jobB.body.job.id}/trello-link`)
+        .send({ trelloCardId: 'card-ja-vinculado' });
+
+      expect(res.status).toBe(409);
+      expect(res.body.error).toBe('trello_card_ja_vinculado');
+      expect(res.body.existingJobId).toBe(jobA.body.job.id);
+    });
+  });
+
+  it('allows re-linking the same card to the same job it is already linked to', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+
+      const job = await agent.post('/api/jobs').send({ name: 'Job Card Relink Teste', atendimentoPersonId });
+      await agent.post(`/api/jobs/${job.body.job.id}/trello-link`).send({ trelloCardId: 'card-relink' });
+
+      const res = await agent
+        .post(`/api/jobs/${job.body.job.id}/trello-link`)
+        .send({ trelloCardId: 'card-relink' });
+
+      expect(res.status).toBe(200);
+    });
+  });
+});
+
+describe('DELETE /api/jobs/:id', () => {
+  it('deletes the job when the caller is an admin', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+      const created = await agent.post('/api/jobs').send({ name: 'Job Exclusão Rota Teste', atendimentoPersonId });
+
+      const res = await agent.delete(`/api/jobs/${created.body.job.id}`);
+
+      expect(res.status).toBe(204);
+      const getRes = await agent.get(`/api/jobs/${created.body.job.id}`);
+      expect(getRes.status).toBe(404);
+    });
+  });
+
+  it('returns 403 for a non-admin member', async () => {
+    await withTestTransaction(async (db) => {
+      const adminApp = buildApp(db);
+      const adminAgent = await loggedInAgent(adminApp);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+      const created = await adminAgent
+        .post('/api/jobs')
+        .send({ name: 'Job Exclusão Sem Permissão Teste', atendimentoPersonId });
+
+      const memberAgent = await loggedInMemberAgent(db);
+      const res = await memberAgent.delete(`/api/jobs/${created.body.job.id}`);
+
+      expect(res.status).toBe(403);
+      const getRes = await adminAgent.get(`/api/jobs/${created.body.job.id}`);
+      expect(getRes.status).toBe(200);
+    });
+  });
+
+  it('returns 404 for a nonexistent job', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+      const res = await agent.delete('/api/jobs/999999999');
+      expect(res.status).toBe(404);
     });
   });
 });

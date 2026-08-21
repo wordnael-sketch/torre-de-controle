@@ -9,6 +9,12 @@ export interface TrelloChecklistItem {
   checked: boolean;
 }
 
+export interface TrelloComment {
+  author: string;
+  text: string;
+  postedAt: string;
+}
+
 export interface TrelloCardDetail {
   name: string;
   listName: string;
@@ -16,6 +22,7 @@ export interface TrelloCardDetail {
   due: string | null;
   latestComment: string | null;
   members: string[];
+  comments: TrelloComment[];
 }
 
 export interface TrelloClient {
@@ -58,7 +65,9 @@ interface TrelloCardDetailResponse {
 }
 
 interface TrelloCommentActionResponse {
+  date: string;
   data: { text: string };
+  memberCreator?: { fullName: string };
 }
 
 export function createHttpTrelloClient(
@@ -113,18 +122,25 @@ export function createHttpTrelloClient(
         })),
       );
 
-      const comments = await trelloGet<TrelloCommentActionResponse[]>(
+      const commentActions = await trelloGet<TrelloCommentActionResponse[]>(
         `/cards/${cardId}/actions`,
-        '&filter=commentCard&limit=1',
+        '&filter=commentCard&limit=30&member_creator=true&member_creator_fields=fullName',
       );
+      // A API do Trello já retorna as actions da mais recente pra mais antiga.
+      const comments: TrelloComment[] = commentActions.map((action) => ({
+        author: action.memberCreator?.fullName ?? 'Desconhecido',
+        text: action.data.text,
+        postedAt: action.date,
+      }));
 
       return {
         name: card.name,
         listName: card.list?.name ?? '',
         checklistItems,
         due: card.due,
-        latestComment: comments[0]?.data.text ?? null,
+        latestComment: comments[0]?.text ?? null,
         members: (card.members ?? []).map((m) => m.fullName),
+        comments,
       };
     },
   };

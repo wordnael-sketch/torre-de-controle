@@ -70,6 +70,17 @@ export interface BolaComDayCounts {
   currentStreakDays: number;
 }
 
+export interface TrelloStatusUpdate {
+  author: string;
+  text: string;
+  postedAt: string;
+}
+
+export interface TrelloChecklistMirrorItem {
+  name: string;
+  checked: boolean;
+}
+
 export interface Job {
   id: number;
   name: string;
@@ -91,6 +102,8 @@ export interface Job {
   trelloCardId: string | null;
   atendimentoPersonId: number | null;
   atendimentoPersonName: string | null;
+  trelloStatusUpdates: TrelloStatusUpdate[];
+  trelloChecklistItems: TrelloChecklistMirrorItem[];
   bolaComDayCounts?: BolaComDayCounts;
 }
 
@@ -186,6 +199,7 @@ export const api = {
   createJob: (job: { name: string; code?: string; client?: string; atendimentoPersonId: number }) =>
     request<{ job: Job }>('/api/jobs', { method: 'POST', body: JSON.stringify(job) }),
   getJob: (id: number) => request<{ job: JobDetail }>(`/api/jobs/${id}`),
+  deleteJob: (id: number) => request<void>(`/api/jobs/${id}`, { method: 'DELETE' }),
   advanceJob: (id: number, note?: string) =>
     request<{ job: Job }>(`/api/jobs/${id}/advance`, { method: 'POST', body: JSON.stringify({ note }) }),
   setJobStatus: (id: number, statusId: number, note?: string) =>

@@ -365,3 +365,26 @@ UPDATE people SET title = 'Head' WHERE name = 'Wilka' AND area = 'Atendimento';
 
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS trello_card_id TEXT;
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS trello_linked_at TIMESTAMPTZ;
+
+-- Últimos comentários "STATUS" do card do Trello vinculado (autor, texto, data),
+-- mais recente primeiro. Sempre sobrescrito por completo a cada sync — não é
+-- histórico incremental, é o retrato atual do que está no Trello.
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS trello_status_updates JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+-- Espelho somente-leitura do checklist real do card do Trello (nome + marcado),
+-- pra exibir ao lado do checklist de fases do sistema — que continua sendo a
+-- única fonte de verdade pra avanço de fase/prazo/responsabilidade. Sempre
+-- sobrescrito por completo a cada sync, igual trello_status_updates acima.
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS trello_checklist_items JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+-- Impede duas pessoas vinculando o mesmo card do Trello a dois jobs
+-- diferentes: sync automático (webhook) só enxerga um deles pra sempre,
+-- deixando o outro congelado — foi exatamente isso que gerou duplicatas
+-- travadas em produção.
+CREATE UNIQUE INDEX IF NOT EXISTS jobs_trello_card_id_unique_idx
+  ON jobs (trello_card_id) WHERE trello_card_id IS NOT NULL;
+
+-- Impede dois jobs com o mesmo nome (ignorando maiúscula/minúscula e
+-- espaços nas pontas) — nomes duplicados criados por engano confundiam
+-- qual job era o "de verdade".
+CREATE UNIQUE INDEX IF NOT EXISTS jobs_name_unique_idx ON jobs (lower(trim(name)));

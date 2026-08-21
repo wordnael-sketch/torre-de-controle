@@ -2,6 +2,8 @@ import type { AppDatabase } from '../db';
 import { getLastStatusChangeAt } from './jobStatusHistory';
 import { computeAlertLevel, type AlertLevel } from './alertLevel';
 import { recordInitialBolaCom } from './bolaCom';
+import type { TrelloStatusUpdate } from './trelloMatch';
+import type { TrelloChecklistItem } from '../services/trello';
 
 export interface Job {
   id: number;
@@ -25,6 +27,8 @@ export interface Job {
   trelloLinkedAt: string | null;
   atendimentoPersonId: number | null;
   atendimentoPersonName: string | null;
+  trelloStatusUpdates: TrelloStatusUpdate[];
+  trelloChecklistItems: TrelloChecklistItem[];
 }
 
 interface JobRow {
@@ -48,6 +52,8 @@ interface JobRow {
   trello_linked_at: string | Date | null;
   atendimento_person_id: number | null;
   atendimento_person_name: string | null;
+  trello_status_updates: TrelloStatusUpdate[];
+  trello_checklist_items: TrelloChecklistItem[];
 }
 
 const JOB_SELECT = `
@@ -106,6 +112,8 @@ async function rowToJob(db: AppDatabase, row: JobRow): Promise<Job> {
     trelloLinkedAt: row.trello_linked_at ? new Date(row.trello_linked_at).toISOString() : null,
     atendimentoPersonId: row.atendimento_person_id,
     atendimentoPersonName: row.atendimento_person_name,
+    trelloStatusUpdates: row.trello_status_updates,
+    trelloChecklistItems: row.trello_checklist_items,
   };
 }
 
@@ -130,6 +138,17 @@ export async function getJobById(db: AppDatabase, id: number): Promise<Job | nul
     return null;
   }
   return rowToJob(db, result.rows[0]);
+}
+
+export async function findJobByName(db: AppDatabase, name: string): Promise<Job | null> {
+  const result = await db.query<{ id: number }>(
+    `SELECT id FROM jobs WHERE lower(trim(name)) = lower(trim($1)) LIMIT 1`,
+    [name],
+  );
+  if (!result.rows[0]) {
+    return null;
+  }
+  return getJobById(db, result.rows[0].id);
 }
 
 export async function getJobByTrelloCardId(db: AppDatabase, trelloCardId: string): Promise<Job | null> {
@@ -264,6 +283,50 @@ export async function setJobName(db: AppDatabase, jobId: number, name: string): 
 export async function setAtendimento(db: AppDatabase, jobId: number, personId: number): Promise<Job> {
   await db.query('UPDATE jobs SET atendimento_person_id = $1, updated_at = now() WHERE id = $2', [
     personId,
+    jobId,
+  ]);
+  const job = await getJobById(db, jobId);
+  return job!;
+}
+
+export async function setTrelloStatusUpdates(
+  db: AppDatabase,
+  jobId: number,
+  updates: TrelloStatusUpdate[],
+): Promise<Job> {
+  await db.query('UPDATE jobs SET trello_status_updates = $1::jsonb, updated_at = now() WHERE id = $2', [
+    JSON.stringify(updates),
+    jobId,
+  ]);
+  const job = await getJobById(db, jobId);
+  return job!;
+}
+
+export async function deleteJob(db: AppDatabase, jobId: number): Promise<boolean> {
+  // Sem ON DELETE CASCADE nas tabelas dependentes — apaga tudo numa única
+  // instrução (via CTEs) pra manter atomicidade sem depender de uma
+  // transação explícita, mesmo padrão usado em createJob/applyStatusChange.
+  const result = await db.query<{ id: number }>(
+    `WITH del_roles AS (
+       DELETE FROM job_role_assignments WHERE job_id = $1
+     ), del_hist AS (
+       DELETE FROM job_status_history WHERE job_id = $1
+     ), del_bola AS (
+       DELETE FROM job_bola_com_history WHERE job_id = $1
+     )
+     DELETE FROM jobs WHERE id = $1 RETURNING id`,
+    [jobId],
+  );
+  return result.rows.length > 0;
+}
+
+export async function setTrelloChecklistItems(
+  db: AppDatabase,
+  jobId: number,
+  items: TrelloChecklistItem[],
+): Promise<Job> {
+  await db.query('UPDATE jobs SET trello_checklist_items = $1::jsonb, updated_at = now() WHERE id = $2', [
+    JSON.stringify(items),
     jobId,
   ]);
   const job = await getJobById(db, jobId);

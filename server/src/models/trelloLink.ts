@@ -1,9 +1,16 @@
 import type { AppDatabase } from '../db';
 import { listPeople, type Person } from './people';
 import { getJobRoleAssignments, setJobRoleAssignment } from './jobRoleAssignments';
-import { setAtendimento, setJobName, type Job } from './job';
+import {
+  setAtendimento,
+  setJobName,
+  setTrelloStatusUpdates,
+  setTrelloChecklistItems,
+  findJobByName,
+  type Job,
+} from './job';
 import { classifyAndApply, type ResolvedSuggestion } from './classification';
-import { buildTrelloEvidenceText } from './trelloMatch';
+import { buildTrelloEvidenceText, extractStatusUpdates } from './trelloMatch';
 import type { Classifier } from '../services/classifier';
 import type { TrelloClient } from '../services/trello';
 
@@ -24,6 +31,11 @@ export async function setTrelloLink(
 
 function normalizePersonName(text: string): string {
   return text
+    // Pessoas com nomes ambíguos entre escritórios são cadastradas como
+    // "Bianca (Brasília)", "Renata (RJ)" etc. — esse sufixo nunca aparece no
+    // nome real de ninguém no Trello, então precisa cair fora antes da
+    // comparação por substring, senão o match nunca bate.
+    .replace(/\([^)]*\)/g, '')
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
@@ -149,14 +161,36 @@ export async function syncJobFromTrello(
   // O card do Trello é a fonte da verdade pro nome, uma vez vinculado —
   // se alguém renomeou o card lá (ou o job aqui, e ficou desatualizado),
   // toda sincronização realinha o nome do job com o nome atual do card.
+  // Mas nunca pra um nome que já pertence a outro job — isso rodaria sem
+  // supervisão (webhook) e criaria a mesma duplicata de nome que a trava
+  // de unicidade existe pra impedir.
   if (card.name !== job.name) {
-    await setJobName(db, job.id, card.name);
+    const nameConflict = await findJobByName(db, card.name);
+    if (!nameConflict || nameConflict.id === job.id) {
+      await setJobName(db, job.id, card.name);
+    }
   }
 
+  // Quem está de fato tocando o job nem sempre está marcado como "member" do
+  // card no Trello — às vezes só aparece comentando os status. Os dois
+  // conjuntos de nomes alimentam o mesmo match determinístico.
+  const memberNames = [...card.members, ...card.comments.map((comment) => comment.author)];
+
   if (job.phaseId) {
-    await syncTrelloMembersToRoles(db, job.id, job.phaseId, card.members);
+    await syncTrelloMembersToRoles(db, job.id, job.phaseId, memberNames);
   }
-  await syncTrelloMembersToAtendimento(db, job.id, job.atendimentoPersonId, card.members);
+  await syncTrelloMembersToAtendimento(db, job.id, job.atendimentoPersonId, memberNames);
+
+  const statusUpdates = extractStatusUpdates(card.comments);
+  if (JSON.stringify(statusUpdates) !== JSON.stringify(job.trelloStatusUpdates)) {
+    await setTrelloStatusUpdates(db, job.id, statusUpdates);
+  }
+
+  // Espelho somente-leitura do checklist do Trello — não influencia a fase/
+  // status do job, que continua vindo só do checklist de fases do sistema.
+  if (JSON.stringify(card.checklistItems) !== JSON.stringify(job.trelloChecklistItems)) {
+    await setTrelloChecklistItems(db, job.id, card.checklistItems);
+  }
 
   let suggestions: ResolvedSuggestion[] = [];
   if (classifier) {
