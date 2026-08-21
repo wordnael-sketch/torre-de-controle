@@ -133,7 +133,9 @@ export async function getJobById(db: AppDatabase, id: number): Promise<Job | nul
 }
 
 export async function getJobByTrelloCardId(db: AppDatabase, trelloCardId: string): Promise<Job | null> {
-  const result = await db.query<JobRow>(`${JOB_SELECT} WHERE j.trello_card_id = $1`, [trelloCardId]);
+  const result = await db.query<JobRow>(`${JOB_SELECT} WHERE j.trello_card_id = $1 ORDER BY j.id LIMIT 1`, [
+    trelloCardId,
+  ]);
   if (!result.rows[0]) {
     return null;
   }

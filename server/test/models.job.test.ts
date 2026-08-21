@@ -46,6 +46,22 @@ describe('job model', () => {
     });
   });
 
+  it('returns the lowest-id job when multiple jobs share a Trello card id (defensive determinism, not an expected state)', async () => {
+    await withTestTransaction(async (db) => {
+      const jobA = await createJob(db, { name: 'Job Trello Card Duplicado A Teste' });
+      const jobB = await createJob(db, { name: 'Job Trello Card Duplicado B Teste' });
+      await db.query('UPDATE jobs SET trello_card_id = $1 WHERE id IN ($2, $3)', [
+        'card-duplicado',
+        jobA.id,
+        jobB.id,
+      ]);
+
+      const found = await getJobByTrelloCardId(db, 'card-duplicado');
+
+      expect(found?.id).toBe(Math.min(jobA.id, jobB.id));
+    });
+  });
+
   it('creates a job without optional fields', async () => {
     await withTestTransaction(async (db) => {
       const job = await createJob(db, { name: 'Job sem codigo' });

@@ -72,6 +72,9 @@ export function createTrelloWebhookRouter(deps: TrelloWebhookRouterDeps): Router
         !deps.trelloWebhookSecret ||
         !deps.trelloWebhookCallbackUrl
       ) {
+        console.warn(
+          'trello webhook received a request but is not fully configured (missing trelloClient/classifier/trelloWebhookSecret/trelloWebhookCallbackUrl)',
+        );
         res.status(200).json({ ok: true });
         return;
       }
@@ -80,6 +83,7 @@ export function createTrelloWebhookRouter(deps: TrelloWebhookRouterDeps): Router
       const signature = req.header('x-trello-webhook');
 
       if (!isValidTrelloSignature(rawBody, signature, deps.trelloWebhookSecret, deps.trelloWebhookCallbackUrl)) {
+        console.warn('trello webhook received a request with an invalid or missing signature');
         res.status(401).json({ error: 'invalid_signature' });
         return;
       }

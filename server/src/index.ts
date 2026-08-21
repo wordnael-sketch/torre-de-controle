@@ -14,6 +14,11 @@ createAppFromEnv()
           'TRELLO_API_KEY/TRELLO_TOKEN/TRELLO_BOARD_ID not fully set — Trello integration endpoints will return 503',
         );
       }
+      if (!process.env.TRELLO_API_SECRET || !process.env.TRELLO_WEBHOOK_CALLBACK_URL) {
+        console.warn(
+          'TRELLO_API_SECRET/TRELLO_WEBHOOK_CALLBACK_URL not fully set — POST /api/trello-webhook will accept requests but silently do nothing',
+        );
+      }
     });
   })
   .catch((err) => {

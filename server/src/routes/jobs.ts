@@ -463,7 +463,8 @@ export function createJobsRouter(deps: JobsRouterDeps): Router {
         result = await syncJobFromTrello(deps.db, deps.trelloClient, deps.classifier, job, {
           bypassConfidenceGate: false,
         });
-      } catch {
+      } catch (err) {
+        console.error('trello sync failed', err);
         res.status(502).json({ error: 'trello_api_error' });
         return;
       }
