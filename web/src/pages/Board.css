@@ -4,45 +4,11 @@
   background: var(--bg-subtle);
 }
 
-.board-sidebar {
-  width: 260px;
-  flex: 0 0 auto;
-  background: var(--bg-panel);
-  border-right: 1px solid var(--border);
-  padding: 1.25rem 1rem;
-}
-
 .board-search {
   width: 100%;
   padding: 0.5rem 0.75rem 0.5rem 2rem;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-}
-
-.board-filter-group {
-  margin-bottom: 1.5rem;
-}
-
-.board-filter-group h2 {
-  margin: 0 0 0.5rem;
-}
-
-.board-filter-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  width: 100%;
-  padding: 0.35rem 0.25rem;
-  border: none;
-  background: transparent;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  text-align: left;
-}
-
-.board-filter-row:hover,
-.board-filter-row.is-active {
-  background: var(--bg-hover);
 }
 
 .board-dot {
@@ -62,17 +28,6 @@
   height: 10px;
   border-radius: 2px;
   flex: 0 0 auto;
-}
-
-.board-filter-label {
-  flex: 1;
-  font-size: 0.85rem;
-}
-
-.board-filter-count {
-  font-family: var(--font-mono);
-  color: var(--text-secondary);
-  font-size: 0.8rem;
 }
 
 /* barra fixa: busca + pílulas de Farol/Fase + indicadores, acima da
@@ -613,81 +568,17 @@ tr:hover .board-job-edit-btn,
   margin-top: 0.2rem;
 }
 
-.board-filters-toggle {
-  display: none;
-}
-
-.board-new-job-btn,
-.board-filters-toggle {
+.board-new-job-btn {
   gap: 0.4rem;
 }
 
-.board-filters-close {
-  display: none;
-}
-
 @media (max-width: 1023px) {
-  .board-filters-close {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 48px;
-    min-height: 48px;
-    border: none;
-    background: none;
-    cursor: pointer;
-    margin-bottom: 0.5rem;
-  }
-
-  .board-filters-toggle {
-    display: inline-flex;
-    align-items: center;
-    min-height: 48px;
-    padding: 0.5rem 1rem;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--bg-panel);
-    cursor: pointer;
-  }
-
-  .board-sidebar {
-    display: none;
-  }
-
-  .board-sidebar.is-open {
-    display: block;
-    position: fixed;
-    inset: 0 20% 0 0;
-    width: 80%;
-    z-index: 60;
-    overflow-y: auto;
-    box-shadow: var(--shadow-md);
-  }
-
-  .board-sidebar-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 55;
-    background: var(--backdrop);
-  }
-
   .board-stats {
     grid-template-columns: repeat(2, 1fr);
   }
 }
 
-@media (min-width: 1024px) {
-  .board-sidebar-backdrop {
-    display: none;
-  }
-}
-
 @media (max-width: 639px) {
-  .board-sidebar.is-open {
-    inset: 0;
-    width: 100%;
-  }
-
   .board-main {
     padding: 1rem;
   }
@@ -742,13 +633,9 @@ tr:hover .board-job-edit-btn,
 
 /* touch targets — mobile e tablet */
 @media (max-width: 1023px) {
-  .board-filter-row,
+  .board-pill,
   .board-new-job-btn,
   .board-job-link {
     min-height: 48px;
-  }
-
-  .board-filter-row {
-    padding: 0.6rem 0.5rem;
   }
 }

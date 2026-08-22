@@ -1,35 +1,42 @@
 .job-detail-page {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  background: var(--backdrop);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1.5rem;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 1.5rem 2rem 3rem;
 }
 
-.job-detail-panel {
-  width: 100%;
-  max-width: 720px;
-  max-height: 90vh;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
-  overflow-y: auto;
-  padding: 1.5rem;
+.job-detail-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0 0 1.25rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.job-detail-breadcrumb a {
+  color: var(--text-secondary);
+  text-decoration: underline;
+}
+
+.job-detail-breadcrumb a:hover {
+  color: var(--text-primary);
+}
+
+.job-detail-breadcrumb [aria-current='page'] {
+  color: var(--text-primary);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .job-detail-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
+  margin-bottom: 1rem;
 }
 
 .job-detail-header h1 {
   margin: 0.15rem 0;
-  font-size: 1.3rem;
+  font-size: 1.7rem;
 }
 
 .job-detail-phase {
@@ -40,12 +47,28 @@
   font-weight: 600;
 }
 
-.job-detail-close {
-  font-size: 1.5rem;
-  line-height: 1;
-  color: var(--text-secondary);
-  text-decoration: none;
-  padding: 0.25rem;
+.job-detail-warnings {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 1.5rem;
+}
+
+.job-detail-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  align-items: start;
+}
+
+.job-detail-column {
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .job-detail-columns {
+    grid-template-columns: 1fr;
+  }
 }
 
 .job-detail-atendimento {
@@ -247,30 +270,17 @@
 
 @media (max-width: 639px) {
   .job-detail-page {
-    padding: 0;
-  }
-
-  .job-detail-panel {
-    max-width: 100%;
-    max-height: 100vh;
-    height: 100vh;
-    border-radius: 0;
-    border: none;
+    padding: 1rem;
   }
 }
 
 @media (max-width: 1023px) {
   .job-detail-checklist-item,
   .job-detail-bola-btn,
-  .job-detail-close,
   .job-detail-phase-header,
   .job-detail-action-btn,
   .job-detail-delete-btn {
     min-height: 48px;
-  }
-
-  .job-detail-close {
-    min-width: 48px;
   }
 }
 

@@ -3,6 +3,7 @@ import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { Login } from './pages/Login';
 import { Board } from './pages/Board';
+import { JobDetailPage } from './pages/JobDetail';
 import { UsersPage } from './pages/Users';
 import { ToastHost } from './components/Toast';
 import logoIlha from './assets/logo-ilha.jpg';
@@ -90,7 +91,7 @@ function AppRoutes() {
         path="/jobs/:id"
         element={
           <RequireAuth>
-            <Board />
+            <JobDetailPage />
           </RequireAuth>
         }
       />

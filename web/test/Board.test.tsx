@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { Board } from '../src/pages/Board';
+import { JobDetailPage } from '../src/pages/JobDetail';
 import { AuthProvider } from '../src/auth/AuthContext';
 import { ToastHost } from '../src/components/Toast';
 import { api } from '../src/api/client';
@@ -199,6 +200,35 @@ describe('Board', () => {
     expect(mockedApi.createJob).not.toHaveBeenCalled();
   });
 
+  it('navigates to a full job page (replacing the board) when a job row is clicked', async () => {
+    mockedApi.listJobs.mockResolvedValue({ jobs: [makeJob({ id: 42, name: 'Job Aberto Teste' })] });
+    mockedApi.getJob.mockResolvedValue({
+      job: {
+        ...makeJob({ id: 42, name: 'Job Aberto Teste' }),
+        roleAssignments: [],
+        statusHistory: [],
+      },
+    });
+    const user = userEvent.setup();
+
+    render(
+      <AuthProvider>
+        <MemoryRouter initialEntries={['/']}>
+          <Routes>
+            <Route path="/" element={<Board />} />
+            <Route path="/jobs/:id" element={<JobDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </AuthProvider>,
+    );
+
+    await user.click(await screen.findByRole('link', { name: /Job Aberto Teste/ }));
+
+    expect(await screen.findByRole('heading', { name: 'Job Aberto Teste' })).toBeInTheDocument();
+    // O board saiu de cena — não é mais um overlay por cima dele.
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  });
+
   it('does not show a completed job on the board', async () => {
     mockedApi.listJobs.mockResolvedValue({ jobs: [makeJob({ name: 'Job Concluído Teste', completedAt: '2026-08-18T00:00:00.000Z' })] });
 
@@ -237,110 +267,6 @@ describe('Board', () => {
     expect(screen.getByText('Job Fase 2')).toBeInTheDocument();
   });
 
-  it('keeps the job table visible when a job is open in the drawer', async () => {
-    mockedApi.listJobs.mockResolvedValue({ jobs: [makeJob({ id: 42, name: 'Job Aberto Teste' })] });
-    mockedApi.getJob.mockResolvedValue({
-      job: {
-        id: 42,
-        name: 'Job Aberto Teste',
-        code: null,
-        client: null,
-        createdAt: '2026-08-18T00:00:00.000Z',
-        updatedAt: '2026-08-18T00:00:00.000Z',
-        statusId: 10,
-        statusName: 'Prospecção',
-        phaseId: 1,
-        phaseName: 'Comercial e Orçamento',
-        completedAt: null,
-        alertLevel: 'green',
-        highlightedPersonName: null,
-        atendimentoPersonId: null,
-        atendimentoPersonName: null,
-        bolaCom: 'ilha',
-        lastWhatsappActivityAt: null,
-        actionRequired: null,
-        triggerLabel: null,
-        trelloCardId: null,
-        trelloAutoUnlinkedAt: null,
-        trelloStatusUpdates: [],
-        trelloChecklistItems: [],
-        bolaComDayCounts: { ilhaDays: 0, clienteDays: 0, currentSide: 'ilha', currentStreakDays: 0 },
-        roleAssignments: [],
-        statusHistory: [],
-      },
-    });
-
-    render(
-      <AuthProvider>
-        <MemoryRouter initialEntries={['/jobs/42']}>
-          <Routes>
-            <Route path="/" element={<Board />} />
-            <Route path="/jobs/:id" element={<Board />} />
-          </Routes>
-        </MemoryRouter>
-      </AuthProvider>,
-    );
-
-    expect(await screen.findByRole('dialog')).toBeInTheDocument();
-    const matches = await screen.findAllByText('Job Aberto Teste');
-    expect(matches.length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByRole('cell', { name: /Job Aberto Teste/ })).toBeInTheDocument();
-  });
-
-  it('refetches the job list when the drawer closes, so edits made inside it are reflected', async () => {
-    mockedApi.listJobs.mockResolvedValue({ jobs: [makeJob({ id: 42, name: 'Job Aberto Teste' })] });
-    mockedApi.getJob.mockResolvedValue({
-      job: {
-        id: 42,
-        name: 'Job Aberto Teste',
-        code: null,
-        client: null,
-        createdAt: '2026-08-18T00:00:00.000Z',
-        updatedAt: '2026-08-18T00:00:00.000Z',
-        statusId: 10,
-        statusName: 'Prospecção',
-        phaseId: 1,
-        phaseName: 'Comercial e Orçamento',
-        completedAt: null,
-        alertLevel: 'green',
-        highlightedPersonName: null,
-        atendimentoPersonId: null,
-        atendimentoPersonName: null,
-        bolaCom: 'ilha',
-        lastWhatsappActivityAt: null,
-        actionRequired: null,
-        triggerLabel: null,
-        trelloCardId: null,
-        trelloAutoUnlinkedAt: null,
-        trelloStatusUpdates: [],
-        trelloChecklistItems: [],
-        bolaComDayCounts: { ilhaDays: 0, clienteDays: 0, currentSide: 'ilha', currentStreakDays: 0 },
-        roleAssignments: [],
-        statusHistory: [],
-      },
-    });
-    const user = userEvent.setup();
-
-    render(
-      <AuthProvider>
-        <MemoryRouter initialEntries={['/jobs/42']}>
-          <Routes>
-            <Route path="/" element={<Board />} />
-            <Route path="/jobs/:id" element={<Board />} />
-          </Routes>
-        </MemoryRouter>
-      </AuthProvider>,
-    );
-
-    await screen.findByRole('dialog');
-    expect(mockedApi.listJobs).toHaveBeenCalledTimes(1);
-
-    await user.click(screen.getByRole('button', { name: 'Fechar' }));
-
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    await waitFor(() => expect(mockedApi.listJobs).toHaveBeenCalledTimes(2));
-  });
-
   it('shows an Atendimentos row per active person, counting active and completed jobs together', async () => {
     mockedApi.listPeople.mockResolvedValue({
       people: [
@@ -359,7 +285,7 @@ describe('Board', () => {
 
     renderBoard();
 
-    const atendimentosNav = await screen.findByRole('navigation', { name: 'Filtro por atendimento' });
+    const atendimentosNav = await screen.findByRole('group', { name: 'Filtro por atendimento' });
     expect(within(atendimentosNav).getByText('Wilka')).toBeInTheDocument();
     expect(within(atendimentosNav).getByRole('button', { name: /Wilka/ })).toHaveTextContent('2');
     expect(within(atendimentosNav).getByRole('button', { name: /Camila/ })).toHaveTextContent('1');
@@ -386,7 +312,7 @@ describe('Board', () => {
     await screen.findByText('Job da Wilka');
     await screen.findByText('Job da Camila');
 
-    const atendimentosNav = screen.getByRole('navigation', { name: 'Filtro por atendimento' });
+    const atendimentosNav = screen.getByRole('group', { name: 'Filtro por atendimento' });
     await user.click(within(atendimentosNav).getByRole('button', { name: /Camila/ }));
 
     expect(screen.queryByText('Job da Wilka')).not.toBeInTheDocument();

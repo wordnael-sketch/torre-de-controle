@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { Board } from '../src/pages/Board';
+import { JobDetailPage } from '../src/pages/JobDetail';
 import { AuthProvider } from '../src/auth/AuthContext';
 import { api, ApiError } from '../src/api/client';
 
@@ -96,8 +96,8 @@ function renderJobDetail() {
     <AuthProvider>
       <MemoryRouter initialEntries={['/jobs/1']}>
         <Routes>
-          <Route path="/" element={<Board />} />
-          <Route path="/jobs/:id" element={<Board />} />
+          <Route path="/" element={<p>Dashboard</p>} />
+          <Route path="/jobs/:id" element={<JobDetailPage />} />
         </Routes>
       </MemoryRouter>
     </AuthProvider>,
@@ -140,20 +140,36 @@ describe('JobDetailPage', () => {
     mockedApi.getTrelloCandidates.mockResolvedValue({ candidates: [] });
   });
 
+  it('shows a breadcrumb back to the Dashboard, with the job name as the current page', async () => {
+    const user = userEvent.setup();
+    renderJobDetail();
+
+    const breadcrumb = await screen.findByRole('navigation', { name: 'Navegação' });
+    expect(within(breadcrumb).getByRole('link', { name: 'Dashboard' })).toHaveAttribute('href', '/');
+    expect(within(breadcrumb).getByText('Colgate - Color Correct Wave 2')).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+
+    await user.click(within(breadcrumb).getByRole('link', { name: 'Dashboard' }));
+
+    expect(await screen.findByText('Dashboard')).toBeInTheDocument();
+  });
+
   it('shows the job name, phase, and checklist for the current phase', async () => {
     renderJobDetail();
 
-    expect(await screen.findByText('Colgate - Color Correct Wave 2')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Colgate - Color Correct Wave 2' })).toBeInTheDocument();
     expect(await screen.findByText(/FASE 1/)).toBeInTheDocument();
     expect(await screen.findByText('1/2')).toBeInTheDocument();
   });
 
-  it('moves keyboard focus to the close button once the job has loaded', async () => {
+  it('moves keyboard focus to the job title once the page has loaded', async () => {
     renderJobDetail();
 
-    await screen.findByText('Colgate - Color Correct Wave 2');
+    const heading = await screen.findByRole('heading', { name: 'Colgate - Color Correct Wave 2' });
 
-    expect(screen.getByRole('button', { name: 'Fechar' })).toHaveFocus();
+    expect(heading).toHaveFocus();
   });
 
   it('advances the status when an unchecked checklist item is clicked', async () => {
@@ -224,7 +240,7 @@ describe('JobDetailPage', () => {
   it('does not show the auto-unlink warning for a job that was never auto-unlinked', async () => {
     renderJobDetail();
 
-    await screen.findByText('Colgate - Color Correct Wave 2');
+    await screen.findByRole('heading', { name: 'Colgate - Color Correct Wave 2' });
     expect(screen.queryByText(/Desvinculado do Trello automaticamente/)).not.toBeInTheDocument();
   });
 
@@ -234,7 +250,7 @@ describe('JobDetailPage', () => {
 
     renderJobDetail();
 
-    await screen.findByText('Colgate - Color Correct Wave 2');
+    await screen.findByRole('heading', { name: 'Colgate - Color Correct Wave 2' });
     await user.selectOptions(screen.getByLabelText('Atendimento responsável'), '7');
 
     await waitFor(() => expect(mockedApi.setAtendimento).toHaveBeenCalledWith(1, 7));
@@ -269,14 +285,14 @@ describe('JobDetailPage', () => {
 
     renderJobDetail();
 
-    await screen.findByText('Colgate - Color Correct Wave 2');
+    await screen.findByRole('heading', { name: 'Colgate - Color Correct Wave 2' });
     expect(screen.queryByText(/dias com a Ilha/)).not.toBeInTheDocument();
   });
 
   it('does not show the WhatsApp inactivity line when lastWhatsappActivityAt is null', async () => {
     renderJobDetail();
 
-    await screen.findByText('Colgate - Color Correct Wave 2');
+    await screen.findByRole('heading', { name: 'Colgate - Color Correct Wave 2' });
     expect(screen.queryByText(/Grupo sem movimento/)).not.toBeInTheDocument();
   });
 
@@ -339,11 +355,9 @@ describe('JobDetailPage', () => {
 
     renderJobDetail();
 
-    // Scope queries to the JobDetail panel: Board's sidebar also renders a phase
-    // filter button named "Encerramento" from the same reference data.
-    const panel = await screen.findByRole('dialog');
-    await user.click(within(panel).getByText('Encerramento'));
-    await user.click(within(panel).getByText('Arquivamento'));
+    await screen.findByRole('heading', { name: 'Colgate - Color Correct Wave 2' });
+    await user.click(screen.getByText('Encerramento'));
+    await user.click(screen.getByText('Arquivamento'));
 
     expect(await screen.findByText('Concluir job')).toBeInTheDocument();
     expect(mockedApi.setJobStatus).not.toHaveBeenCalled();
@@ -353,7 +367,7 @@ describe('JobDetailPage', () => {
     await waitFor(() => expect(mockedApi.setJobStatus).toHaveBeenCalledWith(1, 99));
   });
 
-  it('pressing Escape while the completion confirmation is open only dismisses the confirmation, not the drawer', async () => {
+  it('pressing Escape while the completion confirmation is open only dismisses the confirmation, not the page', async () => {
     const finalPhaseReference = [
       ...referencePhases,
       {
@@ -371,9 +385,9 @@ describe('JobDetailPage', () => {
 
     renderJobDetail();
 
-    const panel = await screen.findByRole('dialog');
-    await user.click(within(panel).getByText('Encerramento'));
-    await user.click(within(panel).getByText('Arquivamento'));
+    await screen.findByRole('heading', { name: 'Colgate - Color Correct Wave 2' });
+    await user.click(screen.getByText('Encerramento'));
+    await user.click(screen.getByText('Arquivamento'));
 
     expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
     expect(mockedApi.setJobStatus).not.toHaveBeenCalled();
@@ -381,7 +395,7 @@ describe('JobDetailPage', () => {
     await user.keyboard('{Escape}');
 
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Colgate - Color Correct Wave 2' })).toBeInTheDocument();
   });
 
   it('shows the Trello card faithfully: description with a clickable link, labels, people, and a link to open it', async () => {
@@ -609,7 +623,7 @@ describe('JobDetailPage', () => {
     await user.click(screen.getByRole('button', { name: 'Excluir' }));
 
     await waitFor(() => expect(mockedApi.deleteJob).toHaveBeenCalledWith(1));
-    expect(screen.queryByText('Colgate - Color Correct Wave 2')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Colgate - Color Correct Wave 2' })).not.toBeInTheDocument();
   });
 
   it('does not delete the job when the confirmation is cancelled', async () => {
@@ -621,7 +635,7 @@ describe('JobDetailPage', () => {
     await user.click(screen.getByRole('button', { name: 'Cancelar' }));
 
     expect(mockedApi.deleteJob).not.toHaveBeenCalled();
-    expect(screen.getByText('Colgate - Color Correct Wave 2')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Colgate - Color Correct Wave 2' })).toBeInTheDocument();
   });
 
   it('does not show the "Excluir job" button for a non-admin member', async () => {
@@ -629,7 +643,7 @@ describe('JobDetailPage', () => {
 
     renderJobDetail();
 
-    await screen.findByText('Colgate - Color Correct Wave 2');
+    await screen.findByRole('heading', { name: 'Colgate - Color Correct Wave 2' });
     expect(screen.queryByText('Excluir job')).not.toBeInTheDocument();
   });
 });

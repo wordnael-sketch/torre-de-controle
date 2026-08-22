@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { Plus, X, SlidersHorizontal, Search, AlertTriangle, Contrast, ChevronDown, ChevronRight, Link2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Plus, X, Search, AlertTriangle, Contrast, ChevronDown, ChevronRight, Link2 } from 'lucide-react';
 import { api, type AlertLevel, type Job, type Person, type Phase } from '../api/client';
 import { FAROL_COLOR_VARS, FAROL_LABELS, phaseMarkerColor } from '../theme/phase';
 import { useAuth } from '../auth/AuthContext';
 import { showToast } from '../components/Toast';
-import { JobDetailPage } from './JobDetail';
 import { BoardJobRow } from './BoardJobRow';
 import './Board.css';
 
@@ -24,7 +23,6 @@ function matchesSearch(job: Job, term: string): boolean {
 }
 
 export function Board() {
-  const { id: openJobId } = useParams<{ id?: string }>();
   const { user, updateBoardDensity } = useAuth();
   const density = user?.boardDensity ?? 'agrupado';
   const [phases, setPhases] = useState<Phase[]>([]);
@@ -38,7 +36,6 @@ export function Board() {
   const [atendimentoPersonId, setAtendimentoPersonId] = useState('');
   const [showNewJobForm, setShowNewJobForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showFilters, setShowFilters] = useState(false);
   const [highContrast, setHighContrast] = useState(
     () => typeof window !== 'undefined' && window.localStorage.getItem(HIGH_CONTRAST_STORAGE_KEY) === '1',
   );
@@ -104,18 +101,6 @@ export function Board() {
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
-
-  // Board and JobDetailPage render from the same Board component instance at both
-  // "/" and "/jobs/:id" (no remount happens when navigating between them), so the
-  // job list fetched once on mount goes stale after any edit made in the drawer.
-  // Refetch whenever the drawer just closed (openJobId went from set to unset).
-  const previousOpenJobIdRef = useRef(openJobId);
-  useEffect(() => {
-    if (previousOpenJobIdRef.current && !openJobId) {
-      refresh().catch(() => setError('Não foi possível carregar o board.'));
-    }
-    previousOpenJobIdRef.current = openJobId;
-  }, [openJobId]);
 
   const activeJobs = useMemo(() => jobs.filter((j) => !j.completedAt), [jobs]);
 
@@ -297,35 +282,6 @@ export function Board() {
 
   return (
     <div className={`board${highContrast ? ' board--alto-contraste' : ''}`}>
-      <aside className={`board-sidebar${showFilters ? ' is-open' : ''}`}>
-        <button
-          type="button"
-          className="board-filters-close"
-          aria-label="Fechar atendimentos"
-          onClick={() => setShowFilters(false)}
-        >
-          <X size={18} aria-hidden="true" />
-        </button>
-
-        <nav className="board-filter-group" aria-label="Filtro por atendimento">
-          <h2 className="label-caps">Atendimentos</h2>
-          {atendimentoPeople.map((person) => (
-            <button
-              key={person.id}
-              type="button"
-              className={`board-filter-row${atendimentoFilter.has(person.id) ? ' is-active' : ''}`}
-              aria-pressed={atendimentoFilter.has(person.id)}
-              onClick={() => toggleAtendimento(person.id)}
-            >
-              <span className="board-filter-label">{person.name}</span>
-              <span className="board-filter-count">{atendimentoCounts.get(person.id) ?? 0}</span>
-            </button>
-          ))}
-        </nav>
-      </aside>
-
-      {showFilters && <div className="board-sidebar-backdrop" onClick={() => setShowFilters(false)} />}
-
       <main className="board-main">
         <header className="board-header">
           <div>
@@ -334,14 +290,6 @@ export function Board() {
               Torre de Controle <span className="board-header-count">/ {activeJobs.length} jobs</span>
             </h1>
           </div>
-          <button
-            type="button"
-            className="board-filters-toggle"
-            aria-expanded={showFilters}
-            onClick={() => setShowFilters((v) => !v)}
-          >
-            <SlidersHorizontal size={16} aria-hidden="true" /> Atendimentos
-          </button>
           <button type="button" className="board-new-job-btn" onClick={() => setShowNewJobForm((v) => !v)}>
             <Plus size={16} aria-hidden="true" /> Criar novo job
           </button>
@@ -393,6 +341,21 @@ export function Board() {
                   </button>
                 ))}
               </div>
+
+              <div className="board-pill-group" role="group" aria-label="Filtro por atendimento">
+                {atendimentoPeople.map((person) => (
+                  <button
+                    key={person.id}
+                    type="button"
+                    className={`board-pill${atendimentoFilter.has(person.id) ? ' is-active' : ''}`}
+                    aria-pressed={atendimentoFilter.has(person.id)}
+                    onClick={() => toggleAtendimento(person.id)}
+                  >
+                    {person.name}
+                    <span className="board-pill-count">{atendimentoCounts.get(person.id) ?? 0}</span>
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="board-toolbar-indicators">
@@ -431,7 +394,7 @@ export function Board() {
             </div>
           </div>
 
-          {(farolFilter.size > 0 || faseFilter.size > 0) && (
+          {(farolFilter.size > 0 || faseFilter.size > 0 || atendimentoFilter.size > 0) && (
             <div className="board-active-tags" aria-label="Filtros ativos">
               {FAROL_ORDER.filter((level) => farolFilter.has(level)).map((level) => (
                 <button key={`farol-${level}`} type="button" className="board-tag" onClick={() => toggleFarol(level)}>
@@ -444,6 +407,19 @@ export function Board() {
                 .map((phase) => (
                   <button key={`fase-${phase.id}`} type="button" className="board-tag" onClick={() => toggleFase(phase.id)}>
                     {phase.name}
+                    <X size={12} aria-hidden="true" />
+                  </button>
+                ))}
+              {atendimentoPeople
+                .filter((person) => atendimentoFilter.has(person.id))
+                .map((person) => (
+                  <button
+                    key={`atendimento-${person.id}`}
+                    type="button"
+                    className="board-tag"
+                    onClick={() => toggleAtendimento(person.id)}
+                  >
+                    {person.name}
                     <X size={12} aria-hidden="true" />
                   </button>
                 ))}
@@ -630,8 +606,6 @@ export function Board() {
           )}
         </table>
       </main>
-
-      {openJobId && <JobDetailPage />}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { X } from 'lucide-react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { ChevronRight } from 'lucide-react';
 import {
   api,
   ApiError,
@@ -59,30 +59,8 @@ export function JobDetailPage() {
 
   const { user } = useAuth();
   const navigate = useNavigate();
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
   const hasFocusedRef = useRef(false);
-
-  function handleClose() {
-    navigate('/');
-  }
-
-  // ConfirmDialog registers its own document-level Escape listener to dismiss
-  // itself. When it's open on top of this drawer, both listeners fire on the same
-  // keydown event, so this handler must skip closing the whole drawer and let
-  // ConfirmDialog's own listener handle dismissing just the confirmation.
-  const pendingCompleteStatusIdRef = useRef<number | null>(null);
-  const pendingDeleteRef = useRef(false);
-
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape' && pendingCompleteStatusIdRef.current === null && !pendingDeleteRef.current) {
-        handleClose();
-      }
-    }
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   useEffect(() => {
     hasFocusedRef.current = false;
@@ -112,14 +90,6 @@ export function JobDetailPage() {
     if (!term) return allTrelloCards;
     return allTrelloCards.filter((c) => c.name.toLowerCase().includes(term));
   }, [allTrelloCards, trelloCardSearch]);
-
-  useEffect(() => {
-    pendingCompleteStatusIdRef.current = pendingCompleteStatusId;
-  }, [pendingCompleteStatusId]);
-
-  useEffect(() => {
-    pendingDeleteRef.current = pendingDelete;
-  }, [pendingDelete]);
 
   async function refresh() {
     const [jobRes, referenceRes, peopleRes] = await Promise.all([
@@ -200,7 +170,7 @@ export function JobDetailPage() {
 
   useEffect(() => {
     if (job && !hasFocusedRef.current) {
-      closeButtonRef.current?.focus();
+      titleRef.current?.focus();
       hasFocusedRef.current = true;
     }
   }, [job]);
@@ -397,15 +367,11 @@ export function JobDetailPage() {
 
   if (!job) {
     return (
-      <div className="job-detail-page" onClick={handleClose}>
-        <div
-          className="job-detail-panel"
-          role="dialog"
-          aria-modal="true"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {error ? <p role="alert">{error}</p> : <p>Carregando...</p>}
-        </div>
+      <div className="job-detail-page">
+        <p className="job-detail-breadcrumb">
+          <Link to="/">Dashboard</Link>
+        </p>
+        {error ? <p role="alert">{error}</p> : <p>Carregando...</p>}
       </div>
     );
   }
@@ -419,35 +385,28 @@ export function JobDetailPage() {
     phases.find((p) => p.id === job.phaseId)?.statuses.find((s) => s.id === job.statusId)?.order ?? 0;
 
   return (
-    <div className="job-detail-page" onClick={handleClose}>
-      <div
-        className="job-detail-panel"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="job-detail-title"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="job-detail-header">
-          <div>
-            <p className="label-caps">
-              {job.client ?? 'Sem cliente'} · {job.code ?? `J${job.id}`}
-            </p>
-            <h1 id="job-detail-title">{job.name}</h1>
-            <p className="job-detail-phase" style={{ color: phaseTextColor(currentPhaseOrder) }}>
-              FASE {currentPhaseOrder} · {job.phaseName?.toUpperCase()}
-            </p>
-          </div>
-          <button
-            type="button"
-            ref={closeButtonRef}
-            className="job-detail-close"
-            aria-label="Fechar"
-            onClick={handleClose}
-          >
-            <X size={20} aria-hidden="true" />
-          </button>
-        </div>
+    <div className="job-detail-page">
+      <nav className="job-detail-breadcrumb" aria-label="Navegação">
+        <Link to="/">Dashboard</Link>
+        <ChevronRight size={14} aria-hidden="true" />
+        <span aria-current="page">{job.name}</span>
+      </nav>
 
+      <div className="job-detail-header">
+        <div>
+          <p className="label-caps">
+            {job.client ?? 'Sem cliente'} · {job.code ?? `J${job.id}`}
+          </p>
+          <h1 id="job-detail-title" ref={titleRef} tabIndex={-1}>
+            {job.name}
+          </h1>
+          <p className="job-detail-phase" style={{ color: phaseTextColor(currentPhaseOrder) }}>
+            FASE {currentPhaseOrder} · {job.phaseName?.toUpperCase()}
+          </p>
+        </div>
+      </div>
+
+      <div className="job-detail-warnings">
         <div className="job-detail-atendimento">
           <span className="label-caps">Atendimento responsável</span>
           <select
@@ -505,152 +464,10 @@ export function JobDetailPage() {
             {error}
           </p>
         )}
+      </div>
 
-        {trelloCard && (
-          <div className="job-detail-trello-card">
-            <p className="job-detail-trello-indicator label-caps">
-              Vinculado ao card: {trelloCard.name} ({trelloCard.listName}){' '}
-              {trelloCard.url && (
-                <a href={trelloCard.url} target="_blank" rel="noreferrer noopener">
-                  abrir no Trello
-                </a>
-              )}{' '}
-              <button type="button" className="job-detail-link-btn" onClick={() => void handleUnlinkTrello()}>
-                desvincular
-              </button>
-            </p>
-
-            {trelloCard.labels && trelloCard.labels.length > 0 && (
-              <ul className="job-detail-trello-labels">
-                {trelloCard.labels.map((label, index) => (
-                  <li
-                    key={index}
-                    className="job-detail-trello-label"
-                    style={{ background: TRELLO_LABEL_COLORS[label.color ?? ''] ?? 'var(--bg-subtle)' }}
-                  >
-                    {label.name || label.color || 'sem nome'}
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            {trelloCard.people && trelloCard.people.length > 0 && (
-              <p className="job-detail-trello-people">
-                <span className="label-caps">Pessoas envolvidas: </span>
-                {trelloCard.people.join(', ')}
-              </p>
-            )}
-
-            {trelloCard.description && (
-              <p className="job-detail-trello-description">{linkify(trelloCard.description)}</p>
-            )}
-          </div>
-        )}
-
-        {job.trelloChecklistItems.length > 0 && (
-          <div className="job-detail-trello-checklist">
-            <p className="label-caps">
-              Checklist do Trello ({job.trelloChecklistItems.filter((i) => i.checked).length}/
-              {job.trelloChecklistItems.length})
-            </p>
-            <ul className="job-detail-trello-checklist-items">
-              {job.trelloChecklistItems.map((item, index) => (
-                <li
-                  key={index}
-                  className={`job-detail-trello-checklist-item${item.checked ? ' is-checked' : ''}`}
-                >
-                  <span className="job-detail-checkbox" aria-hidden="true">
-                    {item.checked ? '✓' : ''}
-                  </span>
-                  {item.name}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {job.trelloStatusUpdates.length > 0 && (
-          <div className="job-detail-trello-status">
-            <p className="label-caps">Comentários do Trello</p>
-            <ul className="job-detail-trello-status-list">
-              {job.trelloStatusUpdates.map((update, index) => (
-                <li key={index} className="job-detail-trello-status-item">
-                  <p className="job-detail-trello-status-meta">
-                    <span className="job-detail-trello-status-author">{update.author}</span>
-                    {' · '}
-                    <time dateTime={update.postedAt}>
-                      {new Date(update.postedAt).toLocaleString('pt-BR', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </time>
-                  </p>
-                  <p className="job-detail-trello-status-text">{update.text}</p>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {trelloCandidates && trelloCandidates.length > 0 && (
-          <div className="job-detail-trello-picker">
-            <p className="label-caps">Vincular ao card do Trello</p>
-            <ul>
-              {trelloCandidates.map((c) => (
-                <li key={c.id}>
-                  <button type="button" onClick={() => void handleLinkTrello(c)}>
-                    {c.name} <span className="job-detail-trello-list">({c.listName})</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-            <button type="button" onClick={() => setTrelloCandidates([])}>
-              Nenhum desses
-            </button>
-          </div>
-        )}
-
-        <button
-          type="button"
-          className="job-detail-action-btn"
-          onClick={() => void handleShowAllTrelloCards()}
-          disabled={loadingAllTrelloCards}
-        >
-          {loadingAllTrelloCards ? 'Carregando cards do Trello…' : 'Vincular ao Trello'}
-        </button>
-
-        {allTrelloCards && (
-          <div className="job-detail-trello-picker job-detail-trello-picker--full">
-            <p className="label-caps">Vincular ao card do Trello ({allTrelloCards.length} cards)</p>
-            <input
-              type="text"
-              className="job-detail-trello-search"
-              placeholder="Buscar por nome do card…"
-              value={trelloCardSearch}
-              onChange={(e) => setTrelloCardSearch(e.target.value)}
-              autoFocus
-              aria-label="Buscar card do Trello"
-            />
-            <ul>
-              {filteredTrelloCards.map((c) => (
-                <li key={c.id}>
-                  <button type="button" onClick={() => void handleLinkTrello(c)}>
-                    {c.name} <span className="job-detail-trello-list">({c.listName})</span>
-                  </button>
-                </li>
-              ))}
-              {filteredTrelloCards.length === 0 && (
-                <li className="job-detail-trello-empty">Nenhum card encontrado.</li>
-              )}
-            </ul>
-            <button type="button" onClick={() => setAllTrelloCards(null)}>
-              Fechar
-            </button>
-          </div>
-        )}
-
+      <div className="job-detail-columns">
+      <div className="job-detail-column job-detail-column--fluxo">
         {counts && (
           <div className="job-detail-bola-toggle">
             <button
@@ -825,6 +642,155 @@ export function JobDetailPage() {
             onCancel={() => setPendingDelete(false)}
           />
         )}
+      </div>
+
+      <div className="job-detail-column job-detail-column--trello">
+        {trelloCard && (
+          <div className="job-detail-trello-card">
+            <p className="job-detail-trello-indicator label-caps">
+              Vinculado ao card: {trelloCard.name} ({trelloCard.listName}){' '}
+              {trelloCard.url && (
+                <a href={trelloCard.url} target="_blank" rel="noreferrer noopener">
+                  abrir no Trello
+                </a>
+              )}{' '}
+              <button type="button" className="job-detail-link-btn" onClick={() => void handleUnlinkTrello()}>
+                desvincular
+              </button>
+            </p>
+
+            {trelloCard.labels && trelloCard.labels.length > 0 && (
+              <ul className="job-detail-trello-labels">
+                {trelloCard.labels.map((label, index) => (
+                  <li
+                    key={index}
+                    className="job-detail-trello-label"
+                    style={{ background: TRELLO_LABEL_COLORS[label.color ?? ''] ?? 'var(--bg-subtle)' }}
+                  >
+                    {label.name || label.color || 'sem nome'}
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {trelloCard.people && trelloCard.people.length > 0 && (
+              <p className="job-detail-trello-people">
+                <span className="label-caps">Pessoas envolvidas: </span>
+                {trelloCard.people.join(', ')}
+              </p>
+            )}
+
+            {trelloCard.description && (
+              <p className="job-detail-trello-description">{linkify(trelloCard.description)}</p>
+            )}
+          </div>
+        )}
+
+        {job.trelloChecklistItems.length > 0 && (
+          <div className="job-detail-trello-checklist">
+            <p className="label-caps">
+              Checklist do Trello ({job.trelloChecklistItems.filter((i) => i.checked).length}/
+              {job.trelloChecklistItems.length})
+            </p>
+            <ul className="job-detail-trello-checklist-items">
+              {job.trelloChecklistItems.map((item, index) => (
+                <li
+                  key={index}
+                  className={`job-detail-trello-checklist-item${item.checked ? ' is-checked' : ''}`}
+                >
+                  <span className="job-detail-checkbox" aria-hidden="true">
+                    {item.checked ? '✓' : ''}
+                  </span>
+                  {item.name}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {job.trelloStatusUpdates.length > 0 && (
+          <div className="job-detail-trello-status">
+            <p className="label-caps">Comentários do Trello</p>
+            <ul className="job-detail-trello-status-list">
+              {job.trelloStatusUpdates.map((update, index) => (
+                <li key={index} className="job-detail-trello-status-item">
+                  <p className="job-detail-trello-status-meta">
+                    <span className="job-detail-trello-status-author">{update.author}</span>
+                    {' · '}
+                    <time dateTime={update.postedAt}>
+                      {new Date(update.postedAt).toLocaleString('pt-BR', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </time>
+                  </p>
+                  <p className="job-detail-trello-status-text">{update.text}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {trelloCandidates && trelloCandidates.length > 0 && (
+          <div className="job-detail-trello-picker">
+            <p className="label-caps">Vincular ao card do Trello</p>
+            <ul>
+              {trelloCandidates.map((c) => (
+                <li key={c.id}>
+                  <button type="button" onClick={() => void handleLinkTrello(c)}>
+                    {c.name} <span className="job-detail-trello-list">({c.listName})</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <button type="button" onClick={() => setTrelloCandidates([])}>
+              Nenhum desses
+            </button>
+          </div>
+        )}
+
+        <button
+          type="button"
+          className="job-detail-action-btn"
+          onClick={() => void handleShowAllTrelloCards()}
+          disabled={loadingAllTrelloCards}
+        >
+          {loadingAllTrelloCards ? 'Carregando cards do Trello…' : 'Vincular ao Trello'}
+        </button>
+
+        {allTrelloCards && (
+          <div className="job-detail-trello-picker job-detail-trello-picker--full">
+            <p className="label-caps">Vincular ao card do Trello ({allTrelloCards.length} cards)</p>
+            <input
+              type="text"
+              className="job-detail-trello-search"
+              placeholder="Buscar por nome do card…"
+              value={trelloCardSearch}
+              onChange={(e) => setTrelloCardSearch(e.target.value)}
+              autoFocus
+              aria-label="Buscar card do Trello"
+            />
+            <ul>
+              {filteredTrelloCards.map((c) => (
+                <li key={c.id}>
+                  <button type="button" onClick={() => void handleLinkTrello(c)}>
+                    {c.name} <span className="job-detail-trello-list">({c.listName})</span>
+                  </button>
+                </li>
+              ))}
+              {filteredTrelloCards.length === 0 && (
+                <li className="job-detail-trello-empty">Nenhum card encontrado.</li>
+              )}
+            </ul>
+            <button type="button" onClick={() => setAllTrelloCards(null)}>
+              Fechar
+            </button>
+          </div>
+        )}
+
+      </div>
       </div>
     </div>
   );
