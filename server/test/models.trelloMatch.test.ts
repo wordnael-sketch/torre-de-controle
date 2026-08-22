@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findTrelloCandidates, extractStatusUpdates } from '../src/models/trelloMatch';
+import { findTrelloCandidates, extractStatusUpdates, extractRecentComments } from '../src/models/trelloMatch';
 import type { TrelloComment } from '../src/services/trello';
 
 describe('findTrelloCandidates', () => {
@@ -102,5 +102,38 @@ describe('extractStatusUpdates', () => {
 
   it('returns an empty list when there are no comments', () => {
     expect(extractStatusUpdates([])).toEqual([]);
+  });
+});
+
+describe('extractRecentComments', () => {
+  function comment(overrides: Partial<TrelloComment>): TrelloComment {
+    return { author: 'Alguém', text: '', postedAt: '2026-08-20T00:00:00.000Z', ...overrides };
+  }
+
+  it('keeps every comment regardless of content', () => {
+    const comments = [
+      comment({ author: 'Cliente', text: 'Ficou ótimo, obrigado!' }),
+      comment({ author: 'Larissa Holanda', text: 'RETORNO - AGÊNCIA ⚠️\nSegue o retorno por e-mail.' }),
+      comment({ author: 'Bianca de Souza Andrade', text: '📌STATUS 20.08 às 13h51' }),
+    ];
+
+    const result = extractRecentComments(comments);
+
+    expect(result).toEqual([
+      { author: 'Cliente', text: 'Ficou ótimo, obrigado!', postedAt: '2026-08-20T00:00:00.000Z' },
+      { author: 'Larissa Holanda', text: 'RETORNO - AGÊNCIA ⚠️\nSegue o retorno por e-mail.', postedAt: '2026-08-20T00:00:00.000Z' },
+      { author: 'Bianca de Souza Andrade', text: '📌STATUS 20.08 às 13h51', postedAt: '2026-08-20T00:00:00.000Z' },
+    ]);
+  });
+
+  it('caps the result at the given limit, defaulting to 15', () => {
+    const comments = Array.from({ length: 20 }, (_, i) => comment({ text: `comentário ${i}` }));
+
+    expect(extractRecentComments(comments)).toHaveLength(15);
+    expect(extractRecentComments(comments, 3)).toHaveLength(3);
+  });
+
+  it('returns an empty list when there are no comments', () => {
+    expect(extractRecentComments([])).toEqual([]);
   });
 });

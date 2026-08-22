@@ -12,7 +12,7 @@ import {
   type Job,
 } from './job';
 import { classifyAndApply, type ResolvedSuggestion } from './classification';
-import { buildTrelloEvidenceText, extractStatusUpdates } from './trelloMatch';
+import { buildTrelloEvidenceText, extractStatusUpdates, extractRecentComments } from './trelloMatch';
 import type { Classifier } from '../services/classifier';
 import type { TrelloCardDetail, TrelloClient, TrelloLabel } from '../services/trello';
 
@@ -262,8 +262,12 @@ export async function syncJobFromTrello(
     await syncTrelloMembersToAtendimento(db, job.id, job.atendimentoPersonId, memberNames);
   }
 
-  if (JSON.stringify(statusUpdates) !== JSON.stringify(job.trelloStatusUpdates)) {
-    await setTrelloStatusUpdates(db, job.id, statusUpdates);
+  // Espelho de comentários mostrado no job: todos os mais recentes, não só
+  // os "STATUS" — statusUpdates acima continua existindo só como sinal pro
+  // Atendimento, não é o que fica salvo/exibido.
+  const recentComments = extractRecentComments(card.comments);
+  if (JSON.stringify(recentComments) !== JSON.stringify(job.trelloStatusUpdates)) {
+    await setTrelloStatusUpdates(db, job.id, recentComments);
   }
 
   // Espelho somente-leitura do checklist do Trello — não influencia a fase/

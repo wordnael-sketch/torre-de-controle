@@ -568,7 +568,7 @@ export function JobDetailPage() {
 
         {job.trelloStatusUpdates.length > 0 && (
           <div className="job-detail-trello-status">
-            <p className="label-caps">Últimos status do Trello</p>
+            <p className="label-caps">Comentários do Trello</p>
             <ul className="job-detail-trello-status-list">
               {job.trelloStatusUpdates.map((update, index) => (
                 <li key={index} className="job-detail-trello-status-item">

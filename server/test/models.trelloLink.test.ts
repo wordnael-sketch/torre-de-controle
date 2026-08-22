@@ -640,7 +640,7 @@ describe('syncJobFromTrello', () => {
     });
   });
 
-  it('persists only the comments that look like a team STATUS update, newest first', async () => {
+  it('persists every recent comment, not just ones that look like a team STATUS update', async () => {
     await withTestTransaction(async (db) => {
       const created = await createJob(db, { name: 'Job Sync Status Teste' });
       await setTrelloLink(db, created.id, 'card1');
@@ -681,6 +681,7 @@ describe('syncJobFromTrello', () => {
           text: '📌STATUS 20.08 às 13h51\nFilme em montagem.',
           postedAt: '2026-08-20T13:51:00.000Z',
         },
+        { author: 'Cliente', text: 'Ficou ótimo, obrigado!', postedAt: '2026-08-20T10:00:00.000Z' },
         {
           author: 'Bianca de Souza Andrade',
           text: 'STATUS 19.08 às 14h40\nPrevisto envio no fim do dia.',
@@ -690,7 +691,49 @@ describe('syncJobFromTrello', () => {
     });
   });
 
-  it('does not write a no-op update when the extracted status updates already match what is stored', async () => {
+  it('still uses only the STATUS-tagged comment to correct Atendimento, even when a more recent non-STATUS comment exists', async () => {
+    await withTestTransaction(async (db) => {
+      const camila = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Camila' AND area = 'Atendimento'`);
+      const created = await createJob(db, {
+        name: 'Job Sync Comentário Não Status Não Corrige Teste',
+        atendimentoPersonId: camila.rows[0].id,
+      });
+      await setTrelloLink(db, created.id, 'card1');
+      const job = (await getJobById(db, created.id))!;
+
+      const cardDetail: TrelloCardDetail = {
+        name: 'Job Sync Comentário Não Status Não Corrige Teste',
+        listName: 'Em Pós Produção',
+        checklistItems: [],
+        due: null,
+        description: null,
+        url: 'https://trello.com/c/test',
+        labels: [],
+        latestComment: 'Ficou ótimo, obrigado!',
+        members: [],
+        comments: [
+          // Mais recente, mas não é um "STATUS" — não deve virar sinal de
+          // correção de Atendimento, só entra no espelho de comentários.
+          { author: 'Cliente', text: 'Ficou ótimo, obrigado!', postedAt: '2026-08-20T15:00:00.000Z' },
+          {
+            author: 'Wilka Nepomoceno',
+            text: 'STATUS 20.08\nTudo em dia.',
+            postedAt: '2026-08-20T13:51:00.000Z',
+          },
+        ],
+      };
+      const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
+
+      await syncJobFromTrello(db, trelloClient, undefined, job, { bypassConfidenceGate: false });
+
+      const updatedJob = await getJobById(db, created.id);
+      const wilka = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Wilka' AND area = 'Atendimento'`);
+      expect(updatedJob?.atendimentoPersonId).toBe(wilka.rows[0].id);
+      expect(updatedJob?.trelloStatusUpdates).toHaveLength(2);
+    });
+  });
+
+  it('does not write a no-op update when the extracted comments already match what is stored', async () => {
     await withTestTransaction(async (db) => {
       const created = await createJob(db, { name: 'Job Sync Status Sem Mudança Teste' });
       await setTrelloLink(db, created.id, 'card1');
@@ -705,9 +748,9 @@ describe('syncJobFromTrello', () => {
         description: null,
         url: 'https://trello.com/c/test',
         labels: [],
-        latestComment: 'Sem status ainda',
+        latestComment: null,
         members: [],
-        comments: [{ author: 'Alguém', text: 'Sem status ainda', postedAt: '2026-08-20T13:51:00.000Z' }],
+        comments: [],
       };
       const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
 

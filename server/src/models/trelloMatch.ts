@@ -81,9 +81,24 @@ export interface TrelloStatusUpdate {
 // "STATUS" (com ou sem o emoji de alfinete na frente), ex.: "📌STATUS 20.08 às 13h51".
 const STATUS_COMMENT_PATTERN = /^\s*(?:\p{Emoji_Presentation}\s*)?status\b/iu;
 
+/**
+ * Só os comentários "STATUS" — usado internamente pra achar quem postou o
+ * status mais recente (sinal do Atendimento responsável), não pra exibição.
+ * Ver extractRecentComments para o espelho completo mostrado no job.
+ */
 export function extractStatusUpdates(comments: TrelloComment[], limit = 5): TrelloStatusUpdate[] {
   return comments
     .filter((comment) => STATUS_COMMENT_PATTERN.test(comment.text))
     .slice(0, limit)
     .map(({ author, text, postedAt }) => ({ author, text, postedAt }));
+}
+
+/**
+ * Espelha os comentários mais recentes do card sem filtrar por conteúdo —
+ * "RETORNO - AGÊNCIA", uma resposta de cliente etc. também precisam
+ * aparecer, não só os que seguem a convenção "STATUS". `comments` já vem
+ * mais recente primeiro; isso só limita quantos guardar/mostrar.
+ */
+export function extractRecentComments(comments: TrelloComment[], limit = 15): TrelloStatusUpdate[] {
+  return comments.slice(0, limit).map(({ author, text, postedAt }) => ({ author, text, postedAt }));
 }
