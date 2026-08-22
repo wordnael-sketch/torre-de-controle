@@ -146,7 +146,7 @@ interface GeminiResponse {
  */
 export function createGeminiClassifier(
   apiKey: string,
-  model = 'gemini-flash-latest',
+  model = 'gemini-3.6-flash',
   fetchImpl: typeof fetch = fetch,
 ): Classifier {
   return {

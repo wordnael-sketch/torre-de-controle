@@ -45,7 +45,7 @@ describe('createGeminiClassifier', () => {
       }),
     );
 
-    const classifier = createGeminiClassifier('fake-key', 'gemini-flash-latest', fetchMock as unknown as typeof fetch);
+    const classifier = createGeminiClassifier('fake-key', 'gemini-3.6-flash', fetchMock as unknown as typeof fetch);
     const suggestions = await classifier.classify(INPUT);
 
     expect(suggestions).toEqual([
@@ -60,12 +60,12 @@ describe('createGeminiClassifier', () => {
 
   it('sends the API key, model, and structured-output config in the request', async () => {
     const fetchMock = vi.fn(async () => jsonResponse({ candidates: [] }));
-    const classifier = createGeminiClassifier('minha-chave', 'gemini-flash-latest', fetchMock as unknown as typeof fetch);
+    const classifier = createGeminiClassifier('minha-chave', 'gemini-3.6-flash', fetchMock as unknown as typeof fetch);
 
     await classifier.classify(INPUT);
 
     const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toContain('gemini-flash-latest:generateContent');
+    expect(url).toContain('gemini-3.6-flash:generateContent');
     expect(url).toContain('key=minha-chave');
     const body = JSON.parse(options.body as string);
     expect(body.generationConfig.responseMimeType).toBe('application/json');
@@ -74,7 +74,7 @@ describe('createGeminiClassifier', () => {
 
   it('returns an empty list when there are no candidates', async () => {
     const fetchMock = vi.fn(async () => jsonResponse({ candidates: [] }));
-    const classifier = createGeminiClassifier('fake-key', 'gemini-flash-latest', fetchMock as unknown as typeof fetch);
+    const classifier = createGeminiClassifier('fake-key', 'gemini-3.6-flash', fetchMock as unknown as typeof fetch);
 
     const suggestions = await classifier.classify(INPUT);
 
@@ -85,7 +85,7 @@ describe('createGeminiClassifier', () => {
     const fetchMock = vi.fn(async () =>
       jsonResponse({ error: { message: 'Your credit balance is too low' } }, 400),
     );
-    const classifier = createGeminiClassifier('fake-key', 'gemini-flash-latest', fetchMock as unknown as typeof fetch);
+    const classifier = createGeminiClassifier('fake-key', 'gemini-3.6-flash', fetchMock as unknown as typeof fetch);
 
     await expect(classifier.classify(INPUT)).rejects.toThrow(/Gemini API error 400/);
   });
