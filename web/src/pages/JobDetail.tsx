@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, ExternalLink } from 'lucide-react';
 import {
   api,
   ApiError,
@@ -41,8 +41,16 @@ function linkify(text: string): (string | JSX.Element)[] {
   // testar de novo com o regex global (que tem estado e erraria alternando).
   return text.split(URL_PATTERN).map((part, index) =>
     index % 2 === 1 ? (
-      <a key={index} href={part} target="_blank" rel="noreferrer noopener">
-        {part}
+      <a
+        key={index}
+        href={part}
+        target="_blank"
+        rel="noreferrer noopener"
+        className="job-detail-trello-link-btn"
+        aria-label={`Abrir link: ${part}`}
+      >
+        <ExternalLink size={13} aria-hidden="true" />
+        Abrir link
       </a>
     ) : (
       part
@@ -759,7 +767,7 @@ export function JobDetailPage() {
                       })}
                     </time>
                   </p>
-                  <p className="job-detail-trello-status-text">{update.text}</p>
+                  <p className="job-detail-trello-status-text">{linkify(update.text)}</p>
                 </li>
               ))}
             </ul>

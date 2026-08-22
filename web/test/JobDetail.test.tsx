@@ -428,10 +428,9 @@ describe('JobDetailPage', () => {
     expect(screen.getByText(/Pessoas envolvidas:/).closest('p')).toHaveTextContent(
       'Wilka Nepomoceno, Vicky Salles',
     );
-    expect(screen.getByRole('link', { name: 'https://drive.google.com/drive/folders/abc123' })).toHaveAttribute(
-      'href',
-      'https://drive.google.com/drive/folders/abc123',
-    );
+    expect(
+      screen.getByRole('link', { name: 'Abrir link: https://drive.google.com/drive/folders/abc123' }),
+    ).toHaveAttribute('href', 'https://drive.google.com/drive/folders/abc123');
   });
 
   it('collapses a long Trello description behind "ver mais" and expands it on click', async () => {
@@ -493,6 +492,42 @@ describe('JobDetailPage', () => {
 
     expect(await screen.findByText('Briefing curto e direto.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'ver mais' })).not.toBeInTheDocument();
+  });
+
+  it('turns a URL inside a Trello comment into an "Abrir link" button', async () => {
+    mockedApi.getJob.mockResolvedValue({
+      job: {
+        ...jobDetail,
+        trelloCardId: 'card1',
+        trelloStatusUpdates: [
+          {
+            author: 'Wilka Nepomoceno',
+            text: 'Arquivo final aqui: https://drive.google.com/file/d/xyz789',
+            postedAt: '2026-08-21T00:00:00.000Z',
+          },
+        ],
+      },
+    });
+    mockedApi.syncTrello.mockResolvedValue({
+      suggestions: [],
+      trelloCard: {
+        name: 'WPP:: COLGATE:: CAMPANHA',
+        listName: 'Em Captação 2026',
+        description: null,
+        url: 'https://trello.com/c/card1',
+        labels: [],
+        members: [],
+        people: [],
+      },
+    });
+
+    renderJobDetail();
+
+    const link = await screen.findByRole('link', {
+      name: 'Abrir link: https://drive.google.com/file/d/xyz789',
+    });
+    expect(link).toHaveAttribute('href', 'https://drive.google.com/file/d/xyz789');
+    expect(link).toHaveTextContent('Abrir link');
   });
 
   it('auto-links when exactly one strong Trello match is found', async () => {
