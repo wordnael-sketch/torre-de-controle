@@ -434,6 +434,67 @@ describe('JobDetailPage', () => {
     );
   });
 
+  it('collapses a long Trello description behind "ver mais" and expands it on click', async () => {
+    const longDescription = `Primeiro parágrafo bem grande de briefing. ${'Detalhe importante do job. '.repeat(10)}\n\nSegundo parágrafo com mais contexto adicional sobre a entrega.`;
+    mockedApi.getTrelloCandidates.mockResolvedValue({
+      candidates: [
+        { id: 'card1', name: 'WPP:: COLGATE:: CAMPANHA', listName: 'Em Captação 2026', strongMatch: true },
+      ],
+    });
+    mockedApi.setTrelloLink.mockResolvedValue({ job: { ...jobDetail, trelloCardId: 'card1' } });
+    mockedApi.syncTrello.mockResolvedValue({
+      suggestions: [],
+      trelloCard: {
+        name: 'WPP:: COLGATE:: CAMPANHA',
+        listName: 'Em Captação 2026',
+        description: longDescription,
+        url: 'https://trello.com/c/card1',
+        labels: [],
+        members: [],
+        people: [],
+      },
+    });
+    const user = userEvent.setup();
+
+    renderJobDetail();
+
+    const toggle = await screen.findByRole('button', { name: 'ver mais' });
+    const description = document.querySelector('.job-detail-trello-description');
+    expect(description).toHaveClass('is-collapsed');
+    expect(screen.getByText(/Segundo parágrafo com mais contexto/)).toBeInTheDocument();
+
+    await user.click(toggle);
+
+    expect(screen.getByRole('button', { name: 'ver menos' })).toBeInTheDocument();
+    expect(description).not.toHaveClass('is-collapsed');
+  });
+
+  it('shows a short Trello description in full, with no "ver mais" toggle', async () => {
+    mockedApi.getTrelloCandidates.mockResolvedValue({
+      candidates: [
+        { id: 'card1', name: 'WPP:: COLGATE:: CAMPANHA', listName: 'Em Captação 2026', strongMatch: true },
+      ],
+    });
+    mockedApi.setTrelloLink.mockResolvedValue({ job: { ...jobDetail, trelloCardId: 'card1' } });
+    mockedApi.syncTrello.mockResolvedValue({
+      suggestions: [],
+      trelloCard: {
+        name: 'WPP:: COLGATE:: CAMPANHA',
+        listName: 'Em Captação 2026',
+        description: 'Briefing curto e direto.',
+        url: 'https://trello.com/c/card1',
+        labels: [],
+        members: [],
+        people: [],
+      },
+    });
+
+    renderJobDetail();
+
+    expect(await screen.findByText('Briefing curto e direto.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'ver mais' })).not.toBeInTheDocument();
+  });
+
   it('auto-links when exactly one strong Trello match is found', async () => {
     mockedApi.getTrelloCandidates.mockResolvedValue({
       candidates: [

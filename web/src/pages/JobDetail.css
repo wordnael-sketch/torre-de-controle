@@ -324,8 +324,33 @@
   background: var(--bg-subtle);
   border-radius: var(--radius);
   font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.job-detail-trello-description p {
+  margin: 0 0 0.6rem;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.job-detail-trello-description p:last-child {
+  margin-bottom: 0;
+}
+
+.job-detail-trello-description.is-collapsed {
+  position: relative;
+  max-height: 4.5em;
+  overflow: hidden;
+}
+
+.job-detail-trello-description.is-collapsed::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1.5em;
+  background: linear-gradient(to bottom, transparent, var(--bg-subtle));
 }
 
 .job-detail-trello-picker {

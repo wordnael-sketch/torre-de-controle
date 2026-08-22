@@ -262,10 +262,11 @@ export async function syncJobFromTrello(
     await syncTrelloMembersToAtendimento(db, job.id, job.atendimentoPersonId, memberNames);
   }
 
-  // Espelho de comentários mostrado no job: todos os mais recentes, não só
-  // os "STATUS" — statusUpdates acima continua existindo só como sinal pro
-  // Atendimento, não é o que fica salvo/exibido.
-  const recentComments = extractRecentComments(card.comments);
+  // Espelho de comentários mostrado no job: os 3 mais recentes, não só os
+  // "STATUS" — statusUpdates acima continua existindo só como sinal pro
+  // Atendimento, não é o que fica salvo/exibido. Limitado a 3 pra manter a
+  // página enxuta; histórico completo continua disponível no Trello.
+  const recentComments = extractRecentComments(card.comments, 3);
   if (JSON.stringify(recentComments) !== JSON.stringify(job.trelloStatusUpdates)) {
     await setTrelloStatusUpdates(db, job.id, recentComments);
   }

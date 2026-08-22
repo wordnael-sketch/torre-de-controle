@@ -22,6 +22,16 @@ function hoursSince(iso: string): number {
   return Math.floor((Date.now() - new Date(iso).getTime()) / (1000 * 60 * 60));
 }
 
+/** Quebra a descrição do Trello em parágrafos (linha em branco = novo parágrafo). */
+function splitParagraphs(text: string): string[] {
+  return text
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+}
+
+const DESCRIPTION_COLLAPSE_THRESHOLD = 220;
+
 const URL_PATTERN = /(https?:\/\/[^\s<>"']+)/g;
 
 /** Descrição/comentários do Trello são texto puro — isso só torna as URLs que já vêm ali clicáveis. */
@@ -64,6 +74,7 @@ export function JobDetailPage() {
 
   useEffect(() => {
     hasFocusedRef.current = false;
+    setDescriptionExpanded(false);
   }, [jobId]);
 
   const [job, setJob] = useState<JobDetailType | null>(null);
@@ -83,6 +94,7 @@ export function JobDetailPage() {
   const [allTrelloCards, setAllTrelloCards] = useState<TrelloBoardCard[] | null>(null);
   const [loadingAllTrelloCards, setLoadingAllTrelloCards] = useState(false);
   const [trelloCardSearch, setTrelloCardSearch] = useState('');
+  const [descriptionExpanded, setDescriptionExpanded] = useState(false);
 
   const filteredTrelloCards = useMemo(() => {
     if (!allTrelloCards) return [];
@@ -681,7 +693,28 @@ export function JobDetailPage() {
             )}
 
             {trelloCard.description && (
-              <p className="job-detail-trello-description">{linkify(trelloCard.description)}</p>
+              <>
+                <div
+                  className={`job-detail-trello-description${
+                    !descriptionExpanded && trelloCard.description.length > DESCRIPTION_COLLAPSE_THRESHOLD
+                      ? ' is-collapsed'
+                      : ''
+                  }`}
+                >
+                  {splitParagraphs(trelloCard.description).map((paragraph, index) => (
+                    <p key={index}>{linkify(paragraph)}</p>
+                  ))}
+                </div>
+                {trelloCard.description.length > DESCRIPTION_COLLAPSE_THRESHOLD && (
+                  <button
+                    type="button"
+                    className="job-detail-link-btn"
+                    onClick={() => setDescriptionExpanded((current) => !current)}
+                  >
+                    {descriptionExpanded ? 'ver menos' : 'ver mais'}
+                  </button>
+                )}
+              </>
             )}
           </div>
         )}
