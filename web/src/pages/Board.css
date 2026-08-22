@@ -70,12 +70,26 @@
   pointer-events: none;
 }
 
-.board-pill-groups {
+.board-filter-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.board-filter-row {
   display: flex;
   align-items: center;
-  gap: 1.25rem;
-  flex-wrap: wrap;
-  flex: 1;
+  gap: 0.7rem;
+}
+
+.board-filter-label {
+  flex: 0 0 auto;
+  min-width: 5.5rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
 }
 
 .board-pill-group {

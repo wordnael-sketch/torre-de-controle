@@ -309,55 +309,6 @@ export function Board() {
               />
             </div>
 
-            <div className="board-pill-groups">
-              <div className="board-pill-group" role="group" aria-label="Filtro por farol">
-                {FAROL_ORDER.map((level) => (
-                  <button
-                    key={level}
-                    type="button"
-                    className={`board-pill${farolFilter.has(level) ? ' is-active' : ''}`}
-                    aria-pressed={farolFilter.has(level)}
-                    onClick={() => toggleFarol(level)}
-                  >
-                    <span className="board-dot" style={{ background: FAROL_COLOR_VARS[level] }} />
-                    {FAROL_LABELS[level]}
-                    <span className="board-pill-count">{farolCounts[level]}</span>
-                  </button>
-                ))}
-              </div>
-
-              <div className="board-pill-group" role="group" aria-label="Filtro por fase">
-                {phases.map((phase) => (
-                  <button
-                    key={phase.id}
-                    type="button"
-                    className={`board-pill${faseFilter.has(phase.id) ? ' is-active' : ''}`}
-                    aria-pressed={faseFilter.has(phase.id)}
-                    onClick={() => toggleFase(phase.id)}
-                  >
-                    <span className="board-swatch" style={{ background: phaseMarkerColor(phase.order) }} />
-                    {phase.name}
-                    <span className="board-pill-count">{faseCounts.get(phase.id) ?? 0}</span>
-                  </button>
-                ))}
-              </div>
-
-              <div className="board-pill-group" role="group" aria-label="Filtro por atendimento">
-                {atendimentoPeople.map((person) => (
-                  <button
-                    key={person.id}
-                    type="button"
-                    className={`board-pill${atendimentoFilter.has(person.id) ? ' is-active' : ''}`}
-                    aria-pressed={atendimentoFilter.has(person.id)}
-                    onClick={() => toggleAtendimento(person.id)}
-                  >
-                    {person.name}
-                    <span className="board-pill-count">{atendimentoCounts.get(person.id) ?? 0}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
             <div className="board-toolbar-indicators">
               {stuckJobs.length > 0 && (
                 <button
@@ -391,6 +342,64 @@ export function Board() {
                 <Contrast size={16} aria-hidden="true" />
                 <span className="board-contrast-toggle-label">Alto contraste</span>
               </button>
+            </div>
+          </div>
+
+          <div className="board-filter-rows">
+            <div className="board-filter-row">
+              <span className="board-filter-label">Farol</span>
+              <div className="board-pill-group" role="group" aria-label="Filtro por farol">
+                {FAROL_ORDER.map((level) => (
+                  <button
+                    key={level}
+                    type="button"
+                    className={`board-pill${farolFilter.has(level) ? ' is-active' : ''}`}
+                    aria-pressed={farolFilter.has(level)}
+                    onClick={() => toggleFarol(level)}
+                  >
+                    <span className="board-dot" style={{ background: FAROL_COLOR_VARS[level] }} />
+                    {FAROL_LABELS[level]}
+                    <span className="board-pill-count">{farolCounts[level]}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="board-filter-row">
+              <span className="board-filter-label">Fase</span>
+              <div className="board-pill-group" role="group" aria-label="Filtro por fase">
+                {phases.map((phase) => (
+                  <button
+                    key={phase.id}
+                    type="button"
+                    className={`board-pill${faseFilter.has(phase.id) ? ' is-active' : ''}`}
+                    aria-pressed={faseFilter.has(phase.id)}
+                    onClick={() => toggleFase(phase.id)}
+                  >
+                    <span className="board-swatch" style={{ background: phaseMarkerColor(phase.order) }} />
+                    {phase.name}
+                    <span className="board-pill-count">{faseCounts.get(phase.id) ?? 0}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="board-filter-row">
+              <span className="board-filter-label">Atendimento</span>
+              <div className="board-pill-group" role="group" aria-label="Filtro por atendimento">
+                {atendimentoPeople.map((person) => (
+                  <button
+                    key={person.id}
+                    type="button"
+                    className={`board-pill${atendimentoFilter.has(person.id) ? ' is-active' : ''}`}
+                    aria-pressed={atendimentoFilter.has(person.id)}
+                    onClick={() => toggleAtendimento(person.id)}
+                  >
+                    {person.name}
+                    <span className="board-pill-count">{atendimentoCounts.get(person.id) ?? 0}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
