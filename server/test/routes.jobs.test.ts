@@ -194,6 +194,60 @@ describe('GET /api/jobs/:id', () => {
   });
 });
 
+describe('GET /api/jobs/search', () => {
+  it('returns 401 when not logged in', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const res = await request(app).get('/api/jobs/search?q=teste');
+      expect(res.status).toBe(401);
+    });
+  });
+
+  it('returns matching jobs by name, with no matchContext', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+
+      const created = await agent
+        .post('/api/jobs')
+        .send({ name: 'Job Busca Rota Teste Único', atendimentoPersonId });
+
+      const res = await agent.get('/api/jobs/search').query({ q: 'Busca Rota Teste Único' });
+
+      expect(res.status).toBe(200);
+      const match = res.body.results.find((r: { id: number }) => r.id === created.body.job.id);
+      expect(match).toBeDefined();
+      expect(match.name).toBe('Job Busca Rota Teste Único');
+      expect(match.matchContext).toBeNull();
+    });
+  });
+
+  it('returns an empty list for a term shorter than 2 characters, without 400ing', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+
+      const res = await agent.get('/api/jobs/search').query({ q: 'a' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.results).toEqual([]);
+    });
+  });
+
+  it('returns an empty list when q is missing entirely', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+
+      const res = await agent.get('/api/jobs/search');
+
+      expect(res.status).toBe(200);
+      expect(res.body.results).toEqual([]);
+    });
+  });
+});
+
 describe('POST /api/jobs/:id/advance', () => {
   it('advances the job to the next status within the phase', async () => {
     await withTestTransaction(async (db) => {

@@ -30,6 +30,7 @@ export interface Job {
   atendimentoPersonName: string | null;
   trelloStatusUpdates: TrelloStatusUpdate[];
   trelloChecklistItems: TrelloChecklistItem[];
+  trelloDescription: string | null;
 }
 
 interface JobRow {
@@ -56,6 +57,7 @@ interface JobRow {
   atendimento_person_name: string | null;
   trello_status_updates: TrelloStatusUpdate[];
   trello_checklist_items: TrelloChecklistItem[];
+  trello_description: string | null;
 }
 
 const JOB_SELECT = `
@@ -121,6 +123,7 @@ async function rowToJob(db: AppDatabase, row: JobRow, precomputedLastStatusChang
     atendimentoPersonName: row.atendimento_person_name,
     trelloStatusUpdates: row.trello_status_updates,
     trelloChecklistItems: row.trello_checklist_items,
+    trelloDescription: row.trello_description,
   };
 }
 
@@ -342,4 +345,97 @@ export async function setTrelloChecklistItems(
   ]);
   const job = await getJobById(db, jobId);
   return job!;
+}
+
+export async function setTrelloDescription(
+  db: AppDatabase,
+  jobId: number,
+  description: string | null,
+): Promise<Job> {
+  await db.query('UPDATE jobs SET trello_description = $1, updated_at = now() WHERE id = $2', [
+    description,
+    jobId,
+  ]);
+  const job = await getJobById(db, jobId);
+  return job!;
+}
+
+export interface JobSearchResult {
+  id: number;
+  name: string;
+  client: string | null;
+  code: string | null;
+  matchContext: string | null;
+}
+
+const SEARCH_SNIPPET_RADIUS = 40;
+
+/** Corta um trecho do texto ao redor da primeira ocorrência do termo buscado, pra dar contexto no resultado. */
+function buildSnippet(text: string, term: string): string {
+  const lower = text.toLowerCase();
+  const index = lower.indexOf(term.toLowerCase());
+  if (index === -1) return text.slice(0, SEARCH_SNIPPET_RADIUS * 2).trim();
+  const start = Math.max(0, index - SEARCH_SNIPPET_RADIUS);
+  const end = Math.min(text.length, index + term.length + SEARCH_SNIPPET_RADIUS);
+  const snippet = text.slice(start, end).trim();
+  return `${start > 0 ? '…' : ''}${snippet}${end < text.length ? '…' : ''}`;
+}
+
+/**
+ * Busca global: nome, cliente, código, fase, status, Atendimento, comentários
+ * e descrição do Trello — tudo num único job. `matchContext` só vem
+ * preenchido quando o termo bateu em comentários/descrição (nome/cliente/
+ * código/fase/status/Atendimento já aparecem no próprio resultado, não
+ * precisam de trecho extra).
+ */
+export async function searchJobs(db: AppDatabase, term: string, limit = 8): Promise<JobSearchResult[]> {
+  const trimmed = term.trim();
+  if (trimmed.length < 2) return [];
+
+  const result = await db.query<{
+    id: number;
+    name: string;
+    client: string | null;
+    code: string | null;
+    trello_status_updates: TrelloStatusUpdate[];
+    trello_description: string | null;
+  }>(
+    `SELECT j.id, j.name, j.client, j.code, j.trello_status_updates, j.trello_description
+     FROM jobs j
+     LEFT JOIN statuses s ON s.id = j.status_id
+     LEFT JOIN phases p ON p.id = s.phase_id
+     LEFT JOIN people atendimento ON atendimento.id = j.atendimento_person_id
+     WHERE j.name ILIKE $1
+        OR j.client ILIKE $1
+        OR j.code ILIKE $1
+        OR p.name ILIKE $1
+        OR s.name ILIKE $1
+        OR atendimento.name ILIKE $1
+        OR j.trello_status_updates::text ILIKE $1
+        OR j.trello_description ILIKE $1
+     ORDER BY j.name
+     LIMIT $2`,
+    [`%${trimmed}%`, limit],
+  );
+
+  return result.rows.map((row) => {
+    const nameOrFieldMatch =
+      row.name.toLowerCase().includes(trimmed.toLowerCase()) ||
+      (row.client ?? '').toLowerCase().includes(trimmed.toLowerCase()) ||
+      (row.code ?? '').toLowerCase().includes(trimmed.toLowerCase());
+
+    let matchContext: string | null = null;
+    if (!nameOrFieldMatch) {
+      const commentHit = row.trello_status_updates.find((update) =>
+        update.text.toLowerCase().includes(trimmed.toLowerCase()),
+      );
+      if (commentHit) {
+        matchContext = `Comentário do Trello: "${buildSnippet(commentHit.text, trimmed)}"`;
+      } else if (row.trello_description?.toLowerCase().includes(trimmed.toLowerCase())) {
+        matchContext = `Descrição do Trello: "${buildSnippet(row.trello_description, trimmed)}"`;
+      }
+    }
+
+    return { id: row.id, name: row.name, client: row.client, code: row.code, matchContext };
+  });
 }

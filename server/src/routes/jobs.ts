@@ -12,6 +12,7 @@ import {
   setAtendimento,
   setJobName,
   deleteJob,
+  searchJobs,
 } from '../models/job';
 import { setBolaCom, getBolaComDayCounts, getBolaComDayCountsForJobs } from '../models/bolaCom';
 import { getJobStatusHistory } from '../models/jobStatusHistory';
@@ -154,6 +155,15 @@ export function createJobsRouter(deps: JobsRouterDeps): Router {
       }
 
       res.json({ linkedCount, syncedCount });
+    }),
+  );
+
+  router.get(
+    '/search',
+    asyncHandler(async (req, res) => {
+      const q = typeof req.query.q === 'string' ? req.query.q : '';
+      const results = await searchJobs(deps.db, q);
+      res.json({ results });
     }),
   );
 

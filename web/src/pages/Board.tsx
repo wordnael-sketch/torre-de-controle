@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, X, Search, AlertTriangle, Contrast, ChevronDown, ChevronRight, Link2 } from 'lucide-react';
+import { Plus, X, AlertTriangle, Contrast, ChevronDown, ChevronRight, Link2 } from 'lucide-react';
 import { api, type AlertLevel, type Job, type Person, type Phase } from '../api/client';
 import { FAROL_COLOR_VARS, FAROL_LABELS, phaseMarkerColor } from '../theme/phase';
 import { useAuth } from '../auth/AuthContext';
 import { showToast } from '../components/Toast';
+import { GlobalSearch } from '../components/GlobalSearch';
 import { BoardJobRow } from './BoardJobRow';
 import './Board.css';
 
@@ -16,19 +17,12 @@ function phaseOrderOf(phases: Phase[], phaseId: number | null): number | null {
   return phases.find((p) => p.id === phaseId)?.order ?? null;
 }
 
-function matchesSearch(job: Job, term: string): boolean {
-  if (!term) return true;
-  const haystack = `${job.name} ${job.client ?? ''} ${job.highlightedPersonName ?? ''} ${job.atendimentoPersonName ?? ''}`.toLowerCase();
-  return haystack.includes(term.toLowerCase());
-}
-
 export function Board() {
   const { user, updateBoardDensity } = useAuth();
   const density = user?.boardDensity ?? 'agrupado';
   const [phases, setPhases] = useState<Phase[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
-  const [search, setSearch] = useState('');
   const [farolFilter, setFarolFilter] = useState<Set<AlertLevel>>(new Set());
   const [faseFilter, setFaseFilter] = useState<Set<number>>(new Set());
   const [atendimentoFilter, setAtendimentoFilter] = useState<Set<number>>(new Set());
@@ -142,10 +136,9 @@ export function Board() {
       if (faseFilter.size > 0 && (!job.phaseId || !faseFilter.has(job.phaseId))) return false;
       if (atendimentoFilter.size > 0 && (!job.atendimentoPersonId || !atendimentoFilter.has(job.atendimentoPersonId)))
         return false;
-      if (!matchesSearch(job, search)) return false;
       return true;
     });
-  }, [activeJobs, farolFilter, faseFilter, atendimentoFilter, search]);
+  }, [activeJobs, farolFilter, faseFilter, atendimentoFilter]);
 
   const stuckJobs = useMemo(
     () =>
@@ -297,17 +290,7 @@ export function Board() {
 
         <div className="board-toolbar">
           <div className="board-toolbar-row">
-            <div className="board-toolbar-search">
-              <Search size={16} aria-hidden="true" className="board-toolbar-search-icon" />
-              <input
-                ref={searchInputRef}
-                className="board-search"
-                placeholder="Cliente, job ou responsável (atalho: /)"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                aria-label="Buscar"
-              />
-            </div>
+            <GlobalSearch inputRef={searchInputRef} />
 
             <div className="board-toolbar-indicators">
               {stuckJobs.length > 0 && (

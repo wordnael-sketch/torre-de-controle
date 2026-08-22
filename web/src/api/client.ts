@@ -193,6 +193,14 @@ export interface Person {
   title: string | null;
 }
 
+export interface JobSearchResult {
+  id: number;
+  name: string;
+  client: string | null;
+  code: string | null;
+  matchContext: string | null;
+}
+
 export const api = {
   me: () => request<{ user: User }>('/api/auth/me'),
   loginWithGoogle: (idToken: string) =>
@@ -207,6 +215,8 @@ export const api = {
       body: JSON.stringify({ boardDensity }),
     }),
   listJobs: () => request<{ jobs: Job[] }>('/api/jobs'),
+  searchJobs: (q: string) =>
+    request<{ results: JobSearchResult[] }>(`/api/jobs/search?q=${encodeURIComponent(q)}`),
   createJob: (job: { name: string; code?: string; client?: string; atendimentoPersonId: number }) =>
     request<{ job: Job }>('/api/jobs', { method: 'POST', body: JSON.stringify(job) }),
   getJob: (id: number) => request<{ job: JobDetail }>(`/api/jobs/${id}`),

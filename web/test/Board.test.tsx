@@ -16,6 +16,7 @@ vi.mock('../src/api/client', async () => {
       me: vi.fn(),
       setBoardDensity: vi.fn(),
       listJobs: vi.fn(),
+      searchJobs: vi.fn(),
       createJob: vi.fn(),
       setJobName: vi.fn(),
       getReference: vi.fn(),
@@ -99,6 +100,8 @@ describe('Board', () => {
     mockedApi.setBoardDensity.mockReset();
     mockedApi.setBoardDensity.mockResolvedValue({ user: loggedInUser });
     mockedApi.listJobs.mockReset();
+    mockedApi.searchJobs.mockReset();
+    mockedApi.searchJobs.mockResolvedValue({ results: [] });
     mockedApi.createJob.mockReset();
     mockedApi.getReference.mockReset();
     mockedApi.getReference.mockResolvedValue({ phases: twoPhases });
@@ -317,24 +320,6 @@ describe('Board', () => {
 
     expect(screen.queryByText('Job da Wilka')).not.toBeInTheDocument();
     expect(screen.getByText('Job da Camila')).toBeInTheDocument();
-  });
-
-  it('matches jobs by Atendimento responsável name in the search box', async () => {
-    mockedApi.listJobs.mockResolvedValue({
-      jobs: [
-        makeJob({ id: 1, name: 'Job A', client: null, highlightedPersonName: null, atendimentoPersonName: 'Larissa (Brasília)' }),
-        makeJob({ id: 2, name: 'Job B', client: null, highlightedPersonName: null, atendimentoPersonName: 'Karina' }),
-      ],
-    });
-    const user = userEvent.setup();
-
-    renderBoard();
-
-    await screen.findByText('Job A');
-    await user.type(screen.getByLabelText('Buscar'), 'Larissa');
-
-    expect(screen.getByText('Job A')).toBeInTheDocument();
-    expect(screen.queryByText('Job B')).not.toBeInTheDocument();
   });
 
   it('shows a common triggerLabel once in the group header when every job in the phase shares it, hiding it from each row', async () => {

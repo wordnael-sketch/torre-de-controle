@@ -4,13 +4,6 @@
   background: var(--bg-subtle);
 }
 
-.board-search {
-  width: 100%;
-  padding: 0.5rem 0.75rem 0.5rem 2rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-}
-
 .board-dot {
   width: 8px;
   height: 8px;
@@ -53,21 +46,6 @@
   align-items: center;
   gap: 1rem;
   flex-wrap: wrap;
-}
-
-.board-toolbar-search {
-  position: relative;
-  flex: 0 1 260px;
-  min-width: 180px;
-}
-
-.board-toolbar-search-icon {
-  position: absolute;
-  left: 0.6rem;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--text-secondary);
-  pointer-events: none;
 }
 
 .board-filter-rows {

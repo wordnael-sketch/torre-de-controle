@@ -7,6 +7,7 @@ import {
   setJobName,
   setTrelloStatusUpdates,
   setTrelloChecklistItems,
+  setTrelloDescription,
   findJobByName,
   getJobById,
   type Job,
@@ -275,6 +276,12 @@ export async function syncJobFromTrello(
   // status do job, que continua vindo só do checklist de fases do sistema.
   if (JSON.stringify(card.checklistItems) !== JSON.stringify(job.trelloChecklistItems)) {
     await setTrelloChecklistItems(db, job.id, card.checklistItems);
+  }
+
+  // Espelho da descrição — antes só existia ao vivo (buildTrelloCardView),
+  // nunca persistida; agora salva também, pra entrar na busca global.
+  if (card.description !== job.trelloDescription) {
+    await setTrelloDescription(db, job.id, card.description);
   }
 
   // Tudo acima (nome, papéis, Atendimento, comentários, checklist) já está

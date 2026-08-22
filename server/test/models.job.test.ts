@@ -11,6 +11,8 @@ import {
   setJobName,
   setTrelloStatusUpdates,
   setTrelloChecklistItems,
+  setTrelloDescription,
+  searchJobs,
   deleteJob,
 } from '../src/models/job';
 import { withTestTransaction } from './helpers/testDb';
@@ -386,6 +388,102 @@ describe('atendimento responsável', () => {
       await withTestTransaction(async (db) => {
         const deleted = await deleteJob(db, 999999999);
         expect(deleted).toBe(false);
+      });
+    });
+  });
+
+  describe('setTrelloDescription', () => {
+    it('stores the description and returns the updated job', async () => {
+      await withTestTransaction(async (db) => {
+        const created = await createJob(db, { name: 'Job Descrição Trello Teste' });
+        expect(created.trelloDescription).toBeNull();
+
+        const updated = await setTrelloDescription(db, created.id, 'Briefing completo do job.');
+
+        expect(updated.trelloDescription).toBe('Briefing completo do job.');
+        const found = await getJobById(db, created.id);
+        expect(found?.trelloDescription).toBe('Briefing completo do job.');
+      });
+    });
+
+    it('accepts null to clear a previously stored description', async () => {
+      await withTestTransaction(async (db) => {
+        const created = await createJob(db, { name: 'Job Descrição Trello Limpa Teste' });
+        await setTrelloDescription(db, created.id, 'Texto antigo.');
+
+        const updated = await setTrelloDescription(db, created.id, null);
+
+        expect(updated.trelloDescription).toBeNull();
+      });
+    });
+  });
+
+  describe('searchJobs', () => {
+    it('returns an empty list for a term shorter than 2 characters', async () => {
+      await withTestTransaction(async (db) => {
+        await createJob(db, { name: 'Colgate - Busca Teste' });
+        expect(await searchJobs(db, 'c')).toEqual([]);
+        expect(await searchJobs(db, '')).toEqual([]);
+      });
+    });
+
+    it('matches by name, client, and code with no matchContext', async () => {
+      await withTestTransaction(async (db) => {
+        const job = await createJob(db, {
+          name: 'Colgate - Busca Nome Teste',
+          client: 'Colgate Brasil',
+          code: 'CLG-0099',
+        });
+
+        const byName = await searchJobs(db, 'Busca Nome');
+        expect(byName.map((r) => r.id)).toContain(job.id);
+        expect(byName.find((r) => r.id === job.id)?.matchContext).toBeNull();
+
+        const byClient = await searchJobs(db, 'Colgate Brasil');
+        expect(byClient.map((r) => r.id)).toContain(job.id);
+
+        const byCode = await searchJobs(db, 'CLG-0099');
+        expect(byCode.map((r) => r.id)).toContain(job.id);
+      });
+    });
+
+    it('matches inside a Trello comment and returns a snippet as matchContext', async () => {
+      await withTestTransaction(async (db) => {
+        const job = await createJob(db, { name: 'Job Busca Comentário Teste' });
+        await setTrelloStatusUpdates(db, job.id, [
+          { author: 'Wilka', text: 'Arquivo final aprovado pelo cliente hoje.', postedAt: '2026-08-21T00:00:00.000Z' },
+        ]);
+
+        const results = await searchJobs(db, 'aprovado pelo cliente');
+        const match = results.find((r) => r.id === job.id);
+
+        expect(match).toBeDefined();
+        expect(match?.matchContext).toContain('Comentário do Trello');
+        expect(match?.matchContext).toContain('aprovado pelo cliente');
+      });
+    });
+
+    it('matches inside the Trello description and returns a snippet as matchContext', async () => {
+      await withTestTransaction(async (db) => {
+        const job = await createJob(db, { name: 'Job Busca Descrição Teste' });
+        await setTrelloDescription(db, job.id, 'Briefing: gravação externa marcada para sexta-feira.');
+
+        const results = await searchJobs(db, 'gravação externa');
+        const match = results.find((r) => r.id === job.id);
+
+        expect(match).toBeDefined();
+        expect(match?.matchContext).toContain('Descrição do Trello');
+        expect(match?.matchContext).toContain('gravação externa');
+      });
+    });
+
+    it('does not match jobs with no relevant field', async () => {
+      await withTestTransaction(async (db) => {
+        const job = await createJob(db, { name: 'Job Sem Relação Teste', client: 'Outro Cliente' });
+
+        const results = await searchJobs(db, 'termo-que-nao-existe-em-nada');
+
+        expect(results.map((r) => r.id)).not.toContain(job.id);
       });
     });
   });

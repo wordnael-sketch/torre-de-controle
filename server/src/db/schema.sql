@@ -394,3 +394,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS jobs_name_unique_idx ON jobs (lower(trim(name)
 -- "desvincular", que nunca marca isso. Mostrado como aviso na tela do job;
 -- limpo automaticamente assim que o job é vinculado a um card de novo.
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS trello_auto_unlinked_at TIMESTAMPTZ;
+
+-- Espelho da descrição do card do Trello vinculado — antes só era buscada ao
+-- vivo na hora de abrir o job (nunca persistida), o que a deixava fora de
+-- alcance da busca global. Sobrescrita por completo a cada sync, igual aos
+-- outros espelhos do Trello acima.
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS trello_description TEXT;
