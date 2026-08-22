@@ -509,6 +509,18 @@ describe('JobDetailPage', () => {
     expect(await screen.findByText(/Vinculado ao card: WPP:: COLGATE:: CAMPANHA/)).toBeInTheDocument();
   });
 
+  it('still refreshes the job after an already-linked auto-sync fails, so partially-saved data (comments etc.) is not hidden', async () => {
+    mockedApi.getJob.mockResolvedValue({ job: { ...jobDetail, trelloCardId: 'card1' } });
+    mockedApi.syncTrello.mockRejectedValue(new ApiError(502, 'trello_api_error'));
+
+    renderJobDetail();
+
+    await waitFor(() => expect(mockedApi.syncTrello).toHaveBeenCalledWith(1));
+    // getJob: uma vez no carregamento inicial, outra depois da tentativa de
+    // sync (mesmo tendo falhado) — é exatamente o refresh que faltava.
+    await waitFor(() => expect(mockedApi.getJob).toHaveBeenCalledTimes(2));
+  });
+
   it('unlinks the Trello card when the unlink action is clicked', async () => {
     mockedApi.getJob.mockResolvedValue({ job: { ...jobDetail, trelloCardId: 'card1' } });
     mockedApi.syncTrello.mockResolvedValue({

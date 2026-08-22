@@ -1438,12 +1438,25 @@ describe('POST /api/jobs/trello-link-all', () => {
     });
   });
 
-  it('skips a job that is already linked to a card', async () => {
+  it('resyncs (does not skip) a job that is already linked to a card, without counting it as newly linked', async () => {
     await withTestTransaction(async (db) => {
+      const cardDetail: TrelloCardDetail = {
+        name: 'Job Já Vinculado Teste',
+        listName: 'Em Captação 2026',
+        checklistItems: [],
+        due: null,
+        latestComment: null,
+        comments: [{ author: 'Wilka Nepomoceno', text: 'Novo comentário', postedAt: '2026-08-21T00:00:00.000Z' }],
+        members: [],
+        description: null,
+        url: 'https://trello.com/c/card-ja-vinculado',
+        labels: [],
+      };
       const trelloClient = fakeTrelloClient({
         listBoardCards: async () => [
           { id: 'outro-card', name: 'Job Já Vinculado Teste', listName: 'Em Captação 2026' },
         ],
+        getCard: async () => cardDetail,
       });
       const app = buildAppWithDeps(db, { trelloClient });
       const agent = await loggedInAgent(app);
@@ -1454,10 +1467,17 @@ describe('POST /api/jobs/trello-link-all', () => {
 
       const res = await agent.post('/api/jobs/trello-link-all');
 
+      // syncedCount cobre todo job já vinculado no banco (não só o deste
+      // teste), então não dá pra afirmar um valor exato aqui — só que pelo
+      // menos este job foi processado.
       expect(res.status).toBe(200);
       expect(res.body.linkedCount).toBe(0);
+      expect(res.body.syncedCount).toBeGreaterThanOrEqual(1);
       const stillLinked = await agent.get(`/api/jobs/${job.body.job.id}`);
       expect(stillLinked.body.job.trelloCardId).toBe('card-ja-vinculado');
+      expect(stillLinked.body.job.trelloStatusUpdates).toEqual([
+        { author: 'Wilka Nepomoceno', text: 'Novo comentário', postedAt: '2026-08-21T00:00:00.000Z' },
+      ]);
     });
   });
 });

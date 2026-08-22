@@ -70,8 +70,9 @@ export function Board() {
   async function handleLinkAllTrello() {
     setLinkingAllTrello(true);
     try {
-      await api.linkAllTrelloJobs();
+      const res = await api.linkAllTrelloJobs();
       await refresh();
+      showToast(`${res.syncedCount} job(s) sincronizado(s) com o Trello.`, 'success');
     } catch {
       showToast('Não foi possível vincular os jobs ao Trello.', 'error');
     } finally {

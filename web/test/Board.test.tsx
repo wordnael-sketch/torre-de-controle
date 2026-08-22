@@ -141,7 +141,7 @@ describe('Board', () => {
 
   it('links all jobs to Trello and refreshes the board when "Vincular todos ao Trello" is clicked', async () => {
     mockedApi.listJobs.mockResolvedValue({ jobs: [makeJob()] });
-    mockedApi.linkAllTrelloJobs.mockResolvedValue({ linkedCount: 2 });
+    mockedApi.linkAllTrelloJobs.mockResolvedValue({ linkedCount: 2, syncedCount: 5 });
     const user = userEvent.setup();
 
     renderBoard();

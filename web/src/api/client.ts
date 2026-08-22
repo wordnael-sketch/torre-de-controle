@@ -259,7 +259,7 @@ export const api = {
       { method: 'POST' },
     ),
   linkAllTrelloJobs: () =>
-    request<{ linkedCount: number }>('/api/jobs/trello-link-all', { method: 'POST' }),
+    request<{ linkedCount: number; syncedCount: number }>('/api/jobs/trello-link-all', { method: 'POST' }),
   getReference: () => request<{ phases: Phase[] }>('/api/reference'),
   listPeople: () => request<{ people: Person[] }>('/api/people'),
   createPerson: (input: { name: string; area: string }) =>

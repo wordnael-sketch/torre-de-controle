@@ -120,35 +120,40 @@ export function createJobsRouter(deps: JobsRouterDeps): Router {
       const cardByName = new Map(cards.map((c) => [c.name.trim().toLowerCase(), c]));
 
       let linkedCount = 0;
+      let syncedCount = 0;
       for (const job of jobs) {
-        if (job.trelloCardId) {
-          continue;
+        // Job sem card ainda: tenta achar um pelo nome exato e vincular.
+        // Job já vinculado: não precisa achar nada, só ressincroniza — é
+        // esse segundo caso que faltava, e é a maioria dos jobs depois que
+        // alguns já foram vinculados manualmente ou automaticamente.
+        if (!job.trelloCardId) {
+          const match = cardByName.get(job.name.trim().toLowerCase());
+          if (!match) {
+            continue;
+          }
+          const alreadyLinkedElsewhere = await getJobByTrelloCardId(deps.db, match.id);
+          if (alreadyLinkedElsewhere) {
+            continue;
+          }
+          await setTrelloLink(deps.db, job.id, match.id);
+          linkedCount++;
         }
-        const match = cardByName.get(job.name.trim().toLowerCase());
-        if (!match) {
-          continue;
-        }
-        const alreadyLinkedElsewhere = await getJobByTrelloCardId(deps.db, match.id);
-        if (alreadyLinkedElsewhere) {
-          continue;
-        }
-
-        await setTrelloLink(deps.db, job.id, match.id);
-        linkedCount++;
 
         try {
-          const linkedJob = await getJobById(deps.db, job.id);
-          await syncJobFromTrello(deps.db, deps.trelloClient, deps.classifier, linkedJob!, {
+          const currentJob = await getJobById(deps.db, job.id);
+          await syncJobFromTrello(deps.db, deps.trelloClient, deps.classifier, currentJob!, {
             bypassConfidenceGate: false,
           });
-        } catch {
+          syncedCount++;
+        } catch (err) {
           // O vínculo em si já foi feito e vale a pena manter — uma falha na
-          // sincronização de um job (Trello instável, IA indisponível) não
-          // deve impedir os próximos jobs do lote de serem vinculados.
+          // sincronização de um job (Trello instável, card sumiu etc.) não
+          // deve impedir os próximos jobs do lote de serem processados.
+          console.error(`trello-link-all: sync failed for job ${job.id}`, err);
         }
       }
 
-      res.json({ linkedCount });
+      res.json({ linkedCount, syncedCount });
     }),
   );
 

@@ -276,12 +276,22 @@ export async function syncJobFromTrello(
     await setTrelloChecklistItems(db, job.id, card.checklistItems);
   }
 
+  // Tudo acima (nome, papéis, Atendimento, comentários, checklist) já está
+  // salvo nesse ponto. A IA é sempre a última etapa, deliberadamente: se ela
+  // falhar (sem crédito, fora do ar, o que for), o resto da sincronização já
+  // aconteceu de verdade e não pode virar erro — isso já aconteceu na prática
+  // (créditos da Anthropic esgotados fazia toda sincronização "falhar" mesmo
+  // com os dados corretos já gravados, e o cliente nunca recarregava a tela).
   let suggestions: ResolvedSuggestion[] = [];
   if (classifier) {
-    const evidenceText = buildTrelloEvidenceText(card);
-    suggestions = await classifyAndApply(db, classifier, job.id, evidenceText, {
-      bypassConfidenceGate: options.bypassConfidenceGate,
-    });
+    try {
+      const evidenceText = buildTrelloEvidenceText(card);
+      suggestions = await classifyAndApply(db, classifier, job.id, evidenceText, {
+        bypassConfidenceGate: options.bypassConfidenceGate,
+      });
+    } catch (err) {
+      console.error('classifyAndApply failed during trello sync — continuing without suggestions', err);
+    }
   }
 
   return { status: 'synced', suggestions, trelloCard: buildTrelloCardView(card) };

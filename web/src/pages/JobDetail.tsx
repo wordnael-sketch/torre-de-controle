@@ -157,13 +157,16 @@ export function JobDetailPage() {
         const res = await api.syncTrello(currentJob.id);
         setSuggestions(res.suggestions);
         setTrelloCard(res.trelloCard);
-        await refresh();
       } catch {
-        // Sincronização automática falhou (Trello não configurado, indisponível, ou IA não
-        // configurada) — falha silenciosa é aceitável aqui: é uma tentativa em segundo plano,
-        // não uma ação que o usuário pediu diretamente. O painel de colar mensagens do
-        // WhatsApp continua disponível como alternativa manual.
+        // A chamada em si pode ter falhado (Trello indisponível, card sumiu,
+        // IA sem crédito), mas o servidor grava nome/papéis/Atendimento/
+        // comentários/checklist ANTES de tentar a IA — então mesmo numa
+        // resposta de erro pode já existir coisa nova pra mostrar. O refresh
+        // abaixo roda com ou sem erro aqui, pra nunca esconder um sync que
+        // deu parcialmente certo (é o mesmo refresh() incondicional que os
+        // outros dois ramos desta função já fazem depois de linkAndSync).
       }
+      await refresh();
       return;
     }
 

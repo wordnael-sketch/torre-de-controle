@@ -269,6 +269,51 @@ describe('syncJobFromTrello', () => {
     });
   });
 
+  it('still returns synced (with everything else already saved) when the classifier itself throws', async () => {
+    await withTestTransaction(async (db) => {
+      // Reproduz o bug real de produção: créditos da Anthropic esgotados
+      // faziam classifyAndApply lançar, e como isso não era pego, o sync
+      // inteiro "falhava" mesmo com nome/checklist/comentários já gravados.
+      const created = await createJob(db, { name: 'Job Sync IA Falha Teste' });
+      await setTrelloLink(db, created.id, 'card1');
+      const job = (await getJobById(db, created.id))!;
+
+      const cardDetail: TrelloCardDetail = {
+        name: 'Job Sync IA Falha Teste',
+        listName: 'Em Pós Produção',
+        checklistItems: [{ name: 'Item 1', checked: true }],
+        due: null,
+        description: null,
+        url: 'https://trello.com/c/test',
+        labels: [],
+        latestComment: 'Comentário novo',
+        members: [],
+        comments: [{ author: 'Alguém', text: 'Comentário novo', postedAt: '2026-08-21T00:00:00.000Z' }],
+      };
+      const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
+      const failingClassifier: Classifier = {
+        classify: async () => {
+          throw new Error('Your credit balance is too low to access the Anthropic API.');
+        },
+      };
+
+      const result = await syncJobFromTrello(db, trelloClient, failingClassifier, job, {
+        bypassConfidenceGate: false,
+      });
+
+      expect(result.status).toBe('synced');
+      if (result.status === 'synced') {
+        expect(result.suggestions).toEqual([]);
+      }
+
+      const updatedJob = await getJobById(db, created.id);
+      expect(updatedJob?.trelloChecklistItems).toEqual([{ name: 'Item 1', checked: true }]);
+      expect(updatedJob?.trelloStatusUpdates).toEqual([
+        { author: 'Alguém', text: 'Comentário novo', postedAt: '2026-08-21T00:00:00.000Z' },
+      ]);
+    });
+  });
+
   it('syncs members and runs the classifier with bypassConfidenceGate: false by default', async () => {
     await withTestTransaction(async (db) => {
       const created = await createJob(db, { name: 'Job Sync Padrão Teste' });
