@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { createApp } from './app';
 import { createDb } from './db';
 import { createGoogleVerifier } from './auth/googleVerifier';
-import { createAnthropicClassifier } from './services/classifier';
+import { createAnthropicClassifier, createGeminiClassifier } from './services/classifier';
 import { createHttpTrelloClient } from './services/trello';
 import type { Express } from 'express';
 
@@ -13,6 +13,7 @@ export async function createAppFromEnv(): Promise<Express> {
   const allowedDomain = process.env.ALLOWED_EMAIL_DOMAIN ?? 'ilhacrossmidia.com.br';
   const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
   const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
+  const geminiApiKey = process.env.GEMINI_API_KEY;
   const trelloApiKey = process.env.TRELLO_API_KEY;
   const trelloToken = process.env.TRELLO_TOKEN;
   const trelloBoardId = process.env.TRELLO_BOARD_ID;
@@ -38,7 +39,13 @@ export async function createAppFromEnv(): Promise<Express> {
     jwtSecret,
     allowedDomain,
     frontendUrl,
-    classifier: anthropicApiKey ? createAnthropicClassifier(anthropicApiKey) : undefined,
+    // Gemini tem prioridade quando as duas estão configuradas — foi o pedido
+    // ao trocar de provedor (créditos da Anthropic esgotados).
+    classifier: geminiApiKey
+      ? createGeminiClassifier(geminiApiKey)
+      : anthropicApiKey
+        ? createAnthropicClassifier(anthropicApiKey)
+        : undefined,
     trelloClient: trelloConfigured
       ? createHttpTrelloClient(trelloApiKey!, trelloToken!, trelloBoardId!)
       : undefined,

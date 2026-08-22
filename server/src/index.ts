@@ -6,8 +6,8 @@ createAppFromEnv()
   .then((app) => {
     app.listen(port, () => {
       console.log(`Server listening on port ${port}`);
-      if (!process.env.ANTHROPIC_API_KEY) {
-        console.warn('ANTHROPIC_API_KEY not set — POST /api/jobs/:id/classify will return 503');
+      if (!process.env.GEMINI_API_KEY && !process.env.ANTHROPIC_API_KEY) {
+        console.warn('GEMINI_API_KEY/ANTHROPIC_API_KEY not set — POST /api/jobs/:id/classify will return 503');
       }
       if (!process.env.TRELLO_API_KEY || !process.env.TRELLO_TOKEN || !process.env.TRELLO_BOARD_ID) {
         console.warn(

@@ -108,3 +108,78 @@ export function createAnthropicClassifier(apiKey: string): Classifier {
     },
   };
 }
+
+const GEMINI_RESPONSE_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    suggestions: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          tipo: { type: 'STRING', enum: ['checklist_item', 'bola_com'] },
+          valor: { type: 'STRING' },
+          confidence: { type: 'NUMBER' },
+          evidencia: { type: 'STRING' },
+        },
+        required: ['tipo', 'valor', 'confidence', 'evidencia'],
+      },
+    },
+  },
+  required: ['suggestions'],
+};
+
+interface GeminiResponse {
+  candidates?: {
+    content?: {
+      parts?: { text?: string }[];
+    };
+  }[];
+}
+
+/**
+ * Sem SDK — a API do Gemini é só REST, e evita adicionar uma dependência
+ * nova só pra isso (mesmo padrão do TrelloClient). Usa responseMimeType
+ * "application/json" + responseSchema em vez de function-calling: mais
+ * direto pro que a gente quer (um JSON com o formato certo), sem precisar
+ * simular uma "ferramenta" como faz a Anthropic.
+ */
+export function createGeminiClassifier(
+  apiKey: string,
+  model = 'gemini-flash-latest',
+  fetchImpl: typeof fetch = fetch,
+): Classifier {
+  return {
+    async classify(input: ClassifyInput): Promise<RawSuggestion[]> {
+      const res = await fetchImpl(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: buildSystemPrompt(input) }] },
+            contents: [{ role: 'user', parts: [{ text: input.pastedText }] }],
+            generationConfig: {
+              responseMimeType: 'application/json',
+              responseSchema: GEMINI_RESPONSE_SCHEMA,
+            },
+          }),
+        },
+      );
+
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        throw new Error(`Gemini API error ${res.status}: ${body}`);
+      }
+
+      const data = (await res.json()) as GeminiResponse;
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) {
+        return [];
+      }
+
+      const parsed = JSON.parse(text) as { suggestions?: RawSuggestion[] };
+      return parsed.suggestions ?? [];
+    },
+  };
+}
