@@ -244,9 +244,24 @@ export async function syncJobFromTrello(
   if (job.phaseId) {
     await syncTrelloMembersToRoles(db, job.id, job.phaseId, memberNames);
   }
-  await syncTrelloMembersToAtendimento(db, job.id, job.atendimentoPersonId, memberNames);
 
   const statusUpdates = extractStatusUpdates(card.comments);
+  const lastStatusAuthor = statusUpdates[0]?.author;
+
+  // Atendimento é o único campo onde o Trello sempre manda: quem postou o
+  // status mais recente é quem está de fato tocando a conta agora, então
+  // isso corrige o responsável mesmo que já exista um definido — diferente
+  // de Comercial/Produção Executiva (syncTrelloMembersToRoles acima), que
+  // continuam só preenchendo quando está vazio.
+  const lastStatusAuthorPersonId = lastStatusAuthor ? await matchAtendimentoPersonId(db, lastStatusAuthor) : null;
+  if (lastStatusAuthorPersonId !== null) {
+    if (job.atendimentoPersonId !== lastStatusAuthorPersonId) {
+      await setAtendimento(db, job.id, lastStatusAuthorPersonId);
+    }
+  } else {
+    await syncTrelloMembersToAtendimento(db, job.id, job.atendimentoPersonId, memberNames);
+  }
+
   if (JSON.stringify(statusUpdates) !== JSON.stringify(job.trelloStatusUpdates)) {
     await setTrelloStatusUpdates(db, job.id, statusUpdates);
   }

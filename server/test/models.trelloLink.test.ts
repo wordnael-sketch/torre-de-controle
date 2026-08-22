@@ -534,6 +534,73 @@ describe('syncJobFromTrello', () => {
     });
   });
 
+  it('corrects Atendimento to whoever posted the most recent STATUS comment, even overwriting one already set', async () => {
+    await withTestTransaction(async (db) => {
+      const camila = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Camila' AND area = 'Atendimento'`);
+      const created = await createJob(db, {
+        name: 'Job Sync Status Corrige Atendimento Teste',
+        atendimentoPersonId: camila.rows[0].id,
+      });
+      await setTrelloLink(db, created.id, 'card1');
+      const job = (await getJobById(db, created.id))!;
+
+      const cardDetail: TrelloCardDetail = {
+        name: 'Job Sync Status Corrige Atendimento Teste',
+        listName: 'Em Pós Produção',
+        checklistItems: [],
+        due: null,
+        description: null,
+        url: 'https://trello.com/c/test',
+        labels: [],
+        latestComment: 'STATUS 20.08',
+        members: [],
+        comments: [
+          { author: 'Wilka Nepomoceno', text: 'STATUS 20.08\nTudo em dia.', postedAt: '2026-08-20T13:51:00.000Z' },
+        ],
+      };
+      const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
+
+      await syncJobFromTrello(db, trelloClient, undefined, job, { bypassConfidenceGate: false });
+
+      const updatedJob = await getJobById(db, created.id);
+      const wilka = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Wilka' AND area = 'Atendimento'`);
+      expect(updatedJob?.atendimentoPersonId).toBe(wilka.rows[0].id);
+    });
+  });
+
+  it('falls back to the fill-if-empty member match when the STATUS author matches no one in Atendimento', async () => {
+    await withTestTransaction(async (db) => {
+      const camila = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Camila' AND area = 'Atendimento'`);
+      const created = await createJob(db, {
+        name: 'Job Sync Status Autor Desconhecido Teste',
+        atendimentoPersonId: camila.rows[0].id,
+      });
+      await setTrelloLink(db, created.id, 'card1');
+      const job = (await getJobById(db, created.id))!;
+
+      const cardDetail: TrelloCardDetail = {
+        name: 'Job Sync Status Autor Desconhecido Teste',
+        listName: 'Em Pós Produção',
+        checklistItems: [],
+        due: null,
+        description: null,
+        url: 'https://trello.com/c/test',
+        labels: [],
+        latestComment: 'STATUS 20.08',
+        members: [],
+        comments: [{ author: 'Cliente Externo', text: 'STATUS 20.08\nAprovado!', postedAt: '2026-08-20T13:51:00.000Z' }],
+      };
+      const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
+
+      await syncJobFromTrello(db, trelloClient, undefined, job, { bypassConfidenceGate: false });
+
+      // Ninguém chamado "Cliente Externo" existe em Atendimento — mantém
+      // Camila, exatamente a mesma proteção contra sobrescrita de sempre.
+      const updatedJob = await getJobById(db, created.id);
+      expect(updatedJob?.atendimentoPersonId).toBe(camila.rows[0].id);
+    });
+  });
+
   it('returns a faithful trelloCard view: description, url, labels, and a deduped members+labels people list', async () => {
     await withTestTransaction(async (db) => {
       const created = await createJob(db, { name: 'Job Sync Card Fiel Teste' });
