@@ -8,6 +8,7 @@ import {
   advanceJobStatus,
   setJobStatus,
   setAtendimento,
+  setAtendimentoBackup,
   setJobName,
   setTrelloStatusUpdates,
   setTrelloChecklistItems,
@@ -246,6 +247,21 @@ describe('atendimento responsável', () => {
 
       expect(updated.atendimentoPersonId).toBe(wilka.rows[0].id);
       expect(updated.atendimentoPersonName).toBe('Wilka');
+    });
+  });
+
+  it('setAtendimentoBackup updates the backup responsible person and returns the updated job', async () => {
+    await withTestTransaction(async (db) => {
+      const created = await createJob(db, { name: 'Job Backup Reatribuição Teste' });
+      const isabela = await db.query<{ id: number }>(
+        `SELECT id FROM people WHERE name = 'Isabela' AND area = 'Atendimento'`,
+      );
+      expect(created.atendimentoBackupPersonId).toBeNull();
+
+      const updated = await setAtendimentoBackup(db, created.id, isabela.rows[0].id);
+
+      expect(updated.atendimentoBackupPersonId).toBe(isabela.rows[0].id);
+      expect(updated.atendimentoBackupPersonName).toBe('Isabela');
     });
   });
 

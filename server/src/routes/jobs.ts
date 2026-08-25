@@ -10,6 +10,7 @@ import {
   setJobStatus,
   setLastWhatsappActivity,
   setAtendimento,
+  setAtendimentoBackup,
   setJobName,
   deleteJob,
   searchJobs,
@@ -339,6 +340,44 @@ export function createJobsRouter(deps: JobsRouterDeps): Router {
       }
 
       const job = await setAtendimento(deps.db, jobId, personId!);
+      res.json({ job });
+    }),
+  );
+
+  router.patch(
+    '/:id/atendimento-backup',
+    asyncHandler(async (req, res) => {
+      const jobId = parseId(req.params.id);
+      if (jobId === null) {
+        res.status(400).json({ error: 'invalid job id' });
+        return;
+      }
+
+      const { personId } = req.body as { personId?: number };
+
+      if (!Number.isInteger(personId)) {
+        res.status(400).json({ error: 'personId is required' });
+        return;
+      }
+
+      const existing = await getJobById(deps.db, jobId);
+      if (!existing) {
+        res.status(404).json({ error: 'Job not found' });
+        return;
+      }
+
+      const person = await deps.db.query<{ area: string; active: boolean }>(
+        'SELECT area, active FROM people WHERE id = $1',
+        [personId],
+      );
+      if (person.rows.length === 0 || person.rows[0].area !== 'Atendimento' || !person.rows[0].active) {
+        res.status(400).json({
+          error: 'personId must reference an active person in the Atendimento area',
+        });
+        return;
+      }
+
+      const job = await setAtendimentoBackup(deps.db, jobId, personId!);
       res.json({ job });
     }),
   );

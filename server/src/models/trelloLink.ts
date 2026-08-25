@@ -1,9 +1,10 @@
 import type { AppDatabase } from '../db';
-import { listPeople, type Person } from './people';
+import { listPeople, createPerson, type Person } from './people';
 import { getJobRoleAssignments, setJobRoleAssignment } from './jobRoleAssignments';
 import {
   createJob,
   setAtendimento,
+  setAtendimentoBackup,
   setJobName,
   setTrelloStatusUpdates,
   setTrelloChecklistItems,
@@ -253,15 +254,38 @@ export async function syncJobFromTrello(
   // status mais recente é quem está de fato tocando a conta agora, então
   // isso corrige o responsável mesmo que já exista um definido — diferente
   // de Comercial/Produção Executiva (syncTrelloMembersToRoles acima), que
-  // continuam só preenchendo quando está vazio.
-  const lastStatusAuthorPersonId = lastStatusAuthor ? await matchAtendimentoPersonId(db, lastStatusAuthor) : null;
-  if (lastStatusAuthorPersonId !== null) {
-    if (job.atendimentoPersonId !== lastStatusAuthorPersonId) {
-      await setAtendimento(db, job.id, lastStatusAuthorPersonId);
+  // continuam só preenchendo quando está vazio. Se essa pessoa ainda não
+  // estiver cadastrada em Atendimento, cadastra na hora — é o único sinal
+  // forte o bastante pra justificar criação automática.
+  let principalPersonId: number | null = job.atendimentoPersonId;
+  let principalName: string | null = job.atendimentoPersonName;
+
+  if (lastStatusAuthor) {
+    principalPersonId = await matchOrCreateAtendimentoPersonId(db, lastStatusAuthor);
+    principalName = lastStatusAuthor;
+    if (job.atendimentoPersonId !== principalPersonId) {
+      await setAtendimento(db, job.id, principalPersonId);
     }
   } else {
     await syncTrelloMembersToAtendimento(db, job.id, job.atendimentoPersonId, memberNames);
+    if (job.atendimentoPersonId === null) {
+      const refreshed = await getJobById(db, job.id);
+      principalPersonId = refreshed?.atendimentoPersonId ?? null;
+      principalName = refreshed?.atendimentoPersonName ?? null;
+    }
+
+    // Ainda sem responsável nenhum (card novo, sem comentário STATUS ainda,
+    // e nenhum membro/etiqueta bateu com alguém já cadastrado) — com
+    // exatamente os 2 membros do padrão do time, assume o primeiro como
+    // principal em vez de deixar o job sem ninguém.
+    if (principalPersonId === null && card.members.length === 2) {
+      principalPersonId = await matchOrCreateAtendimentoPersonId(db, card.members[0]);
+      principalName = card.members[0];
+      await setAtendimento(db, job.id, principalPersonId);
+    }
   }
+
+  await resolveAndSetAtendimentoBackup(db, job, card.members, principalPersonId, principalName);
 
   // Espelho de comentários mostrado no job: os 3 mais recentes, não só os
   // "STATUS" — statusUpdates acima continua existindo só como sinal pro
@@ -314,12 +338,73 @@ async function matchAtendimentoPersonId(db: AppDatabase, name: string): Promise<
 }
 
 /**
+ * Igual matchAtendimentoPersonId, mas cadastra a pessoa em Atendimento na
+ * hora quando ninguém bate — usado só pro sinal forte o bastante pra
+ * justificar isso (autor do "STATUS", criador do card, ou o outro membro
+ * do card quando o principal já foi identificado).
+ */
+async function matchOrCreateAtendimentoPersonId(db: AppDatabase, name: string): Promise<number> {
+  const existingId = await matchAtendimentoPersonId(db, name);
+  if (existingId !== null) {
+    return existingId;
+  }
+  try {
+    const created = await createPerson(db, { name, area: 'Atendimento' });
+    return created.id;
+  } catch (err) {
+    // Corrida rara (duas sincronizações do mesmo card ao mesmo tempo
+    // tentando cadastrar a mesma pessoa nova): o índice único (name, area)
+    // rejeita a segunda inserção — a primeira já criou quem procurávamos.
+    const raceMatch = await matchAtendimentoPersonId(db, name);
+    if (raceMatch !== null) {
+      return raceMatch;
+    }
+    throw err;
+  }
+}
+
+function namesMatch(a: string, b: string): boolean {
+  const normalizedA = normalizePersonName(a);
+  const normalizedB = normalizePersonName(b);
+  return normalizedA.includes(normalizedB) || normalizedB.includes(normalizedA);
+}
+
+/**
+ * Backup é quem, dos 2 Membros do card no Trello, não é o principal — só
+ * decide isso quando o card tem exatamente 2 membros (o padrão do time:
+ * principal + backup); com 1 ou 3+ membros não dá pra adivinhar quem é
+ * quem, então não mexe. Preenche só quando ainda está vazio — diferente do
+ * principal, nunca sobrescreve um backup já definido.
+ */
+async function resolveAndSetAtendimentoBackup(
+  db: AppDatabase,
+  job: Job,
+  cardMembers: string[],
+  principalPersonId: number | null,
+  principalName: string | null,
+): Promise<void> {
+  if (job.atendimentoBackupPersonId !== null || cardMembers.length !== 2 || !principalName) {
+    return;
+  }
+
+  const backupName = cardMembers.find((member) => !namesMatch(member, principalName));
+  if (!backupName) {
+    return;
+  }
+
+  const backupPersonId = await matchOrCreateAtendimentoPersonId(db, backupName);
+  if (backupPersonId !== principalPersonId) {
+    await setAtendimentoBackup(db, job.id, backupPersonId);
+  }
+}
+
+/**
  * Um card novo no Trello não tem job nenhum esperando por ele — isso cria
  * (ou, se já existir um job com esse nome exato ainda sem vínculo, linka
  * nele em vez de duplicar) e sincroniza tudo de uma vez. Quem criou o card
- * no Trello vira o Atendimento responsável quando dá pra reconhecer essa
- * pessoa no cadastro; senão o job entra sem Atendimento definido, do mesmo
- * jeito que qualquer outro job sem responsável hoje.
+ * no Trello vira o Atendimento responsável, cadastrado na hora em
+ * Atendimento se ainda não existir — mesmo sinal forte que justifica
+ * criação automática no sync normal (ver matchOrCreateAtendimentoPersonId).
  */
 export async function createJobFromTrelloCard(
   db: AppDatabase,
@@ -346,7 +431,7 @@ export async function createJobFromTrelloCard(
     await setTrelloLink(db, existingJob.id, cardId);
     job = (await getJobById(db, existingJob.id))!;
   } else {
-    const atendimentoPersonId = creatorName ? await matchAtendimentoPersonId(db, creatorName) : null;
+    const atendimentoPersonId = creatorName ? await matchOrCreateAtendimentoPersonId(db, creatorName) : null;
     const created = await createJob(db, { name: card.name, atendimentoPersonId });
     await setTrelloLink(db, created.id, cardId);
     job = (await getJobById(db, created.id))!;

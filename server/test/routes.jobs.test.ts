@@ -759,6 +759,66 @@ describe('PATCH /api/jobs/:id/atendimento', () => {
   });
 });
 
+describe('PATCH /api/jobs/:id/atendimento-backup', () => {
+  it('assigns the backup responsible person and returns the updated job', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+      const created = await agent
+        .post('/api/jobs')
+        .send({ name: 'Job Backup Rota Teste', atendimentoPersonId });
+
+      const camila = await db.query<{ id: number }>(
+        `SELECT id FROM people WHERE name = 'Camila' AND area = 'Atendimento'`,
+      );
+
+      const res = await agent
+        .patch(`/api/jobs/${created.body.job.id}/atendimento-backup`)
+        .send({ personId: camila.rows[0].id });
+
+      expect(res.status).toBe(200);
+      expect(res.body.job.atendimentoBackupPersonId).toBe(camila.rows[0].id);
+      expect(res.body.job.atendimentoBackupPersonName).toBe('Camila');
+    });
+  });
+
+  it('rejects a personId from a different area', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+      const created = await agent
+        .post('/api/jobs')
+        .send({ name: 'Job Backup Área Errada Teste', atendimentoPersonId });
+
+      const anne = await db.query<{ id: number }>(
+        `SELECT id FROM people WHERE name = 'Anne' AND area = 'Comercial'`,
+      );
+
+      const res = await agent
+        .patch(`/api/jobs/${created.body.job.id}/atendimento-backup`)
+        .send({ personId: anne.rows[0].id });
+
+      expect(res.status).toBe(400);
+    });
+  });
+
+  it('returns 404 for a nonexistent job', async () => {
+    await withTestTransaction(async (db) => {
+      const app = buildApp(db);
+      const agent = await loggedInAgent(app);
+      const atendimentoPersonId = await getAtendimentoPersonId(db);
+
+      const res = await agent
+        .patch('/api/jobs/999999999/atendimento-backup')
+        .send({ personId: atendimentoPersonId });
+
+      expect(res.status).toBe(404);
+    });
+  });
+});
+
 describe('PATCH /api/jobs/:id/name', () => {
   it('renames the job and returns the updated job', async () => {
     await withTestTransaction(async (db) => {

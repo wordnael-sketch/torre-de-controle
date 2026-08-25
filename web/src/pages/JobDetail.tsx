@@ -343,6 +343,17 @@ export function JobDetailPage() {
     }
   }
 
+  async function handleAssignAtendimentoBackup(personId: number) {
+    if (!personId) return;
+    setError(null);
+    try {
+      await api.setAtendimentoBackup(jobId, personId);
+      await refresh();
+    } catch {
+      setError('Não foi possível atualizar o Atendimento backup.');
+    }
+  }
+
   async function handleClassify() {
     if (!pasteText.trim()) return;
     setError(null);
@@ -450,6 +461,25 @@ export function JobDetailPage() {
             Nenhum Atendimento responsável atribuído — selecione um acima.
           </p>
         )}
+
+        <div className="job-detail-atendimento">
+          <span className="label-caps">Atendimento backup</span>
+          <select
+            aria-label="Atendimento backup"
+            value={job.atendimentoBackupPersonId ?? ''}
+            onChange={(e) => handleAssignAtendimentoBackup(Number(e.target.value))}
+          >
+            <option value="" disabled>
+              (selecionar)
+            </option>
+            {peopleByArea('Atendimento').map((person) => (
+              <option key={person.id} value={person.id}>
+                {person.name}
+                {person.title ? ` · ${person.title}` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
 
         {job.trelloAutoUnlinkedAt && (
           <p className="job-detail-warning job-detail-warning--amber">

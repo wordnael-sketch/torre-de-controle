@@ -28,6 +28,8 @@ export interface Job {
   trelloAutoUnlinkedAt: string | null;
   atendimentoPersonId: number | null;
   atendimentoPersonName: string | null;
+  atendimentoBackupPersonId: number | null;
+  atendimentoBackupPersonName: string | null;
   trelloStatusUpdates: TrelloStatusUpdate[];
   trelloChecklistItems: TrelloChecklistItem[];
   trelloDescription: string | null;
@@ -55,6 +57,8 @@ interface JobRow {
   trello_auto_unlinked_at: string | Date | null;
   atendimento_person_id: number | null;
   atendimento_person_name: string | null;
+  atendimento_backup_person_id: number | null;
+  atendimento_backup_person_name: string | null;
   trello_status_updates: TrelloStatusUpdate[];
   trello_checklist_items: TrelloChecklistItem[];
   trello_description: string | null;
@@ -70,6 +74,7 @@ const JOB_SELECT = `
     p.id AS phase_id,
     p.name AS phase_name,
     atendimento.name AS atendimento_person_name,
+    atendimento_backup.name AS atendimento_backup_person_name,
     (
       CASE
         WHEN s.primary_role = 'Atendimento' THEN atendimento.name
@@ -86,6 +91,7 @@ const JOB_SELECT = `
   LEFT JOIN statuses s ON s.id = j.status_id
   LEFT JOIN phases p ON p.id = s.phase_id
   LEFT JOIN people atendimento ON atendimento.id = j.atendimento_person_id
+  LEFT JOIN people atendimento_backup ON atendimento_backup.id = j.atendimento_backup_person_id
 `;
 
 async function rowToJob(db: AppDatabase, row: JobRow, precomputedLastStatusChangeAt?: Date | null): Promise<Job> {
@@ -121,6 +127,8 @@ async function rowToJob(db: AppDatabase, row: JobRow, precomputedLastStatusChang
     trelloAutoUnlinkedAt: row.trello_auto_unlinked_at ? new Date(row.trello_auto_unlinked_at).toISOString() : null,
     atendimentoPersonId: row.atendimento_person_id,
     atendimentoPersonName: row.atendimento_person_name,
+    atendimentoBackupPersonId: row.atendimento_backup_person_id,
+    atendimentoBackupPersonName: row.atendimento_backup_person_name,
     trelloStatusUpdates: row.trello_status_updates,
     trelloChecklistItems: row.trello_checklist_items,
     trelloDescription: row.trello_description,
@@ -296,6 +304,15 @@ export async function setJobName(db: AppDatabase, jobId: number, name: string): 
 
 export async function setAtendimento(db: AppDatabase, jobId: number, personId: number): Promise<Job> {
   await db.query('UPDATE jobs SET atendimento_person_id = $1, updated_at = now() WHERE id = $2', [
+    personId,
+    jobId,
+  ]);
+  const job = await getJobById(db, jobId);
+  return job!;
+}
+
+export async function setAtendimentoBackup(db: AppDatabase, jobId: number, personId: number): Promise<Job> {
+  await db.query('UPDATE jobs SET atendimento_backup_person_id = $1, updated_at = now() WHERE id = $2', [
     personId,
     jobId,
   ]);

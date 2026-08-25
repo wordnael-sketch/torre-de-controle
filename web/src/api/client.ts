@@ -103,6 +103,8 @@ export interface Job {
   trelloAutoUnlinkedAt: string | null;
   atendimentoPersonId: number | null;
   atendimentoPersonName: string | null;
+  atendimentoBackupPersonId: number | null;
+  atendimentoBackupPersonName: string | null;
   trelloStatusUpdates: TrelloStatusUpdate[];
   trelloChecklistItems: TrelloChecklistMirrorItem[];
   bolaComDayCounts?: BolaComDayCounts;
@@ -235,6 +237,11 @@ export const api = {
     }),
   setAtendimento: (id: number, personId: number) =>
     request<{ job: Job }>(`/api/jobs/${id}/atendimento`, {
+      method: 'PATCH',
+      body: JSON.stringify({ personId }),
+    }),
+  setAtendimentoBackup: (id: number, personId: number) =>
+    request<{ job: Job }>(`/api/jobs/${id}/atendimento-backup`, {
       method: 'PATCH',
       body: JSON.stringify({ personId }),
     }),

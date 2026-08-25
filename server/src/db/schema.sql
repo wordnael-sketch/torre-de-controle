@@ -400,3 +400,10 @@ ALTER TABLE jobs ADD COLUMN IF NOT EXISTS trello_auto_unlinked_at TIMESTAMPTZ;
 -- alcance da busca global. Sobrescrita por completo a cada sync, igual aos
 -- outros espelhos do Trello acima.
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS trello_description TEXT;
+
+-- Atendimento backup: normalmente o card do Trello tem 2 pessoas atribuídas
+-- (Membros) — a principal continua em atendimento_person_id (quem postou o
+-- último "STATUS"), a outra vira o backup aqui. Preenchido só quando ainda
+-- está vazio (não sobrescreve um backup já definido manualmente), diferente
+-- do principal, que sempre sobrescreve a partir do autor do STATUS.
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS atendimento_backup_person_id INTEGER REFERENCES people(id);

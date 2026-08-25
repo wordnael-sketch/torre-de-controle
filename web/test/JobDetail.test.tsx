@@ -19,6 +19,7 @@ vi.mock('../src/api/client', async () => {
       setJobStatus: vi.fn(),
       assignRole: vi.fn(),
       setAtendimento: vi.fn(),
+      setAtendimentoBackup: vi.fn(),
       setBolaCom: vi.fn(),
       setLastActivity: vi.fn(),
       classifyJob: vi.fn(),
@@ -60,6 +61,8 @@ const jobDetail = {
   highlightedPersonName: 'Anne',
   atendimentoPersonId: 7,
   atendimentoPersonName: 'Wilka',
+  atendimentoBackupPersonId: null,
+  atendimentoBackupPersonName: null,
   bolaCom: 'ilha' as const,
   lastWhatsappActivityAt: null,
   actionRequired: 'Preenchimento do Briefing Padronizado.',
@@ -116,6 +119,7 @@ describe('JobDetailPage', () => {
     mockedApi.setJobStatus.mockReset();
     mockedApi.assignRole.mockReset();
     mockedApi.setAtendimento.mockReset();
+    mockedApi.setAtendimentoBackup.mockReset();
     mockedApi.setBolaCom.mockReset();
     mockedApi.setLastActivity.mockReset();
     mockedApi.classifyJob.mockReset();
@@ -211,8 +215,17 @@ describe('JobDetailPage', () => {
   it('shows the Atendimento responsável name and title', async () => {
     renderJobDetail();
 
-    expect(await screen.findByLabelText('Atendimento responsável')).toHaveValue('7');
-    expect(screen.getByRole('option', { name: 'Wilka · Head' })).toBeInTheDocument();
+    const select = await screen.findByLabelText('Atendimento responsável');
+    expect(select).toHaveValue('7');
+    expect(within(select).getByRole('option', { name: 'Wilka · Head' })).toBeInTheDocument();
+  });
+
+  it('shows a separate Atendimento backup dropdown', async () => {
+    renderJobDetail();
+
+    const select = await screen.findByLabelText('Atendimento backup');
+    expect(select).toHaveValue('');
+    expect(within(select).getByRole('option', { name: 'Wilka · Head' })).toBeInTheDocument();
   });
 
   it('shows a warning when no Atendimento responsável is assigned', async () => {
@@ -254,6 +267,18 @@ describe('JobDetailPage', () => {
     await user.selectOptions(screen.getByLabelText('Atendimento responsável'), '7');
 
     await waitFor(() => expect(mockedApi.setAtendimento).toHaveBeenCalledWith(1, 7));
+  });
+
+  it('assigns the Atendimento backup via its own select', async () => {
+    mockedApi.setAtendimentoBackup.mockResolvedValue({ job: { ...jobDetail, atendimentoBackupPersonId: 7 } });
+    const user = userEvent.setup();
+
+    renderJobDetail();
+
+    await screen.findByRole('heading', { name: 'Colgate - Color Correct Wave 2' });
+    await user.selectOptions(screen.getByLabelText('Atendimento backup'), '7');
+
+    await waitFor(() => expect(mockedApi.setAtendimentoBackup).toHaveBeenCalledWith(1, 7));
   });
 
   it('toggles bola-com when a toggle button is clicked', async () => {

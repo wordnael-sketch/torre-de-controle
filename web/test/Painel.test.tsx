@@ -40,6 +40,8 @@ function makeJob(overrides: Record<string, unknown> = {}) {
     highlightedPersonName: null,
     atendimentoPersonId: null,
     atendimentoPersonName: null,
+    atendimentoBackupPersonId: null,
+    atendimentoBackupPersonName: null,
     bolaCom: 'ilha' as const,
     lastWhatsappActivityAt: null,
     actionRequired: null,

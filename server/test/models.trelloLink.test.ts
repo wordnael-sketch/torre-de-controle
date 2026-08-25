@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createJob, getJobById } from '../src/models/job';
+import { createJob, getJobById, setAtendimentoBackup } from '../src/models/job';
 import {
   setTrelloLink,
   autoUnlinkTrello,
@@ -613,7 +613,7 @@ describe('syncJobFromTrello', () => {
     });
   });
 
-  it('falls back to the fill-if-empty member match when the STATUS author matches no one in Atendimento', async () => {
+  it('creates the STATUS author in Atendimento when no one matches, and overwrites the previous responsável with them', async () => {
     await withTestTransaction(async (db) => {
       const camila = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Camila' AND area = 'Atendimento'`);
       const created = await createJob(db, {
@@ -633,16 +633,160 @@ describe('syncJobFromTrello', () => {
         labels: [],
         latestComment: 'STATUS 20.08',
         members: [],
-        comments: [{ author: 'Cliente Externo', text: 'STATUS 20.08\nAprovado!', postedAt: '2026-08-20T13:51:00.000Z' }],
+        comments: [{ author: 'Autora Nova Não Cadastrada', text: 'STATUS 20.08\nAprovado!', postedAt: '2026-08-20T13:51:00.000Z' }],
       };
       const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
 
       await syncJobFromTrello(db, trelloClient, undefined, job, { bypassConfidenceGate: false });
 
-      // Ninguém chamado "Cliente Externo" existe em Atendimento — mantém
-      // Camila, exatamente a mesma proteção contra sobrescrita de sempre.
+      // Ninguém chamado "Autora Nova Não Cadastrada" existia em Atendimento —
+      // o autor do STATUS é o único sinal forte o bastante pra criar a
+      // pessoa na hora e assumir o job, mesmo sobrescrevendo Camila.
+      const newPerson = await db.query<{ id: number; active: boolean }>(
+        `SELECT id, active FROM people WHERE name = 'Autora Nova Não Cadastrada' AND area = 'Atendimento'`,
+      );
+      expect(newPerson.rows).toHaveLength(1);
+      expect(newPerson.rows[0].active).toBe(true);
+
       const updatedJob = await getJobById(db, created.id);
-      expect(updatedJob?.atendimentoPersonId).toBe(camila.rows[0].id);
+      expect(updatedJob?.atendimentoPersonId).toBe(newPerson.rows[0].id);
+    });
+  });
+
+  describe('Atendimento backup (segundo membro do card)', () => {
+    it('sets the other of exactly 2 Trello members as backup, creating them if unregistered', async () => {
+      await withTestTransaction(async (db) => {
+        const created = await createJob(db, { name: 'Job Backup Cria Teste' });
+        await setTrelloLink(db, created.id, 'card1');
+        const job = (await getJobById(db, created.id))!;
+
+        const cardDetail: TrelloCardDetail = {
+          name: 'Job Backup Cria Teste',
+          listName: 'Em Pós Produção',
+          checklistItems: [],
+          due: null,
+          description: null,
+          url: 'https://trello.com/c/test',
+          labels: [],
+          latestComment: 'STATUS 20.08',
+          members: ['Wilka Nepomoceno', 'Backup Nova Pessoa'],
+          comments: [
+            { author: 'Wilka Nepomoceno', text: 'STATUS 20.08\nTudo em dia.', postedAt: '2026-08-20T13:51:00.000Z' },
+          ],
+        };
+        const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
+
+        await syncJobFromTrello(db, trelloClient, undefined, job, { bypassConfidenceGate: false });
+
+        const wilka = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Wilka' AND area = 'Atendimento'`);
+        const backupPerson = await db.query<{ id: number }>(
+          `SELECT id FROM people WHERE name = 'Backup Nova Pessoa' AND area = 'Atendimento'`,
+        );
+        expect(backupPerson.rows).toHaveLength(1);
+
+        const updatedJob = await getJobById(db, created.id);
+        expect(updatedJob?.atendimentoPersonId).toBe(wilka.rows[0].id);
+        expect(updatedJob?.atendimentoBackupPersonId).toBe(backupPerson.rows[0].id);
+      });
+    });
+
+    it('does not touch the backup when the card has only 1 member', async () => {
+      await withTestTransaction(async (db) => {
+        const created = await createJob(db, { name: 'Job Backup Um Membro Teste' });
+        await setTrelloLink(db, created.id, 'card1');
+        const job = (await getJobById(db, created.id))!;
+
+        const cardDetail: TrelloCardDetail = {
+          name: 'Job Backup Um Membro Teste',
+          listName: 'Em Pós Produção',
+          checklistItems: [],
+          due: null,
+          description: null,
+          url: 'https://trello.com/c/test',
+          labels: [],
+          latestComment: 'STATUS 20.08',
+          members: ['Wilka Nepomoceno'],
+          comments: [
+            { author: 'Wilka Nepomoceno', text: 'STATUS 20.08\nTudo em dia.', postedAt: '2026-08-20T13:51:00.000Z' },
+          ],
+        };
+        const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
+
+        await syncJobFromTrello(db, trelloClient, undefined, job, { bypassConfidenceGate: false });
+
+        const updatedJob = await getJobById(db, created.id);
+        expect(updatedJob?.atendimentoBackupPersonId).toBeNull();
+      });
+    });
+
+    it('never overwrites an already-set backup', async () => {
+      await withTestTransaction(async (db) => {
+        const isabela = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Isabela' AND area = 'Atendimento'`);
+        const created = await createJob(db, { name: 'Job Backup Já Definido Teste' });
+        await setTrelloLink(db, created.id, 'card1');
+        await setAtendimentoBackup(db, created.id, isabela.rows[0].id);
+        const job = (await getJobById(db, created.id))!;
+        expect(job.atendimentoBackupPersonId).toBe(isabela.rows[0].id);
+
+        const cardDetail: TrelloCardDetail = {
+          name: 'Job Backup Já Definido Teste',
+          listName: 'Em Pós Produção',
+          checklistItems: [],
+          due: null,
+          description: null,
+          url: 'https://trello.com/c/test',
+          labels: [],
+          latestComment: 'STATUS 20.08',
+          members: ['Wilka Nepomoceno', 'Outra Pessoa Qualquer'],
+          comments: [
+            { author: 'Wilka Nepomoceno', text: 'STATUS 20.08\nTudo em dia.', postedAt: '2026-08-20T13:51:00.000Z' },
+          ],
+        };
+        const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
+
+        await syncJobFromTrello(db, trelloClient, undefined, job, { bypassConfidenceGate: false });
+
+        const updatedJob = await getJobById(db, created.id);
+        expect(updatedJob?.atendimentoBackupPersonId).toBe(isabela.rows[0].id);
+      });
+    });
+
+    it('defaults to the first of exactly 2 Trello members as principal when there is no STATUS comment yet, and the second as backup', async () => {
+      await withTestTransaction(async (db) => {
+        const created = await createJob(db, { name: 'Job Sem Status Ainda Teste' });
+        await setTrelloLink(db, created.id, 'card1');
+        const job = (await getJobById(db, created.id))!;
+        expect(job.atendimentoPersonId).toBeNull();
+
+        const cardDetail: TrelloCardDetail = {
+          name: 'Job Sem Status Ainda Teste',
+          listName: 'Em Pós Produção',
+          checklistItems: [],
+          due: null,
+          description: null,
+          url: 'https://trello.com/c/test',
+          labels: [],
+          latestComment: null,
+          members: ['Pessoa Principal Nova', 'Pessoa Backup Nova'],
+          comments: [],
+        };
+        const trelloClient = fakeTrelloClient({ getCard: async () => cardDetail });
+
+        await syncJobFromTrello(db, trelloClient, undefined, job, { bypassConfidenceGate: false });
+
+        const principal = await db.query<{ id: number }>(
+          `SELECT id FROM people WHERE name = 'Pessoa Principal Nova' AND area = 'Atendimento'`,
+        );
+        const backup = await db.query<{ id: number }>(
+          `SELECT id FROM people WHERE name = 'Pessoa Backup Nova' AND area = 'Atendimento'`,
+        );
+        expect(principal.rows).toHaveLength(1);
+        expect(backup.rows).toHaveLength(1);
+
+        const updatedJob = await getJobById(db, created.id);
+        expect(updatedJob?.atendimentoPersonId).toBe(principal.rows[0].id);
+        expect(updatedJob?.atendimentoBackupPersonId).toBe(backup.rows[0].id);
+      });
     });
   });
 
@@ -993,7 +1137,7 @@ describe('createJobFromTrelloCard', () => {
     });
   });
 
-  it('creates the job without an Atendimento when the creator cannot be matched', async () => {
+  it('creates the card creator in Atendimento when they cannot be matched, and assigns them to the new job', async () => {
     await withTestTransaction(async (db) => {
       const trelloClient = fakeTrelloClient({
         getCard: async () => trelloCard({ name: 'Job Criador Desconhecido Teste' }),
@@ -1004,8 +1148,39 @@ describe('createJobFromTrelloCard', () => {
       const created = (
         await db.query<{ id: number }>(`SELECT id FROM jobs WHERE name = 'Job Criador Desconhecido Teste'`)
       ).rows[0];
+      const newPerson = await db.query<{ id: number }>(
+        `SELECT id FROM people WHERE name = 'Alguém De Fora' AND area = 'Atendimento'`,
+      );
+      expect(newPerson.rows).toHaveLength(1);
       const createdJob = await getJobById(db, created.id);
-      expect(createdJob?.atendimentoPersonId).toBeNull();
+      expect(createdJob?.atendimentoPersonId).toBe(newPerson.rows[0].id);
+    });
+  });
+
+  it('also assigns the other Trello member as backup when creating a job from a card with exactly 2 members', async () => {
+    await withTestTransaction(async (db) => {
+      const trelloClient = fakeTrelloClient({
+        getCard: async () =>
+          trelloCard({
+            name: 'Job Criado Com Backup Teste',
+            members: ['Wilka Nepomoceno', 'Backup Da Criação Nova'],
+          }),
+      });
+
+      await createJobFromTrelloCard(db, trelloClient, undefined, 'card-novo', 'Wilka Nepomoceno');
+
+      const created = (
+        await db.query<{ id: number }>(`SELECT id FROM jobs WHERE name = 'Job Criado Com Backup Teste'`)
+      ).rows[0];
+      const wilka = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Wilka' AND area = 'Atendimento'`);
+      const backupPerson = await db.query<{ id: number }>(
+        `SELECT id FROM people WHERE name = 'Backup Da Criação Nova' AND area = 'Atendimento'`,
+      );
+      expect(backupPerson.rows).toHaveLength(1);
+
+      const createdJob = await getJobById(db, created.id);
+      expect(createdJob?.atendimentoPersonId).toBe(wilka.rows[0].id);
+      expect(createdJob?.atendimentoBackupPersonId).toBe(backupPerson.rows[0].id);
     });
   });
 
