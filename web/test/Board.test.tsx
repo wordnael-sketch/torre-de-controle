@@ -86,10 +86,10 @@ async function openFiltersPanel(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: 'Filtros e ações' }));
 }
 
-function renderBoard() {
+function renderBoard(initialEntries: string[] = ['/']) {
   return render(
     <AuthProvider>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={initialEntries}>
         <Board />
       </MemoryRouter>
       <ToastHost />
@@ -276,6 +276,40 @@ describe('Board', () => {
 
     expect(screen.queryByText('Job Fase 1')).not.toBeInTheDocument();
     expect(screen.getByText('Job Fase 2')).toBeInTheDocument();
+  });
+
+  it('seeds the farol filter from a ?farol= URL param, so a Painel card link lands already filtered', async () => {
+    mockedApi.listJobs.mockResolvedValue({
+      jobs: [
+        makeJob({ id: 1, name: 'Job Travado', alertLevel: 'red' }),
+        makeJob({ id: 2, name: 'Job Fluindo', alertLevel: 'green' }),
+      ],
+    });
+
+    renderBoard(['/?farol=red']);
+
+    await screen.findByText('Job Travado');
+    expect(screen.queryByText('Job Fluindo')).not.toBeInTheDocument();
+    // O painel de filtros já abre sozinho quando a URL carrega um filtro,
+    // pra deixar visível qual pill está ativo.
+    expect(screen.getByRole('button', { name: 'Filtros e ações' })).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('seeds the fase and atendimento filters from URL params the same way', async () => {
+    mockedApi.listPeople.mockResolvedValue({
+      people: [{ id: 7, name: 'Wilka', area: 'Atendimento', active: true, title: 'Head' }],
+    });
+    mockedApi.listJobs.mockResolvedValue({
+      jobs: [
+        makeJob({ id: 1, name: 'Job da Wilka', phaseId: 2, phaseName: 'Dotação e Burocracia', atendimentoPersonId: 7 }),
+        makeJob({ id: 2, name: 'Job de Outra Fase' }),
+      ],
+    });
+
+    renderBoard(['/?fase=2&atendimento=7']);
+
+    await screen.findByText('Job da Wilka');
+    expect(screen.queryByText('Job de Outra Fase')).not.toBeInTheDocument();
   });
 
   it('shows an Atendimentos row per active person, counting active and completed jobs together', async () => {

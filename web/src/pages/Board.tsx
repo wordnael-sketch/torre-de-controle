@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Plus, X, AlertTriangle, Contrast, ChevronDown, ChevronRight, Link2, Menu } from 'lucide-react';
 import { api, type AlertLevel, type Job, type Person, type Phase } from '../api/client';
 import { FAROL_COLOR_VARS, FAROL_LABELS, phaseMarkerColor } from '../theme/phase';
@@ -23,9 +23,23 @@ export function Board() {
   const [phases, setPhases] = useState<Phase[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
-  const [farolFilter, setFarolFilter] = useState<Set<AlertLevel>>(new Set());
-  const [faseFilter, setFaseFilter] = useState<Set<number>>(new Set());
-  const [atendimentoFilter, setAtendimentoFilter] = useState<Set<number>>(new Set());
+  // Seeds o filtro inicial a partir da URL (?farol=&fase=&atendimento=) — só
+  // lido uma vez, no primeiro render: é assim que o Painel manda o usuário
+  // pra cá já filtrado ao clicar num card. Depois disso o filtro vive só em
+  // estado local, como sempre viveu (sem sincronizar de volta pra URL).
+  const [searchParams] = useSearchParams();
+  const [farolFilter, setFarolFilter] = useState<Set<AlertLevel>>(() => {
+    const value = searchParams.get('farol');
+    return value === 'red' || value === 'yellow' || value === 'green' ? new Set([value]) : new Set();
+  });
+  const [faseFilter, setFaseFilter] = useState<Set<number>>(() => {
+    const value = Number(searchParams.get('fase'));
+    return Number.isInteger(value) && value > 0 ? new Set([value]) : new Set();
+  });
+  const [atendimentoFilter, setAtendimentoFilter] = useState<Set<number>>(() => {
+    const value = Number(searchParams.get('atendimento'));
+    return Number.isInteger(value) && value > 0 ? new Set([value]) : new Set();
+  });
   const [name, setName] = useState('');
   const [atendimentoPersonId, setAtendimentoPersonId] = useState('');
   const [showNewJobForm, setShowNewJobForm] = useState(false);
@@ -37,7 +51,7 @@ export function Board() {
   const stuckBannerRef = useRef<HTMLElement>(null);
   const [collapsedPhaseIds, setCollapsedPhaseIds] = useState<Set<number>>(new Set());
   const [linkingAllTrello, setLinkingAllTrello] = useState(false);
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(() => searchParams.has('farol') || searchParams.has('fase') || searchParams.has('atendimento'));
 
   function toggleGroupCollapsed(phaseId: number) {
     setCollapsedPhaseIds((prev) => {

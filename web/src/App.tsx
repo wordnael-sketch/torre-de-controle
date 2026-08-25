@@ -3,6 +3,7 @@ import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { Login } from './pages/Login';
 import { Board } from './pages/Board';
+import { Painel } from './pages/Painel';
 import { JobDetailPage } from './pages/JobDetail';
 import { UsersPage } from './pages/Users';
 import { ToastHost } from './components/Toast';
@@ -28,6 +29,9 @@ function RequireAuth({ children }: { children: ReactElement }) {
           <span className="app-header-email">{user.email}</span>
         </div>
         <nav className="app-nav">
+          <Link to="/painel" className="app-nav-link">
+            Painel
+          </Link>
           {user.role === 'admin' && (
             <Link to="/usuarios" className="app-nav-link">
               Usuários
@@ -92,6 +96,14 @@ function AppRoutes() {
         element={
           <RequireAuth>
             <JobDetailPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/painel"
+        element={
+          <RequireAuth>
+            <Painel />
           </RequireAuth>
         }
       />
