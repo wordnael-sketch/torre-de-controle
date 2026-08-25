@@ -8,66 +8,13 @@
   min-height: 100vh;
 }
 
-.app-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.6rem 1.5rem;
-  background: var(--bg-panel);
-  border-bottom: 1px solid var(--border);
+.app-content {
+  margin-left: 240px;
 }
 
-.app-header-brand {
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-}
-
-.app-header-logo {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-sm);
-  object-fit: cover;
-  flex: 0 0 auto;
-}
-
-.app-header-email {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-}
-
-.app-nav {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-}
-
-.app-nav-link {
-  text-decoration: none;
-  color: var(--text-primary);
-  font-size: 0.85rem;
-}
-
-.app-logout-btn {
-  border: 1px solid var(--border);
-  background: var(--bg-panel);
-  border-radius: var(--radius-sm);
-  padding: 0.3rem 0.75rem;
-  cursor: pointer;
-  font-size: 0.85rem;
-}
-
-@media (max-width: 639px) {
-  .app-header {
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    padding: 0.6rem 1rem;
+@media (max-width: 1023px) {
+  .app-content {
+    margin-left: 0;
+    margin-top: 56px;
   }
-}
-
-.app-logout-btn,
-.app-nav-link {
-  min-height: 48px;
-  display: inline-flex;
-  align-items: center;
 }

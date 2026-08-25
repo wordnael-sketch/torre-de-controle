@@ -26,10 +26,40 @@
 }
 
 .painel-kpi-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 0.85rem 1rem;
+}
+
+.painel-kpi-card--primary {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 20%, var(--bg-panel)) 0%, var(--bg-panel) 100%);
+}
+
+.painel-kpi-card--good {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--farol-fluindo-fill) 22%, var(--bg-panel)) 0%, var(--bg-panel) 100%);
+}
+
+.painel-kpi-card--warn {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--farol-atencao-fill) 22%, var(--bg-panel)) 0%, var(--bg-panel) 100%);
+}
+
+.painel-kpi-card--captacao {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--fase-4-marcador) 22%, var(--bg-panel)) 0%, var(--bg-panel) 100%);
+}
+
+.painel-icon-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius);
+  color: var(--text-inverse);
+  flex: 0 0 auto;
 }
 
 .painel-kpi-value {
@@ -54,8 +84,23 @@
   margin-bottom: 2.5rem;
 }
 
+.painel-block-header {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.6rem 0.85rem;
+  margin-bottom: 0.85rem;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--color-primary) 12%, var(--bg-panel));
+}
+
+.painel-block-header .painel-icon-badge {
+  width: 32px;
+  height: 32px;
+}
+
 .painel-block-title {
-  margin: 0 0 0.85rem;
+  margin: 0;
   font-size: 1.05rem;
 }
 
@@ -69,9 +114,9 @@
 .painel-card {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0.5rem;
   padding: 0.9rem 1rem;
-  background: var(--bg-panel);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 10%, var(--bg-panel)) 0%, var(--bg-panel) 100%);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text-primary);
@@ -80,15 +125,12 @@
 }
 
 .painel-card:hover {
-  background: var(--bg-hover);
   border-color: var(--color-primary);
 }
 
-.painel-card-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex: 0 0 auto;
+.painel-card .painel-icon-badge {
+  width: 32px;
+  height: 32px;
 }
 
 .painel-card-label {

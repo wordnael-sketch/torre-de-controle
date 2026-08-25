@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { Login } from './pages/Login';
 import { Board } from './pages/Board';
@@ -7,11 +7,11 @@ import { Painel } from './pages/Painel';
 import { JobDetailPage } from './pages/JobDetail';
 import { UsersPage } from './pages/Users';
 import { ToastHost } from './components/Toast';
-import logoIlha from './assets/logo-ilha.jpg';
+import { Sidebar } from './components/Sidebar';
 import './App.css';
 
 function RequireAuth({ children }: { children: ReactElement }) {
-  const { user, loading, logout } = useAuth();
+  const { user, loading } = useAuth();
 
   if (loading) {
     return <p className="app-loading">Carregando...</p>;
@@ -23,26 +23,8 @@ function RequireAuth({ children }: { children: ReactElement }) {
 
   return (
     <div className="app-shell">
-      <header className="app-header">
-        <div className="app-header-brand">
-          <img src={logoIlha} alt="Ilha Crossmídia" className="app-header-logo" />
-          <span className="app-header-email">{user.email}</span>
-        </div>
-        <nav className="app-nav">
-          <Link to="/painel" className="app-nav-link">
-            Painel
-          </Link>
-          {user.role === 'admin' && (
-            <Link to="/usuarios" className="app-nav-link">
-              Usuários
-            </Link>
-          )}
-          <button type="button" className="app-logout-btn" onClick={() => void logout()}>
-            Sair
-          </button>
-        </nav>
-      </header>
-      {children}
+      <Sidebar />
+      <div className="app-content">{children}</div>
     </div>
   );
 }

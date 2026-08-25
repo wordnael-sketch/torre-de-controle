@@ -1,11 +1,47 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import {
+  Activity,
+  Building2,
+  Users,
+  Clock,
+  Clapperboard,
+  AlertTriangle,
+  AlertCircle,
+  CheckCircle2,
+  Layers,
+  User,
+  TrafficCone,
+} from 'lucide-react';
 import { api, type AlertLevel, type Job, type Person, type Phase } from '../api/client';
 import { FAROL_COLOR_VARS, FAROL_LABELS, phaseMarkerColor } from '../theme/phase';
 import './Painel.css';
 
 const FAROL_ORDER: AlertLevel[] = ['red', 'yellow', 'green'];
 const CAPTACAO_PHASE_ORDER = 4;
+
+// Ícone da caixinha colorida de cada farol — cores "-fill" (sólidas, pensadas
+// pra fundo com ícone branco em cima), não as "-travado/atencao/fluindo" de
+// texto usadas em outros lugares do site.
+const FAROL_FILL_VARS: Record<AlertLevel, string> = {
+  red: 'var(--farol-travado-fill)',
+  yellow: 'var(--farol-atencao-fill)',
+  green: 'var(--farol-fluindo-fill)',
+};
+
+const FAROL_ICONS: Record<AlertLevel, ReactNode> = {
+  red: <AlertTriangle size={18} aria-hidden="true" />,
+  yellow: <AlertCircle size={18} aria-hidden="true" />,
+  green: <CheckCircle2 size={18} aria-hidden="true" />,
+};
+
+function IconBadge({ icon, color }: { icon: ReactNode; color: string }) {
+  return (
+    <span className="painel-icon-badge" style={{ background: color }} aria-hidden="true">
+      {icon}
+    </span>
+  );
+}
 
 function phaseOrderOf(phases: Phase[], phaseId: number | null): number | null {
   return phases.find((p) => p.id === phaseId)?.order ?? null;
@@ -88,42 +124,60 @@ export function Painel() {
       </header>
 
       <section className="painel-kpis" aria-label="Indicadores gerais">
-        <div className="painel-kpi-card">
-          <p className="label-caps">Em produção</p>
-          <p className="painel-kpi-value">
-            {stats.ativos} <span>jobs ativos</span>
-          </p>
+        <div className="painel-kpi-card painel-kpi-card--primary">
+          <IconBadge icon={<Activity size={18} aria-hidden="true" />} color="var(--color-primary)" />
+          <div>
+            <p className="label-caps">Em produção</p>
+            <p className="painel-kpi-value">
+              {stats.ativos} <span>jobs ativos</span>
+            </p>
+          </div>
         </div>
-        <div className="painel-kpi-card">
-          <p className="label-caps">Bola com a Ilha</p>
-          <p className="painel-kpi-value">
-            {stats.bolaIlha} <span>jobs</span>
-          </p>
+        <div className="painel-kpi-card painel-kpi-card--good">
+          <IconBadge icon={<Building2 size={18} aria-hidden="true" />} color="var(--farol-fluindo-fill)" />
+          <div>
+            <p className="label-caps">Bola com a Ilha</p>
+            <p className="painel-kpi-value">
+              {stats.bolaIlha} <span>jobs</span>
+            </p>
+          </div>
         </div>
-        <div className="painel-kpi-card">
-          <p className="label-caps">Bola com o cliente</p>
-          <p className="painel-kpi-value painel-kpi-value--warn">
-            {stats.bolaCliente} <span>jobs</span>
-          </p>
+        <div className="painel-kpi-card painel-kpi-card--warn">
+          <IconBadge icon={<Users size={18} aria-hidden="true" />} color="var(--farol-atencao-fill)" />
+          <div>
+            <p className="label-caps">Bola com o cliente</p>
+            <p className="painel-kpi-value painel-kpi-value--warn">
+              {stats.bolaCliente} <span>jobs</span>
+            </p>
+          </div>
         </div>
-        <div className="painel-kpi-card">
-          <p className="label-caps">Retenção do cliente</p>
-          <p className="painel-kpi-value painel-kpi-value--warn">
-            {stats.retencaoDias} <span>dias somados</span>
-          </p>
+        <div className="painel-kpi-card painel-kpi-card--warn">
+          <IconBadge icon={<Clock size={18} aria-hidden="true" />} color="var(--farol-atencao-fill)" />
+          <div>
+            <p className="label-caps">Retenção do cliente</p>
+            <p className="painel-kpi-value painel-kpi-value--warn">
+              {stats.retencaoDias} <span>dias somados</span>
+            </p>
+          </div>
         </div>
-        <div className="painel-kpi-card">
-          <p className="label-caps">Entram em set</p>
-          <p className="painel-kpi-value">
-            {stats.entramEmSet} <span>jobs em Captação</span>
-          </p>
+        <div className="painel-kpi-card painel-kpi-card--captacao">
+          <IconBadge icon={<Clapperboard size={18} aria-hidden="true" />} color="var(--fase-4-marcador)" />
+          <div>
+            <p className="label-caps">Entram em set</p>
+            <p className="painel-kpi-value">
+              {stats.entramEmSet} <span>jobs em Captação</span>
+            </p>
+          </div>
         </div>
       </section>
 
       <section className="painel-block" aria-labelledby="painel-farol-heading">
-        <h2 id="painel-farol-heading" className="painel-block-title">
-          Farol
-        </h2>
+        <div className="painel-block-header painel-block-header--farol">
+          <IconBadge icon={<TrafficCone size={18} aria-hidden="true" />} color="var(--color-primary)" />
+          <h2 id="painel-farol-heading" className="painel-block-title">
+            Farol
+          </h2>
+        </div>
         <div className="painel-card-grid">
           {FAROL_ORDER.map((level) => (
             <Link
@@ -132,7 +186,7 @@ export function Painel() {
               className="painel-card"
               aria-label={`Ver jobs com farol ${FAROL_LABELS[level]} (${farolCounts[level]})`}
             >
-              <span className="painel-card-dot" style={{ background: FAROL_COLOR_VARS[level] }} aria-hidden="true" />
+              <IconBadge icon={FAROL_ICONS[level]} color={FAROL_FILL_VARS[level]} />
               <span className="painel-card-label">{FAROL_LABELS[level]}</span>
               <span className="painel-card-value">{farolCounts[level]}</span>
             </Link>
@@ -161,9 +215,12 @@ export function Painel() {
       </section>
 
       <section className="painel-block" aria-labelledby="painel-fase-heading">
-        <h2 id="painel-fase-heading" className="painel-block-title">
-          Fase
-        </h2>
+        <div className="painel-block-header painel-block-header--fase">
+          <IconBadge icon={<Layers size={18} aria-hidden="true" />} color="var(--color-primary)" />
+          <h2 id="painel-fase-heading" className="painel-block-title">
+            Fase
+          </h2>
+        </div>
         <div className="painel-card-grid">
           {phases.map((phase) => (
             <Link
@@ -172,7 +229,7 @@ export function Painel() {
               className="painel-card"
               aria-label={`Ver jobs na fase ${phase.name} (${faseCounts.get(phase.id) ?? 0})`}
             >
-              <span className="painel-card-dot" style={{ background: phaseMarkerColor(phase.order) }} aria-hidden="true" />
+              <IconBadge icon={<Layers size={18} aria-hidden="true" />} color={phaseMarkerColor(phase.order)} />
               <span className="painel-card-label">{phase.name}</span>
               <span className="painel-card-value">{faseCounts.get(phase.id) ?? 0}</span>
             </Link>
@@ -204,9 +261,12 @@ export function Painel() {
       </section>
 
       <section className="painel-block" aria-labelledby="painel-atendimento-heading">
-        <h2 id="painel-atendimento-heading" className="painel-block-title">
-          Atendimento
-        </h2>
+        <div className="painel-block-header painel-block-header--atendimento">
+          <IconBadge icon={<User size={18} aria-hidden="true" />} color="var(--color-primary)" />
+          <h2 id="painel-atendimento-heading" className="painel-block-title">
+            Atendimento
+          </h2>
+        </div>
         <div className="painel-card-grid">
           {atendimentoPeople.map((person) => (
             <Link
@@ -215,6 +275,7 @@ export function Painel() {
               className="painel-card"
               aria-label={`Ver jobs de ${person.name} (${atendimentoCounts.get(person.id) ?? 0})`}
             >
+              <IconBadge icon={<User size={18} aria-hidden="true" />} color="var(--color-primary)" />
               <span className="painel-card-label">{person.name}</span>
               <span className="painel-card-value">{atendimentoCounts.get(person.id) ?? 0}</span>
             </Link>
