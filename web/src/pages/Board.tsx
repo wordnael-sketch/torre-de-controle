@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, X, AlertTriangle, Contrast, ChevronDown, ChevronRight, Link2 } from 'lucide-react';
+import { Plus, X, AlertTriangle, Contrast, ChevronDown, ChevronRight, Link2, Menu } from 'lucide-react';
 import { api, type AlertLevel, type Job, type Person, type Phase } from '../api/client';
 import { FAROL_COLOR_VARS, FAROL_LABELS, phaseMarkerColor } from '../theme/phase';
 import { useAuth } from '../auth/AuthContext';
@@ -37,6 +37,7 @@ export function Board() {
   const stuckBannerRef = useRef<HTMLElement>(null);
   const [collapsedPhaseIds, setCollapsedPhaseIds] = useState<Set<number>>(new Set());
   const [linkingAllTrello, setLinkingAllTrello] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   function toggleGroupCollapsed(phaseId: number) {
     setCollapsedPhaseIds((prev) => {
@@ -290,6 +291,17 @@ export function Board() {
 
         <div className="board-toolbar">
           <div className="board-toolbar-row">
+            <button
+              type="button"
+              className="board-hamburger-toggle"
+              aria-expanded={filtersOpen}
+              aria-controls="board-filters-panel"
+              onClick={() => setFiltersOpen((v) => !v)}
+            >
+              <Menu size={20} aria-hidden="true" />
+              Filtros e ações
+            </button>
+
             <GlobalSearch inputRef={searchInputRef} />
 
             <div className="board-toolbar-indicators">
@@ -303,88 +315,95 @@ export function Board() {
                   {stuckJobs.length} {stuckJobs.length === 1 ? 'travado' : 'travados'}
                 </button>
               )}
-              <button
-                type="button"
-                className="board-contrast-toggle"
-                onClick={() => void handleLinkAllTrello()}
-                disabled={linkingAllTrello}
-                title="Vincula automaticamente todo job sem card do Trello ainda, quando o nome bate exatamente"
-              >
-                <Link2 size={16} aria-hidden="true" />
-                <span className="board-contrast-toggle-label">
-                  {linkingAllTrello ? 'Vinculando…' : 'Vincular todos ao Trello'}
-                </span>
-              </button>
-              <button
-                type="button"
-                className={`board-contrast-toggle${highContrast ? ' is-active' : ''}`}
-                aria-pressed={highContrast}
-                onClick={() => setHighContrast((v) => !v)}
-                title="Alternar alto contraste"
-              >
-                <Contrast size={16} aria-hidden="true" />
-                <span className="board-contrast-toggle-label">Alto contraste</span>
-              </button>
             </div>
           </div>
 
-          <div className="board-filter-rows">
-            <div className="board-filter-row">
-              <span className="board-filter-label">Farol</span>
-              <div className="board-pill-group" role="group" aria-label="Filtro por farol">
-                {FAROL_ORDER.map((level) => (
-                  <button
-                    key={level}
-                    type="button"
-                    className={`board-pill${farolFilter.has(level) ? ' is-active' : ''}`}
-                    aria-pressed={farolFilter.has(level)}
-                    onClick={() => toggleFarol(level)}
-                  >
-                    <span className="board-dot" style={{ background: FAROL_COLOR_VARS[level] }} />
-                    {FAROL_LABELS[level]}
-                    <span className="board-pill-count">{farolCounts[level]}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
+          {filtersOpen && (
+            <div className="board-filters-panel" id="board-filters-panel">
+              <div className="board-filter-rows">
+                <div className="board-filter-row">
+                  <span className="board-filter-label">Farol</span>
+                  <div className="board-pill-group" role="group" aria-label="Filtro por farol">
+                    {FAROL_ORDER.map((level) => (
+                      <button
+                        key={level}
+                        type="button"
+                        className={`board-pill${farolFilter.has(level) ? ' is-active' : ''}`}
+                        aria-pressed={farolFilter.has(level)}
+                        onClick={() => toggleFarol(level)}
+                      >
+                        <span className="board-dot" style={{ background: FAROL_COLOR_VARS[level] }} />
+                        {FAROL_LABELS[level]}
+                        <span className="board-pill-count">{farolCounts[level]}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-            <div className="board-filter-row">
-              <span className="board-filter-label">Fase</span>
-              <div className="board-pill-group" role="group" aria-label="Filtro por fase">
-                {phases.map((phase) => (
-                  <button
-                    key={phase.id}
-                    type="button"
-                    className={`board-pill${faseFilter.has(phase.id) ? ' is-active' : ''}`}
-                    aria-pressed={faseFilter.has(phase.id)}
-                    onClick={() => toggleFase(phase.id)}
-                  >
-                    <span className="board-swatch" style={{ background: phaseMarkerColor(phase.order) }} />
-                    {phase.name}
-                    <span className="board-pill-count">{faseCounts.get(phase.id) ?? 0}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
+                <div className="board-filter-row">
+                  <span className="board-filter-label">Fase</span>
+                  <div className="board-pill-group" role="group" aria-label="Filtro por fase">
+                    {phases.map((phase) => (
+                      <button
+                        key={phase.id}
+                        type="button"
+                        className={`board-pill${faseFilter.has(phase.id) ? ' is-active' : ''}`}
+                        aria-pressed={faseFilter.has(phase.id)}
+                        onClick={() => toggleFase(phase.id)}
+                      >
+                        <span className="board-swatch" style={{ background: phaseMarkerColor(phase.order) }} />
+                        {phase.name}
+                        <span className="board-pill-count">{faseCounts.get(phase.id) ?? 0}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-            <div className="board-filter-row">
-              <span className="board-filter-label">Atendimento</span>
-              <div className="board-pill-group" role="group" aria-label="Filtro por atendimento">
-                {atendimentoPeople.map((person) => (
-                  <button
-                    key={person.id}
-                    type="button"
-                    className={`board-pill${atendimentoFilter.has(person.id) ? ' is-active' : ''}`}
-                    aria-pressed={atendimentoFilter.has(person.id)}
-                    onClick={() => toggleAtendimento(person.id)}
-                  >
-                    {person.name}
-                    <span className="board-pill-count">{atendimentoCounts.get(person.id) ?? 0}</span>
-                  </button>
-                ))}
+                <div className="board-filter-row">
+                  <span className="board-filter-label">Atendimento</span>
+                  <div className="board-pill-group" role="group" aria-label="Filtro por atendimento">
+                    {atendimentoPeople.map((person) => (
+                      <button
+                        key={person.id}
+                        type="button"
+                        className={`board-pill${atendimentoFilter.has(person.id) ? ' is-active' : ''}`}
+                        aria-pressed={atendimentoFilter.has(person.id)}
+                        onClick={() => toggleAtendimento(person.id)}
+                      >
+                        {person.name}
+                        <span className="board-pill-count">{atendimentoCounts.get(person.id) ?? 0}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="board-filters-panel-actions">
+                <button
+                  type="button"
+                  className="board-contrast-toggle"
+                  onClick={() => void handleLinkAllTrello()}
+                  disabled={linkingAllTrello}
+                  title="Vincula automaticamente todo job sem card do Trello ainda, quando o nome bate exatamente"
+                >
+                  <Link2 size={16} aria-hidden="true" />
+                  <span className="board-contrast-toggle-label">
+                    {linkingAllTrello ? 'Vinculando…' : 'Vincular todos ao Trello'}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className={`board-contrast-toggle${highContrast ? ' is-active' : ''}`}
+                  aria-pressed={highContrast}
+                  onClick={() => setHighContrast((v) => !v)}
+                  title="Alternar alto contraste"
+                >
+                  <Contrast size={16} aria-hidden="true" />
+                  <span className="board-contrast-toggle-label">Alto contraste</span>
+                </button>
               </div>
             </div>
-          </div>
+          )}
 
           {(farolFilter.size > 0 || faseFilter.size > 0 || atendimentoFilter.size > 0) && (
             <div className="board-active-tags" aria-label="Filtros ativos">

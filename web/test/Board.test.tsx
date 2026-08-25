@@ -82,6 +82,10 @@ function makeJob(overrides: Record<string, unknown> = {}) {
   };
 }
 
+async function openFiltersPanel(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: 'Filtros e ações' }));
+}
+
 function renderBoard() {
   return render(
     <AuthProvider>
@@ -124,8 +128,10 @@ describe('Board', () => {
 
   it('shows a fase filter row per phase and no jobs when empty', async () => {
     mockedApi.listJobs.mockResolvedValue({ jobs: [] });
+    const user = userEvent.setup();
 
     renderBoard();
+    await openFiltersPanel(user);
 
     expect(await screen.findByText('Comercial e Orçamento')).toBeInTheDocument();
     expect(await screen.findByText('Dotação e Burocracia')).toBeInTheDocument();
@@ -150,6 +156,7 @@ describe('Board', () => {
 
     renderBoard();
     await screen.findByText(/Colgate - Color Correct Wave 2/);
+    await openFiltersPanel(user);
 
     await user.click(screen.getByRole('button', { name: 'Vincular todos ao Trello' }));
 
@@ -176,7 +183,7 @@ describe('Board', () => {
     const user = userEvent.setup();
     renderBoard();
 
-    await screen.findByText('Comercial e Orçamento');
+    await screen.findByRole('table');
     await user.click(screen.getByRole('button', { name: /Criar novo job/ }));
     await user.type(screen.getByLabelText('Nome do job'), 'Novo job');
     await user.selectOptions(screen.getByLabelText('Atendimento responsável'), '7');
@@ -194,7 +201,7 @@ describe('Board', () => {
 
     renderBoard();
 
-    await screen.findByText('Comercial e Orçamento');
+    await screen.findByRole('table');
     await user.click(screen.getByRole('button', { name: /Criar novo job/ }));
     await user.type(screen.getByLabelText('Nome do job'), 'Job Sem Atendimento');
     await user.click(screen.getByRole('button', { name: 'Adicionar' }));
@@ -237,7 +244,7 @@ describe('Board', () => {
 
     renderBoard();
 
-    await screen.findByText('Comercial e Orçamento');
+    await screen.findByRole('table');
     expect(screen.queryByText('Job Concluído Teste')).not.toBeInTheDocument();
   });
 
@@ -262,6 +269,7 @@ describe('Board', () => {
 
     await screen.findByText('Job Fase 1');
     await screen.findByText('Job Fase 2');
+    await openFiltersPanel(user);
 
     const fasePills = screen.getByRole('group', { name: 'Filtro por fase' });
     await user.click(within(fasePills).getByText('Dotação e Burocracia'));
@@ -286,7 +294,10 @@ describe('Board', () => {
       ],
     });
 
+    const user = userEvent.setup();
     renderBoard();
+    await screen.findByText('Comercial e Orçamento');
+    await openFiltersPanel(user);
 
     const atendimentosNav = await screen.findByRole('group', { name: 'Filtro por atendimento' });
     expect(within(atendimentosNav).getByText('Wilka')).toBeInTheDocument();
@@ -314,6 +325,7 @@ describe('Board', () => {
 
     await screen.findByText('Job da Wilka');
     await screen.findByText('Job da Camila');
+    await openFiltersPanel(user);
 
     const atendimentosNav = screen.getByRole('group', { name: 'Filtro por atendimento' });
     await user.click(within(atendimentosNav).getByRole('button', { name: /Camila/ }));
@@ -395,7 +407,8 @@ describe('Board', () => {
 
     renderBoard();
 
-    await screen.findByText('Comercial e Orçamento');
+    await screen.findByRole('table');
+    await openFiltersPanel(user);
     const toggle = screen.getByRole('button', { name: /Alto contraste/ });
     expect(toggle).toHaveAttribute('aria-pressed', 'false');
 

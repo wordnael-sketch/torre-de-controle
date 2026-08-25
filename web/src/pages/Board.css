@@ -48,6 +48,47 @@
   flex-wrap: wrap;
 }
 
+/* estilo gov.br: ícone + rótulo, sem moldura própria — o menu que abre
+   embaixo é que ganha borda/fundo, o gatilho fica discreto */
+.board-hamburger-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+  padding: 0.5rem 0.7rem;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.board-hamburger-toggle:hover,
+.board-hamburger-toggle[aria-expanded='true'] {
+  background: var(--bg-hover);
+}
+
+.board-filters-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+}
+
+.board-filters-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border);
+}
+
 .board-filter-rows {
   display: flex;
   flex-direction: column;
