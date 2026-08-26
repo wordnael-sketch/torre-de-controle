@@ -51,7 +51,7 @@ async function loggedInMemberAgent(db: AppDatabase) {
 
 async function getAtendimentoPersonId(db: AppDatabase): Promise<number> {
   const result = await db.query<{ id: number }>(
-    `SELECT id FROM people WHERE name = 'Wilka' AND area = 'Atendimento'`,
+    `SELECT id FROM people WHERE name = 'Wilka Nepomoceno' AND area = 'Atendimento'`,
   );
   return result.rows[0].id;
 }
@@ -178,7 +178,7 @@ describe('GET /api/jobs/:id', () => {
       ]);
       expect(res.body.job.statusHistory.length).toBeGreaterThanOrEqual(1);
       expect(res.body.job.atendimentoPersonId).toBe(atendimentoPersonId);
-      expect(res.body.job.atendimentoPersonName).toBe('Wilka');
+      expect(res.body.job.atendimentoPersonName).toBe('Wilka Nepomoceno');
     });
   });
 
@@ -658,7 +658,7 @@ describe('POST /api/jobs — atendimentoPersonId validation', () => {
       const app = buildApp(db);
       const agent = await loggedInAgent(app);
       const wilka = await db.query<{ id: number }>(
-        `SELECT id FROM people WHERE name = 'Wilka' AND area = 'Atendimento'`,
+        `SELECT id FROM people WHERE name = 'Wilka Nepomoceno' AND area = 'Atendimento'`,
       );
       await db.query('UPDATE people SET active = false WHERE id = $1', [wilka.rows[0].id]);
 
@@ -695,7 +695,7 @@ describe('PATCH /api/jobs/:id/atendimento', () => {
         .send({ name: 'Job Reatribuição Rota Teste', atendimentoPersonId });
 
       const camila = await db.query<{ id: number }>(
-        `SELECT id FROM people WHERE name = 'Camila' AND area = 'Atendimento'`,
+        `SELECT id FROM people WHERE name = 'Camila Müller' AND area = 'Atendimento'`,
       );
 
       const res = await agent
@@ -704,7 +704,7 @@ describe('PATCH /api/jobs/:id/atendimento', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.job.atendimentoPersonId).toBe(camila.rows[0].id);
-      expect(res.body.job.atendimentoPersonName).toBe('Camila');
+      expect(res.body.job.atendimentoPersonName).toBe('Camila Müller');
     });
   });
 
@@ -770,7 +770,7 @@ describe('PATCH /api/jobs/:id/atendimento-backup', () => {
         .send({ name: 'Job Backup Rota Teste', atendimentoPersonId });
 
       const camila = await db.query<{ id: number }>(
-        `SELECT id FROM people WHERE name = 'Camila' AND area = 'Atendimento'`,
+        `SELECT id FROM people WHERE name = 'Camila Müller' AND area = 'Atendimento'`,
       );
 
       const res = await agent
@@ -779,7 +779,7 @@ describe('PATCH /api/jobs/:id/atendimento-backup', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.job.atendimentoBackupPersonId).toBe(camila.rows[0].id);
-      expect(res.body.job.atendimentoBackupPersonName).toBe('Camila');
+      expect(res.body.job.atendimentoBackupPersonName).toBe('Camila Müller');
     });
   });
 
@@ -1325,7 +1325,7 @@ describe('POST /api/jobs/:id/trello-sync', () => {
 
       const jobRes = await agent.get(`/api/jobs/${created.body.job.id}`);
       expect(jobRes.body.job.atendimentoPersonId).toBe(atendimentoPersonId);
-      expect(jobRes.body.job.atendimentoPersonName).toBe('Wilka');
+      expect(jobRes.body.job.atendimentoPersonName).toBe('Wilka Nepomoceno');
     });
   });
 
@@ -1362,7 +1362,7 @@ describe('POST /api/jobs/:id/trello-sync', () => {
       await agent.post(`/api/jobs/${created.body.job.id}/trello-sync`).send({});
 
       const jobRes = await agent.get(`/api/jobs/${created.body.job.id}`);
-      expect(jobRes.body.job.atendimentoPersonName).toBe('Wilka');
+      expect(jobRes.body.job.atendimentoPersonName).toBe('Wilka Nepomoceno');
     });
   });
 });

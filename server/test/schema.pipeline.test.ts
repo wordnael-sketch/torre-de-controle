@@ -125,7 +125,14 @@ describe('pipeline schema', () => {
     }
   });
 
-  it('seeds 8 people in the Atendimento area: Wilka as Head, the rest as Executiva de Contas', async () => {
+  // O seed original de Atendimento (Camila/Andrea/Larissa/Karina/Isabela/
+  // Bianca/Renata) foi removido inteiro do schema.sql: cada uma foi
+  // renomeada pro nome completo do Trello (ou excluída) depois que o seed
+  // já tinha rodado, e como o INSERT roda em todo boot, o "ON CONFLICT DO
+  // NOTHING" parava de proteger assim que o nome exato mudava — cada cold
+  // start recriava a pessoa antiga do zero. Não sobrou ninguém pra esse
+  // seed garantir; este teste só confirma que os nomes antigos não voltam.
+  it('does not resurrect any of the old seeded Atendimento short names, and Wilka Nepomoceno keeps the Head title', async () => {
     const db = await createDb(connectionString);
     try {
       const result = await db.query<{ name: string; title: string | null }>(
@@ -133,18 +140,9 @@ describe('pipeline schema', () => {
       );
       const byName = new Map(result.rows.map((r) => [r.name, r.title]));
 
-      expect(byName.size).toBe(8);
-      expect(byName.get('Wilka')).toBe('Head');
-      for (const name of [
-        'Camila',
-        'Andrea',
-        'Larissa (Brasília)',
-        'Karina',
-        'Isabela',
-        'Bianca (Brasília)',
-        'Renata (RJ)',
-      ]) {
-        expect(byName.get(name)).toBe('Executiva de Contas');
+      expect(byName.get('Wilka Nepomoceno')).toBe('Head');
+      for (const oldName of ['Wilka', 'Camila', 'Andrea', 'Larissa (Brasília)', 'Karina', 'Isabela', 'Bianca (Brasília)', 'Renata (RJ)']) {
+        expect(byName.has(oldName)).toBe(false);
       }
     } finally {
       await db.end();

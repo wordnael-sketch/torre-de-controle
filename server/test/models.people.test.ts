@@ -7,7 +7,7 @@ describe('people model', () => {
     await withTestTransaction(async (db) => {
       const people = await listPeople(db);
       expect(
-        people.some((p) => p.name === 'Wilka' && p.area === 'Atendimento'),
+        people.some((p) => p.name === 'Wilka Nepomoceno' && p.area === 'Atendimento'),
       ).toBe(true);
     });
   });
@@ -39,7 +39,7 @@ describe('people model', () => {
   it('exposes title on each person, populated for Atendimento and null elsewhere', async () => {
     await withTestTransaction(async (db) => {
       const people = await listPeople(db);
-      const wilka = people.find((p) => p.name === 'Wilka' && p.area === 'Atendimento');
+      const wilka = people.find((p) => p.name === 'Wilka Nepomoceno' && p.area === 'Atendimento');
       const anne = people.find((p) => p.name === 'Anne' && p.area === 'Comercial');
 
       expect(wilka?.title).toBe('Head');

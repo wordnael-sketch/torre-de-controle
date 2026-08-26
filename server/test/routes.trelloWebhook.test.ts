@@ -17,7 +17,7 @@ const WEBHOOK_CALLBACK_URL = 'https://exemplo.test/api/trello-webhook';
 
 async function getAtendimentoPersonId(db: AppDatabase): Promise<number> {
   const result = await db.query<{ id: number }>(
-    `SELECT id FROM people WHERE name = 'Wilka' AND area = 'Atendimento'`,
+    `SELECT id FROM people WHERE name = 'Wilka Nepomoceno' AND area = 'Atendimento'`,
   );
   return result.rows[0].id;
 }
@@ -223,7 +223,7 @@ describe('POST /api/trello-webhook', () => {
       expect(res.status).toBe(200);
 
       const updated = await getJobById(db, job.id);
-      const wilka = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Wilka' AND area = 'Atendimento'`);
+      const wilka = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Wilka Nepomoceno' AND area = 'Atendimento'`);
       expect(updated?.atendimentoPersonId).toBe(wilka.rows[0].id);
     });
   });
@@ -294,7 +294,7 @@ describe('POST /api/trello-webhook', () => {
         await db.query<{ id: number }>(`SELECT id FROM jobs WHERE name = 'Job Novo Via Webhook Teste'`)
       ).rows[0];
       expect(created).toBeDefined();
-      const wilka = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Wilka' AND area = 'Atendimento'`);
+      const wilka = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Wilka Nepomoceno' AND area = 'Atendimento'`);
       const job = await getJobById(db, created.id);
       expect(job?.atendimentoPersonId).toBe(wilka.rows[0].id);
       expect(job?.trelloCardId).toBe('card-webhook-novo');

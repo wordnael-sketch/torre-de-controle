@@ -16,6 +16,7 @@ import {
   searchJobs,
   deleteJob,
 } from '../src/models/job';
+import { createPerson } from '../src/models/people';
 import { withTestTransaction } from './helpers/testDb';
 
 describe('job model', () => {
@@ -223,7 +224,7 @@ describe('atendimento responsável', () => {
   it('creates a job with an atendimentoPersonId and returns it', async () => {
     await withTestTransaction(async (db) => {
       const wilka = await db.query<{ id: number }>(
-        `SELECT id FROM people WHERE name = 'Wilka' AND area = 'Atendimento'`,
+        `SELECT id FROM people WHERE name = 'Wilka Nepomoceno' AND area = 'Atendimento'`,
       );
 
       const job = await createJob(db, {
@@ -232,7 +233,7 @@ describe('atendimento responsável', () => {
       });
 
       expect(job.atendimentoPersonId).toBe(wilka.rows[0].id);
-      expect(job.atendimentoPersonName).toBe('Wilka');
+      expect(job.atendimentoPersonName).toBe('Wilka Nepomoceno');
     });
   });
 
@@ -240,28 +241,26 @@ describe('atendimento responsável', () => {
     await withTestTransaction(async (db) => {
       const created = await createJob(db, { name: 'Job Reatribuição Teste' });
       const wilka = await db.query<{ id: number }>(
-        `SELECT id FROM people WHERE name = 'Wilka' AND area = 'Atendimento'`,
+        `SELECT id FROM people WHERE name = 'Wilka Nepomoceno' AND area = 'Atendimento'`,
       );
 
       const updated = await setAtendimento(db, created.id, wilka.rows[0].id);
 
       expect(updated.atendimentoPersonId).toBe(wilka.rows[0].id);
-      expect(updated.atendimentoPersonName).toBe('Wilka');
+      expect(updated.atendimentoPersonName).toBe('Wilka Nepomoceno');
     });
   });
 
   it('setAtendimentoBackup updates the backup responsible person and returns the updated job', async () => {
     await withTestTransaction(async (db) => {
       const created = await createJob(db, { name: 'Job Backup Reatribuição Teste' });
-      const isabela = await db.query<{ id: number }>(
-        `SELECT id FROM people WHERE name = 'Isabela' AND area = 'Atendimento'`,
-      );
+      const backupPerson = await createPerson(db, { name: 'Backup Reatribuição Pessoa Teste', area: 'Atendimento' });
       expect(created.atendimentoBackupPersonId).toBeNull();
 
-      const updated = await setAtendimentoBackup(db, created.id, isabela.rows[0].id);
+      const updated = await setAtendimentoBackup(db, created.id, backupPerson.id);
 
-      expect(updated.atendimentoBackupPersonId).toBe(isabela.rows[0].id);
-      expect(updated.atendimentoBackupPersonName).toBe('Isabela');
+      expect(updated.atendimentoBackupPersonId).toBe(backupPerson.id);
+      expect(updated.atendimentoBackupPersonName).toBe('Backup Reatribuição Pessoa Teste');
     });
   });
 
@@ -336,7 +335,7 @@ describe('atendimento responsável', () => {
   it('highlightedPersonName resolves from atendimentoPersonId when the current status is primarily Atendimento', async () => {
     await withTestTransaction(async (db) => {
       const wilka = await db.query<{ id: number }>(
-        `SELECT id FROM people WHERE name = 'Wilka' AND area = 'Atendimento'`,
+        `SELECT id FROM people WHERE name = 'Wilka Nepomoceno' AND area = 'Atendimento'`,
       );
       const created = await createJob(db, {
         name: 'Job Destaque Atendimento Teste',
@@ -349,7 +348,7 @@ describe('atendimento responsável', () => {
       const updated = await setJobStatus(db, created.id, targetStatus.rows[0].id);
 
       expect(updated.statusName).toBe('Atendimento da conta definida');
-      expect(updated.highlightedPersonName).toBe('Wilka');
+      expect(updated.highlightedPersonName).toBe('Wilka Nepomoceno');
     });
   });
 
@@ -376,7 +375,7 @@ describe('atendimento responsável', () => {
     it('deletes the job and its dependent rows, returning true', async () => {
       await withTestTransaction(async (db) => {
         const wilka = await db.query<{ id: number }>(
-          `SELECT id FROM people WHERE name = 'Wilka' AND area = 'Atendimento'`,
+          `SELECT id FROM people WHERE name = 'Wilka Nepomoceno' AND area = 'Atendimento'`,
         );
         const created = await createJob(db, {
           name: 'Job Exclusão Teste',

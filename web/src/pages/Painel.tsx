@@ -123,6 +123,52 @@ export function Painel() {
         <h1>Painel</h1>
       </header>
 
+      <section className="painel-block" aria-labelledby="painel-atendimento-heading">
+        <div className="painel-block-header painel-block-header--atendimento">
+          <IconBadge icon={<User size={18} aria-hidden="true" />} color="var(--color-primary)" />
+          <h2 id="painel-atendimento-heading" className="painel-block-title">
+            Atendimento
+          </h2>
+        </div>
+        <div className="painel-card-grid">
+          {atendimentoPeople.map((person) => (
+            <Link
+              key={person.id}
+              to={`/?atendimento=${person.id}`}
+              className="painel-card"
+              aria-label={`Ver jobs de ${person.name} (${atendimentoCounts.get(person.id) ?? 0})`}
+            >
+              <IconBadge icon={<User size={18} aria-hidden="true" />} color="var(--color-primary)" />
+              <span className="painel-card-label">{person.name}</span>
+              <span className="painel-card-value">{atendimentoCounts.get(person.id) ?? 0}</span>
+            </Link>
+          ))}
+        </div>
+        <ul className="painel-bar-list">
+          {atendimentoSorted.map((person) => {
+            const count = atendimentoCounts.get(person.id) ?? 0;
+            return (
+              <li key={person.id}>
+                <Link
+                  to={`/?atendimento=${person.id}`}
+                  className="painel-bar-row"
+                  aria-label={`Ver jobs de ${person.name} (${count})`}
+                >
+                  <span className="painel-bar-row-label">{person.name}</span>
+                  <span className="painel-bar-track">
+                    <span
+                      className="painel-bar-fill painel-bar-fill--sequential"
+                      style={{ width: `${(count / atendimentoMax) * 100}%` }}
+                    />
+                  </span>
+                  <span className="painel-bar-row-count">{count}</span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+
       <section className="painel-kpis" aria-label="Indicadores gerais">
         <div className="painel-kpi-card painel-kpi-card--primary">
           <IconBadge icon={<Activity size={18} aria-hidden="true" />} color="var(--color-primary)" />
@@ -250,52 +296,6 @@ export function Painel() {
                     <span
                       className="painel-bar-fill"
                       style={{ width: `${(count / faseMax) * 100}%`, background: phaseMarkerColor(phase.order) }}
-                    />
-                  </span>
-                  <span className="painel-bar-row-count">{count}</span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </section>
-
-      <section className="painel-block" aria-labelledby="painel-atendimento-heading">
-        <div className="painel-block-header painel-block-header--atendimento">
-          <IconBadge icon={<User size={18} aria-hidden="true" />} color="var(--color-primary)" />
-          <h2 id="painel-atendimento-heading" className="painel-block-title">
-            Atendimento
-          </h2>
-        </div>
-        <div className="painel-card-grid">
-          {atendimentoPeople.map((person) => (
-            <Link
-              key={person.id}
-              to={`/?atendimento=${person.id}`}
-              className="painel-card"
-              aria-label={`Ver jobs de ${person.name} (${atendimentoCounts.get(person.id) ?? 0})`}
-            >
-              <IconBadge icon={<User size={18} aria-hidden="true" />} color="var(--color-primary)" />
-              <span className="painel-card-label">{person.name}</span>
-              <span className="painel-card-value">{atendimentoCounts.get(person.id) ?? 0}</span>
-            </Link>
-          ))}
-        </div>
-        <ul className="painel-bar-list">
-          {atendimentoSorted.map((person) => {
-            const count = atendimentoCounts.get(person.id) ?? 0;
-            return (
-              <li key={person.id}>
-                <Link
-                  to={`/?atendimento=${person.id}`}
-                  className="painel-bar-row"
-                  aria-label={`Ver jobs de ${person.name} (${count})`}
-                >
-                  <span className="painel-bar-row-label">{person.name}</span>
-                  <span className="painel-bar-track">
-                    <span
-                      className="painel-bar-fill painel-bar-fill--sequential"
-                      style={{ width: `${(count / atendimentoMax) * 100}%` }}
                     />
                   </span>
                   <span className="painel-bar-row-count">{count}</span>

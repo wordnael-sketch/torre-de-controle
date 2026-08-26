@@ -289,7 +289,6 @@ INSERT INTO people (name, area) VALUES
   ('Flávia Lebre', 'Produção Executiva'),
   ('Fagner', 'Financeiro'),
   ('Dani', 'Financeiro'),
-  ('Wilka', 'Atendimento'),
   ('Carol', 'Jurídico/Base'),
   ('Maíce', 'Produção'),
   ('Camila', 'Produção'),
@@ -351,17 +350,14 @@ WHERE jra.job_id = j.id
 DELETE FROM job_role_assignments WHERE area = 'Atendimento';
 DELETE FROM phase_roles WHERE area = 'Atendimento';
 
-INSERT INTO people (name, area, title) VALUES
-  ('Camila', 'Atendimento', 'Executiva de Contas'),
-  ('Andrea', 'Atendimento', 'Executiva de Contas'),
-  ('Larissa (Brasília)', 'Atendimento', 'Executiva de Contas'),
-  ('Karina', 'Atendimento', 'Executiva de Contas'),
-  ('Isabela', 'Atendimento', 'Executiva de Contas'),
-  ('Bianca (Brasília)', 'Atendimento', 'Executiva de Contas'),
-  ('Renata (RJ)', 'Atendimento', 'Executiva de Contas')
-ON CONFLICT (name, area) DO NOTHING;
-
-UPDATE people SET title = 'Head' WHERE name = 'Wilka' AND area = 'Atendimento';
+-- O seed original de Atendimento (Camila, Andrea, Larissa (Brasília),
+-- Karina, Isabela, Bianca (Brasília) e por fim Renata (RJ)) foi todo
+-- removido: cada uma foi renomeada pro nome completo do Trello ou excluída
+-- depois que este seed já tinha rodado, e como o INSERT roda em todo boot,
+-- o "ON CONFLICT (name, area) DO NOTHING" parava de proteger assim que o
+-- nome exato mudava — cada cold start recriava a pessoa antiga do zero.
+-- Sem ninguém mais nessa lista original pra seedar, este bloco não existe
+-- mais — ver histórico do commit se precisar recuperar o texto.
 
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS trello_card_id TEXT;
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS trello_linked_at TIMESTAMPTZ;

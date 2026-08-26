@@ -53,7 +53,7 @@ describe('GET /api/people', () => {
       const res = await agent.get('/api/people');
 
       expect(res.status).toBe(200);
-      expect(res.body.people.some((p: { name: string }) => p.name === 'Wilka')).toBe(true);
+      expect(res.body.people.some((p: { name: string }) => p.name === 'Wilka Nepomoceno')).toBe(true);
     });
   });
 });

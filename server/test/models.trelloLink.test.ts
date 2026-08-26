@@ -9,6 +9,7 @@ import {
   createJobFromTrelloCard,
 } from '../src/models/trelloLink';
 import { getJobRoleAssignments, setJobRoleAssignment } from '../src/models/jobRoleAssignments';
+import { createPerson } from '../src/models/people';
 import type { Classifier, RawSuggestion } from '../src/services/classifier';
 import type { TrelloClient, TrelloCardDetail } from '../src/services/trello';
 import { withTestTransaction } from './helpers/testDb';
@@ -120,7 +121,7 @@ describe('syncTrelloMembersToAtendimento', () => {
         [job.id],
       );
       const wilka = await db.query<{ id: number }>(
-        `SELECT id FROM people WHERE name = 'Wilka' AND area = 'Atendimento'`,
+        `SELECT id FROM people WHERE name = 'Wilka Nepomoceno' AND area = 'Atendimento'`,
       );
       expect(result.rows[0].atendimento_person_id).toBe(wilka.rows[0].id);
     });
@@ -129,7 +130,7 @@ describe('syncTrelloMembersToAtendimento', () => {
   it('does not overwrite an Atendimento that is already set', async () => {
     await withTestTransaction(async (db) => {
       const camila = await db.query<{ id: number }>(
-        `SELECT id FROM people WHERE name = 'Camila' AND area = 'Atendimento'`,
+        `SELECT id FROM people WHERE name = 'Camila Müller' AND area = 'Atendimento'`,
       );
       const job = await createJob(db, {
         name: 'Job Trello Atendimento Já Definido Teste',
@@ -174,23 +175,24 @@ describe('syncTrelloMembersToAtendimento', () => {
     });
   });
 
-  it('matches a person whose system name carries a city disambiguator (e.g. "Bianca (Brasília)") against their plain Trello full name', async () => {
+  it('matches a person whose system name carries a city disambiguator (e.g. "Fulana (RJ)") against their plain Trello full name', async () => {
     await withTestTransaction(async (db) => {
-      // Bug real: o sufixo "(Brasília)" existe só pra desambiguar no cadastro
-      // interno — nunca aparece no nome de ninguém no Trello — então a
-      // comparação por substring falhava sempre pra essas pessoas.
+      // Bug real: o sufixo "(RJ)"/"(Brasília)" existe só pra desambiguar no
+      // cadastro interno — nunca aparece no nome de ninguém no Trello —
+      // então a comparação por substring falhava sempre pra essas pessoas.
+      // Pessoa criada aqui mesmo (não depende de nenhum registro seedado):
+      // toda a base real de Atendimento hoje usa nomes completos do Trello,
+      // sem parênteses, então esse cenário só existe pra este teste.
+      const disambiguated = await createPerson(db, { name: 'Fulana (RJ)', area: 'Atendimento' });
       const job = await createJob(db, { name: 'Job Trello Atendimento Desambiguado Teste' });
 
-      await syncTrelloMembersToAtendimento(db, job.id, null, ['Bianca de Souza Andrade']);
+      await syncTrelloMembersToAtendimento(db, job.id, null, ['Fulana Qualquer Sobrenome']);
 
       const result = await db.query<{ atendimento_person_id: number | null }>(
         'SELECT atendimento_person_id FROM jobs WHERE id = $1',
         [job.id],
       );
-      const bianca = await db.query<{ id: number }>(
-        `SELECT id FROM people WHERE name = 'Bianca (Brasília)' AND area = 'Atendimento'`,
-      );
-      expect(result.rows[0].atendimento_person_id).toBe(bianca.rows[0].id);
+      expect(result.rows[0].atendimento_person_id).toBe(disambiguated.id);
     });
   });
 });
@@ -427,7 +429,7 @@ describe('syncJobFromTrello', () => {
       // A associação de Atendimento é determinística (não passa pela IA) —
       // deve ter acontecido mesmo sem classifier nenhum.
       const updatedJob = await getJobById(db, created.id);
-      const wilka = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Wilka' AND area = 'Atendimento'`);
+      const wilka = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Wilka Nepomoceno' AND area = 'Atendimento'`);
       expect(updatedJob?.atendimentoPersonId).toBe(wilka.rows[0].id);
     });
   });
@@ -546,7 +548,7 @@ describe('syncJobFromTrello', () => {
       await syncJobFromTrello(db, trelloClient, undefined, job, { bypassConfidenceGate: false });
 
       const updatedJob = await getJobById(db, created.id);
-      const wilka = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Wilka' AND area = 'Atendimento'`);
+      const wilka = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Wilka Nepomoceno' AND area = 'Atendimento'`);
       expect(updatedJob?.atendimentoPersonId).toBe(wilka.rows[0].id);
     });
   });
@@ -574,14 +576,14 @@ describe('syncJobFromTrello', () => {
       await syncJobFromTrello(db, trelloClient, undefined, job, { bypassConfidenceGate: false });
 
       const updatedJob = await getJobById(db, created.id);
-      const wilka = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Wilka' AND area = 'Atendimento'`);
+      const wilka = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Wilka Nepomoceno' AND area = 'Atendimento'`);
       expect(updatedJob?.atendimentoPersonId).toBe(wilka.rows[0].id);
     });
   });
 
   it('corrects Atendimento to whoever posted the most recent STATUS comment, even overwriting one already set', async () => {
     await withTestTransaction(async (db) => {
-      const camila = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Camila' AND area = 'Atendimento'`);
+      const camila = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Camila Müller' AND area = 'Atendimento'`);
       const created = await createJob(db, {
         name: 'Job Sync Status Corrige Atendimento Teste',
         atendimentoPersonId: camila.rows[0].id,
@@ -608,14 +610,14 @@ describe('syncJobFromTrello', () => {
       await syncJobFromTrello(db, trelloClient, undefined, job, { bypassConfidenceGate: false });
 
       const updatedJob = await getJobById(db, created.id);
-      const wilka = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Wilka' AND area = 'Atendimento'`);
+      const wilka = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Wilka Nepomoceno' AND area = 'Atendimento'`);
       expect(updatedJob?.atendimentoPersonId).toBe(wilka.rows[0].id);
     });
   });
 
   it('creates the STATUS author in Atendimento when no one matches, and overwrites the previous responsável with them', async () => {
     await withTestTransaction(async (db) => {
-      const camila = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Camila' AND area = 'Atendimento'`);
+      const camila = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Camila Müller' AND area = 'Atendimento'`);
       const created = await createJob(db, {
         name: 'Job Sync Status Autor Desconhecido Teste',
         atendimentoPersonId: camila.rows[0].id,
@@ -678,7 +680,7 @@ describe('syncJobFromTrello', () => {
 
         await syncJobFromTrello(db, trelloClient, undefined, job, { bypassConfidenceGate: false });
 
-        const wilka = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Wilka' AND area = 'Atendimento'`);
+        const wilka = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Wilka Nepomoceno' AND area = 'Atendimento'`);
         const backupPerson = await db.query<{ id: number }>(
           `SELECT id FROM people WHERE name = 'Backup Nova Pessoa' AND area = 'Atendimento'`,
         );
@@ -721,12 +723,12 @@ describe('syncJobFromTrello', () => {
 
     it('never overwrites an already-set backup', async () => {
       await withTestTransaction(async (db) => {
-        const isabela = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Isabela' AND area = 'Atendimento'`);
+        const backupPerson = await createPerson(db, { name: 'Backup Já Definido Pessoa Teste', area: 'Atendimento' });
         const created = await createJob(db, { name: 'Job Backup Já Definido Teste' });
         await setTrelloLink(db, created.id, 'card1');
-        await setAtendimentoBackup(db, created.id, isabela.rows[0].id);
+        await setAtendimentoBackup(db, created.id, backupPerson.id);
         const job = (await getJobById(db, created.id))!;
-        expect(job.atendimentoBackupPersonId).toBe(isabela.rows[0].id);
+        expect(job.atendimentoBackupPersonId).toBe(backupPerson.id);
 
         const cardDetail: TrelloCardDetail = {
           name: 'Job Backup Já Definido Teste',
@@ -747,7 +749,7 @@ describe('syncJobFromTrello', () => {
         await syncJobFromTrello(db, trelloClient, undefined, job, { bypassConfidenceGate: false });
 
         const updatedJob = await getJobById(db, created.id);
-        expect(updatedJob?.atendimentoBackupPersonId).toBe(isabela.rows[0].id);
+        expect(updatedJob?.atendimentoBackupPersonId).toBe(backupPerson.id);
       });
     });
 
@@ -882,7 +884,7 @@ describe('syncJobFromTrello', () => {
 
   it('still uses only the STATUS-tagged comment to correct Atendimento, even when a more recent non-STATUS comment exists', async () => {
     await withTestTransaction(async (db) => {
-      const camila = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Camila' AND area = 'Atendimento'`);
+      const camila = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Camila Müller' AND area = 'Atendimento'`);
       const created = await createJob(db, {
         name: 'Job Sync Comentário Não Status Não Corrige Teste',
         atendimentoPersonId: camila.rows[0].id,
@@ -916,7 +918,7 @@ describe('syncJobFromTrello', () => {
       await syncJobFromTrello(db, trelloClient, undefined, job, { bypassConfidenceGate: false });
 
       const updatedJob = await getJobById(db, created.id);
-      const wilka = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Wilka' AND area = 'Atendimento'`);
+      const wilka = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Wilka Nepomoceno' AND area = 'Atendimento'`);
       expect(updatedJob?.atendimentoPersonId).toBe(wilka.rows[0].id);
       expect(updatedJob?.trelloStatusUpdates).toHaveLength(2);
     });
@@ -1130,7 +1132,7 @@ describe('createJobFromTrelloCard', () => {
       const created = (await db.query<{ id: number }>(`SELECT id FROM jobs WHERE name = 'Job Criado Do Zero Teste'`))
         .rows[0];
       expect(created).toBeDefined();
-      const wilka = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Wilka' AND area = 'Atendimento'`);
+      const wilka = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Wilka Nepomoceno' AND area = 'Atendimento'`);
       const createdJob = await getJobById(db, created.id);
       expect(createdJob?.atendimentoPersonId).toBe(wilka.rows[0].id);
       expect(createdJob?.trelloCardId).toBe('card-novo');
@@ -1172,7 +1174,7 @@ describe('createJobFromTrelloCard', () => {
       const created = (
         await db.query<{ id: number }>(`SELECT id FROM jobs WHERE name = 'Job Criado Com Backup Teste'`)
       ).rows[0];
-      const wilka = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Wilka' AND area = 'Atendimento'`);
+      const wilka = await db.query<{ id: number }>(`SELECT id FROM people WHERE name = 'Wilka Nepomoceno' AND area = 'Atendimento'`);
       const backupPerson = await db.query<{ id: number }>(
         `SELECT id FROM people WHERE name = 'Backup Da Criação Nova' AND area = 'Atendimento'`,
       );
