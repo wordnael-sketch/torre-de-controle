@@ -103,15 +103,6 @@ export function Painel() {
     }
     return counts;
   }, [jobs]);
-  const atendimentoSorted = useMemo(
-    () =>
-      [...atendimentoPeople].sort(
-        (a, b) => (atendimentoCounts.get(b.id) ?? 0) - (atendimentoCounts.get(a.id) ?? 0),
-      ),
-    [atendimentoPeople, atendimentoCounts],
-  );
-  const atendimentoMax = Math.max(1, ...atendimentoPeople.map((p) => atendimentoCounts.get(p.id) ?? 0));
-
   if (error) {
     return <p className="painel-error">{error}</p>;
   }
@@ -144,29 +135,6 @@ export function Painel() {
             </Link>
           ))}
         </div>
-        <ul className="painel-bar-list">
-          {atendimentoSorted.map((person) => {
-            const count = atendimentoCounts.get(person.id) ?? 0;
-            return (
-              <li key={person.id}>
-                <Link
-                  to={`/?atendimento=${person.id}`}
-                  className="painel-bar-row"
-                  aria-label={`Ver jobs de ${person.name} (${count})`}
-                >
-                  <span className="painel-bar-row-label">{person.name}</span>
-                  <span className="painel-bar-track">
-                    <span
-                      className="painel-bar-fill painel-bar-fill--sequential"
-                      style={{ width: `${(count / atendimentoMax) * 100}%` }}
-                    />
-                  </span>
-                  <span className="painel-bar-row-count">{count}</span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
       </section>
 
       <section className="painel-kpis" aria-label="Indicadores gerais">

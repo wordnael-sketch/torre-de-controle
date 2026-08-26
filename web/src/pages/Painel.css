@@ -209,10 +209,6 @@
   min-width: 4px;
 }
 
-.painel-bar-fill--sequential {
-  background: var(--color-primary);
-}
-
 .painel-bar-row-count {
   flex: 0 0 auto;
   width: 2.5rem;

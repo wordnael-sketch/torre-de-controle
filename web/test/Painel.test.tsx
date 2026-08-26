@@ -64,12 +64,6 @@ function cardGridFor(headingName: string): HTMLElement {
   return section.querySelector('.painel-card-grid') as HTMLElement;
 }
 
-function barListFor(headingName: string): HTMLElement {
-  const heading = screen.getByRole('heading', { name: headingName });
-  const section = heading.closest('section') as HTMLElement;
-  return section.querySelector('.painel-bar-list') as HTMLElement;
-}
-
 function renderPainel() {
   return render(
     <MemoryRouter>
@@ -171,29 +165,6 @@ describe('Painel', () => {
     expect(wilkaCard).toHaveAttribute('href', '/?atendimento=7');
     expect(grid.getByRole('link', { name: /Ver jobs de Camila \(1\)/ })).toBeInTheDocument();
     expect(screen.queryByText('Ex-Atendimento')).not.toBeInTheDocument();
-  });
-
-  it('lists Atendimento bar rows sorted by count, descending', async () => {
-    mockedApi.listPeople.mockResolvedValue({
-      people: [
-        { id: 7, name: 'Wilka', area: 'Atendimento', active: true, title: null },
-        { id: 8, name: 'Camila', area: 'Atendimento', active: true, title: null },
-      ],
-    });
-    mockedApi.listJobs.mockResolvedValue({
-      jobs: [
-        makeJob({ id: 1, atendimentoPersonId: 8 }),
-        makeJob({ id: 2, atendimentoPersonId: 7 }),
-        makeJob({ id: 3, atendimentoPersonId: 7 }),
-      ],
-    });
-
-    renderPainel();
-    await screen.findByRole('heading', { name: 'Atendimento' });
-
-    const list = barListFor('Atendimento');
-    const rowLabels = within(list).getAllByText(/^(Wilka|Camila)$/);
-    expect(rowLabels.map((el) => el.textContent)).toEqual(['Wilka', 'Camila']);
   });
 
   it('shows an empty-state message for the Farol distribution bar when there are no active jobs', async () => {
