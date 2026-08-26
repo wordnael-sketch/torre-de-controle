@@ -51,7 +51,11 @@ export function Board() {
   const stuckBannerRef = useRef<HTMLElement>(null);
   const [collapsedPhaseIds, setCollapsedPhaseIds] = useState<Set<number>>(new Set());
   const [linkingAllTrello, setLinkingAllTrello] = useState(false);
-  const [filtersOpen, setFiltersOpen] = useState(() => searchParams.has('farol') || searchParams.has('fase') || searchParams.has('atendimento'));
+  // Fica sempre fechado por padrão, mesmo chegando via link filtrado do
+  // Painel (?farol=/?fase=/?atendimento=) — o painel inteiro de filtros é
+  // grande demais (principalmente no celular) pra abrir sozinho; os chips
+  // de "filtros ativos" abaixo já avisam que um filtro está aplicado.
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   function toggleGroupCollapsed(phaseId: number) {
     setCollapsedPhaseIds((prev) => {

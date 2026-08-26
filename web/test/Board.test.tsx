@@ -292,9 +292,11 @@ describe('Board', () => {
 
     await screen.findByText('Job Travado');
     expect(screen.queryByText('Job Fluindo')).not.toBeInTheDocument();
-    // O painel de filtros já abre sozinho quando a URL carrega um filtro,
-    // pra deixar visível qual pill está ativo.
-    expect(screen.getByRole('button', { name: 'Filtros e ações' })).toHaveAttribute('aria-expanded', 'true');
+    // O painel de filtros fica fechado mesmo chegando via link filtrado —
+    // é grande demais (principalmente no celular) pra abrir sozinho; o chip
+    // de "filtro ativo" abaixo é quem avisa que o filtro está aplicado.
+    expect(screen.getByRole('button', { name: 'Filtros e ações' })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('button', { name: /Travado/ })).toBeInTheDocument();
   });
 
   it('seeds the fase and atendimento filters from URL params the same way', async () => {

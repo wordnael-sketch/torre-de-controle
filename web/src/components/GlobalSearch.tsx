@@ -99,7 +99,6 @@ export function GlobalSearch({ inputRef }: GlobalSearchProps) {
         aria-controls="global-search-listbox"
         aria-autocomplete="list"
         aria-label="Pesquisar no sistema"
-        placeholder="Pesquisar qualquer coisa no sistema… (atalho: /)"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onFocus={() => {
